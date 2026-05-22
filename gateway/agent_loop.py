@@ -92,15 +92,17 @@ class AgentLoop:
 
                     # Execute the tool
                     result = await self.hub.call_tool(tc["name"], tc["arguments"])
+                    # Unwrap hub result: {"result": "<json_string>"} → raw JSON string
+                    result_data = result.get("result", result.get("error", str(result)))
                     steps.append({
                         "type": "tool_result",
                         "name": tc["name"],
-                        "result": result,
+                        "result": result_data,
                     })
-                    logger.info(f"Tool result: {str(result)[:100]}...")
+                    logger.info(f"Tool result: {str(result_data)[:100]}...")
 
-                    # Format result for LLM
-                    result_text = json.dumps(result.get("result", result.get("error", str(result))))
+                    # Format result for LLM (result_data is already a string)
+                    result_text = result_data if isinstance(result_data, str) else json.dumps(result_data)
                     messages.append({
                         "role": "tool",
                         "tool_call_id": tc["id"],

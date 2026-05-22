@@ -46,6 +46,27 @@ from llm_engine import LLMEngine
 from agent_loop import AgentLoop
 from memory import SessionMemory
 
+# LLM config persistence file (survives gateway restarts)
+LLM_CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "llm_config.json")
+
+
+def _load_llm_config() -> dict[str, Any]:
+    try:
+        if os.path.exists(LLM_CONFIG_FILE):
+            with open(LLM_CONFIG_FILE, "r") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+
+def _save_llm_config(config: dict[str, Any]) -> None:
+    try:
+        with open(LLM_CONFIG_FILE, "w") as f:
+            json.dump(config, f)
+    except Exception as e:
+        logger.warning(f"Failed to save LLM config: {e}")
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gateway")
 logger.info("JSON monkey-patch applied — all json.dumps calls are now TextContent-safe")
@@ -74,15 +95,9 @@ VENV_PYTHON = os.path.join(BASE_DIR, "venv", "Scripts", "python.exe")
 
 SERVER_CONFIGS = [
     {
-        "name": "demo_calculator",
-        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
-        "args": ["server.py"],
-        "cwd": os.path.join(MCP_SERVERS_DIR, "demo_calculator"),
-    },
-    {
         "name": "anastruct_server",
         "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
-        "args": ["server.py"],
+        "args": [os.path.join(MCP_SERVERS_DIR, "anastruct_server", "server.py")],
         "cwd": os.path.join(MCP_SERVERS_DIR, "anastruct_server"),
     },
     {
@@ -111,10 +126,18 @@ async def lifespan(app: FastAPI):
     logger.info("Starting MCP servers...")
     hub = MCPClientHub(SERVER_CONFIGS)
     await hub.start_all()
-    llm_engine = LLMEngine()
+    saved = _load_llm_config()
+    llm_engine = LLMEngine(
+        model=saved.get("model", "gpt-4o"),
+        api_key=saved.get("api_key"),
+        base_url=saved.get("base_url"),
+    )
     agent = AgentLoop(llm_engine, hub)
     memory = SessionMemory()
-    logger.info("Gateway ready (LLM + Agent loop + Memory active)")
+    if saved.get("api_key"):
+        logger.info(f"Gateway ready — LLM config restored (model={saved.get('model')})")
+    else:
+        logger.info("Gateway ready — no saved LLM config, configure via /settings/llm")
     yield
     logger.info("Shutting down MCP servers...")
     if hub:
@@ -122,7 +145,7 @@ async def lifespan(app: FastAPI):
     logger.info("Gateway stopped")
 
 
-app = FastAPI(title="XuanwuAI Gateway", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="XuanwuAI Gateway", version="0.2.4", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -180,16 +203,22 @@ async def verify_analysis(req: VerifyRequest):
     # Attempt high-fidelity comparison if structure is provided
     if hub and req.structure:
         try:
+            logger.info("Running high-fidelity verification with OpenSees...")
             hf_result = await hub.call_tool("high_fidelity_analysis", {"structure": req.structure})
+            logger.info(f"OpenSees raw result: {str(hf_result)[:200]}")
             if hf_result and "result" in hf_result:
                 import json
-                hf_data = json.loads(hf_result["result"]) if isinstance(hf_result["result"], str) else hf_result["result"]
-                if "error" not in hf_data:
+                result_str = hf_result["result"]
+                hf_data = json.loads(result_str) if isinstance(result_str, str) else result_str
+                if "error" in hf_data:
+                    logger.warning(f"OpenSees analysis error: {hf_data['error']}")
+                else:
                     max_disp_hf = hf_data.get("max_displacement", 0)
                     max_axial_hf = hf_data.get("max_axial_force", 0)
                     disp_diff = abs(max_disp_fast - max_disp_hf) / max(max_disp_fast, 1e-12) * 100
                     axial_diff = abs(max_axial_fast - max_axial_hf) / max(max_axial_fast, 1e-12) * 100
                     status = "verified" if max(disp_diff, axial_diff) < 5.0 else "warning"
+                    logger.info(f"OpenSees comparison: disp_diff={disp_diff:.1f}%, axial_diff={axial_diff:.1f}%, status={status}")
                     return {
                         "status": status,
                         "demo_mode": False,
@@ -198,8 +227,8 @@ async def verify_analysis(req: VerifyRequest):
                             "max_axial_force": {"fast": round(max_axial_fast, 2), "high_fidelity": round(max_axial_hf, 2), "diff_percent": round(axial_diff, 2)},
                         },
                     }
-        except Exception:
-            pass
+        except Exception as e:
+            logger.exception(f"High-fidelity verification failed: {e}")
 
     return {
         "status": "unavailable",
@@ -229,6 +258,12 @@ async def configure_llm(req: LLMSettingsRequest):
         api_key=req.api_key,
         base_url=req.base_url,
     )
+    # Persist config to survive gateway restarts
+    _save_llm_config({
+        "model": llm_engine.model,
+        "api_key": llm_engine.api_key,
+        "base_url": llm_engine.base_url,
+    })
     # Also set env vars for mem0 and try to reinitialize memory
     if memory and (req.api_key or req.base_url):
         memory.reconfigure(api_key=req.api_key, base_url=req.base_url)
@@ -254,6 +289,36 @@ async def get_llm_config():
         "has_api_key": bool(llm_engine.api_key),
     }
 
+
+@app.post("/settings/memory/clear")
+async def clear_memory():
+    """Clear the local memory file (resets agent context)."""
+    import os as _os
+    memory_file = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "local_memory.json")
+    try:
+        if _os.path.exists(memory_file):
+            _os.remove(memory_file)
+            logger.info("Local memory file cleared")
+        # Also reset in-memory local cache
+        if memory:
+            memory._local = []
+        return {"status": "ok", "message": "Memory cleared"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/settings/memory/status")
+async def memory_status():
+    """Get current memory stats."""
+    if memory is None:
+        return {"status": "unavailable", "entries": 0}
+    mem0_ok = memory._memory is not None
+    local_count = len(memory._local) if memory._local else 0
+    return {
+        "status": "ok",
+        "provider": "mem0" if mem0_ok else "local_json",
+        "entries": local_count,
+        "storage_file": "gateway/local_memory.json",
+    }
 
 # --- WebSocket for Chat ---
 
