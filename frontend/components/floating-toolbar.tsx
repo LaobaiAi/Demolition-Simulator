@@ -155,8 +155,9 @@ export function FloatingToolbar({
       {/* Collapsed state */}
       {!expanded && (
         <div className="flex items-center gap-2 px-3 py-2 hover:bg-white/5 rounded-xl transition-colors">
-          <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M4 4L16 16M16 4L4 16" stroke="#22d3ee" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <text x="1" y="8" fill="#22d3ee" fontSize="8" fontWeight="bold" fontFamily="sans-serif">玄</text>
+            <text x="8" y="16" fill="#22d3ee" fontSize="8" fontWeight="bold" fontFamily="sans-serif">武</text>
           </svg>
           <span className="text-xs font-medium text-slate-300">XuanwuAI</span>
         </div>
@@ -169,8 +170,9 @@ export function FloatingToolbar({
           <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 hover:bg-white/5 rounded-t-xl transition-colors">
             <div className="flex items-center gap-2 pointer-events-none">
               <GripHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
-              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M4 4L16 16M16 4L4 16" stroke="#22d3ee" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <text x="1" y="7" fill="#22d3ee" fontSize="6" fontWeight="bold" fontFamily="sans-serif">玄</text>
+                <text x="6" y="13" fill="#22d3ee" fontSize="6" fontWeight="bold" fontFamily="sans-serif">武</text>
               </svg>
               <span className="text-xs font-semibold text-foreground">XuanwuAI</span>
             </div>
