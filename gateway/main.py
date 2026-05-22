@@ -55,16 +55,17 @@ SERVER_CONFIGS = [
 hub: MCPClientHub | None = None
 agent: AgentLoop | None = None
 memory: SessionMemory | None = None
+llm_engine: LLMEngine | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global hub, agent, memory
+    global hub, agent, memory, llm_engine
     logger.info("Starting MCP servers...")
     hub = MCPClientHub(SERVER_CONFIGS)
     await hub.start_all()
-    llm = LLMEngine()
-    agent = AgentLoop(llm, hub)
+    llm_engine = LLMEngine()
+    agent = AgentLoop(llm_engine, hub)
     memory = SessionMemory()
     logger.info("Gateway ready (LLM + Agent loop + Memory active)")
     yield
@@ -161,6 +162,46 @@ async def verify_analysis(req: VerifyRequest):
             "max_axial_force": {"fast": round(max_axial_fast, 2), "high_fidelity": 0, "diff_percent": 0},
         },
         "message": "High-fidelity verification (OpenSees) is not available on this platform. The fast analysis values above are computed by anaStruct linear elastic solver.",
+    }
+
+
+class LLMSettingsRequest(BaseModel):
+    model: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
+
+
+@app.post("/settings/llm")
+async def configure_llm(req: LLMSettingsRequest):
+    """Update LLM configuration at runtime from the frontend."""
+    global llm_engine
+    if llm_engine is None:
+        return JSONResponse({"status": "error", "message": "LLM engine not initialized"}, status_code=503)
+    llm_engine.configure(
+        model=req.model,
+        api_key=req.api_key,
+        base_url=req.base_url,
+    )
+    return {
+        "status": "ok",
+        "config": {
+            "model": llm_engine.model,
+            "base_url": llm_engine.base_url or "default (OpenAI)",
+            "has_api_key": bool(llm_engine.api_key),
+        },
+    }
+
+
+@app.get("/settings/llm")
+async def get_llm_config():
+    """Get current LLM configuration (no secrets)."""
+    global llm_engine
+    if llm_engine is None:
+        return JSONResponse({"status": "error", "message": "LLM engine not initialized"}, status_code=503)
+    return {
+        "model": llm_engine.model,
+        "base_url": llm_engine.base_url or "",
+        "has_api_key": bool(llm_engine.api_key),
     }
 
 

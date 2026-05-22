@@ -70,6 +70,23 @@ class LLMEngine:
 
         self.client = AsyncOpenAI(**client_kwargs)
 
+    def configure(self, model: str | None = None, api_key: str | None = None, base_url: str | None = None):
+        """Reconfigure the LLM engine at runtime (e.g., from frontend settings)."""
+        if model is not None:
+            self.model = model
+        if api_key is not None:
+            self.api_key = api_key
+        if base_url is not None:
+            self.base_url = base_url
+
+        client_kwargs: dict[str, Any] = {"_enforce_credentials": False}
+        if self.api_key:
+            client_kwargs["api_key"] = self.api_key
+        if self.base_url:
+            client_kwargs["base_url"] = self.base_url
+        self.client = AsyncOpenAI(**client_kwargs)
+        logger.info(f"LLM reconfigured: model={self.model}, base_url={self.base_url or 'default'}")
+
     async def chat(
         self,
         messages: list[dict[str, Any]],

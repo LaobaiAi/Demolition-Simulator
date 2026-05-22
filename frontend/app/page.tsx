@@ -6,7 +6,7 @@ import {
   Loader2,
   Wrench,
   Activity,
-  Shield,
+  Settings,
   Calculator,
   Brain,
   Play,
@@ -63,6 +63,55 @@ export default function Home() {
   const [currentStep, setCurrentStep] = useState("");
   const [demolishDialogOpen, setDemolishDialogOpen] = useState(false);
   const [demolishReady, setDemolishReady] = useState(false);
+
+  // LLM settings
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [llmApiKey, setLlmApiKey] = useState("");
+  const [llmBaseUrl, setLlmBaseUrl] = useState("");
+  const [llmModel, setLlmModel] = useState("gpt-4o");
+  const [llmStatus, setLlmStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  // Load saved settings on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("xuanwu_llm_settings");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.apiKey) setLlmApiKey(parsed.apiKey);
+        if (parsed.baseUrl) setLlmBaseUrl(parsed.baseUrl);
+        if (parsed.model) setLlmModel(parsed.model);
+        // Apply to backend
+        fetch("http://localhost:8000/settings/llm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(parsed),
+        }).catch(() => {});
+      } catch {}
+    }
+  }, []);
+
+  const saveLlmSettings = async () => {
+    setLlmStatus("saving");
+    const config = {
+      api_key: llmApiKey || undefined,
+      base_url: llmBaseUrl || undefined,
+      model: llmModel || undefined,
+    };
+    try {
+      const res = await fetch("http://localhost:8000/settings/llm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config),
+      });
+      if (!res.ok) throw new Error("Failed");
+      localStorage.setItem("xuanwu_llm_settings", JSON.stringify(config));
+      setLlmStatus("saved");
+      setTimeout(() => setLlmStatus("idle"), 2000);
+    } catch {
+      setLlmStatus("error");
+      setTimeout(() => setLlmStatus("idle"), 3000);
+    }
+  };
 
   const wsRef = useRef<WebSocket | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -344,9 +393,11 @@ export default function Home() {
       <div className="flex w-[30%] min-w-[320px] flex-col border-r border-border">
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/20">
-            <Shield className="h-5 w-5 text-primary" />
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4 4L16 16M16 4L4 16" stroke="#22d3ee" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </div>
-          <div>
+          <div className="flex-1">
             <h1 className="text-sm font-semibold text-foreground">
               XuanwuAI Console
             </h1>
@@ -354,6 +405,13 @@ export default function Home() {
               Intelligent Demolition Simulator
             </p>
           </div>
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted transition-colors cursor-pointer"
+            title="LLM Settings"
+          >
+            <Settings className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
         </div>
 
         {/* Messages */}
@@ -361,7 +419,9 @@ export default function Home() {
           <div className="space-y-4">
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-center text-muted-foreground">
-                <Shield className="h-12 w-12 mb-3 text-primary/40" />
+                <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-3 opacity-40">
+                  <path d="M10 10L38 38M38 10L10 38" stroke="#22d3ee" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
                 <p className="text-sm font-medium">XuanwuAI Ready</p>
                 <p className="text-xs mt-1">
                   Ask the AI to analyze a frame structure
@@ -717,6 +777,77 @@ export default function Home() {
           )}
         </div>
       </div>
+
+      {/* LLM Settings Dialog */}
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="h-4 w-4 text-primary" />
+              LLM Configuration
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Configure your LLM provider connection. Settings are saved locally and applied to the Gateway.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">API Key</label>
+              <input
+                type="password"
+                value={llmApiKey}
+                onChange={(e) => setLlmApiKey(e.target.value)}
+                placeholder="sk-..."
+                className="mt-1 h-8 w-full rounded-lg border border-border bg-transparent px-2.5 py-1 text-sm outline-none focus:border-primary/50 transition-colors"
+              />
+              <p className="text-[10px] text-muted-foreground mt-0.5">Required for most providers (OpenAI, DeepSeek, etc.)</p>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Base URL</label>
+              <input
+                type="text"
+                value={llmBaseUrl}
+                onChange={(e) => setLlmBaseUrl(e.target.value)}
+                placeholder="https://api.openai.com/v1"
+                className="mt-1 h-8 w-full rounded-lg border border-border bg-transparent px-2.5 py-1 text-sm outline-none focus:border-primary/50 transition-colors"
+              />
+              <p className="text-[10px] text-muted-foreground mt-0.5">Leave empty for OpenAI default. Set custom endpoint for other providers.</p>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Model</label>
+              <input
+                type="text"
+                value={llmModel}
+                onChange={(e) => setLlmModel(e.target.value)}
+                placeholder="gpt-4o"
+                className="mt-1 h-8 w-full rounded-lg border border-border bg-transparent px-2.5 py-1 text-sm outline-none focus:border-primary/50 transition-colors"
+              />
+              <p className="text-[10px] text-muted-foreground mt-0.5">e.g. gpt-4o, gpt-4o-mini, deepseek-v4-pro, claude-sonnet-4-6</p>
+            </div>
+          </div>
+          <DialogFooter className="flex items-center gap-2">
+            {llmStatus === "saved" && (
+              <span className="text-xs text-emerald-400 mr-auto">Saved successfully</span>
+            )}
+            {llmStatus === "error" && (
+              <span className="text-xs text-red-400 mr-auto">Failed to save</span>
+            )}
+            <Button variant="outline" onClick={() => setSettingsOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={saveLlmSettings} disabled={llmStatus === "saving"}>
+              {llmStatus === "saving" ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Demolition Confirm Dialog */}
       <Dialog open={demolishDialogOpen} onOpenChange={setDemolishDialogOpen}>

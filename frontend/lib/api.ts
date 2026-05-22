@@ -65,3 +65,28 @@ export async function verifyAnalysis(
   if (!res.ok) throw new Error(`Verification failed: ${res.status}`);
   return res.json();
 }
+
+export interface LLMConfig {
+  model: string;
+  base_url?: string;
+  api_key?: string;
+}
+
+export async function saveLLMSettings(config: LLMConfig): Promise<void> {
+  const res = await fetch(`${API_BASE}/settings/llm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) throw new Error(`Failed to save settings: ${res.status}`);
+}
+
+export async function getLLMConfig(): Promise<{
+  model: string;
+  base_url: string;
+  has_api_key: boolean;
+}> {
+  const res = await fetch(`${API_BASE}/settings/llm`);
+  if (!res.ok) throw new Error(`Failed to get config: ${res.status}`);
+  return res.json();
+}
