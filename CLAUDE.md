@@ -1,0 +1,89 @@
+# XuanwuAI Demolition Simulator — Project Record
+
+## What This Project Is
+智能结构拆除模拟器：AI 驱动的渐进式建筑倒塌分析系统。用户输入框架参数 → AI 生成结构 → 分析力学 → 识别关键柱 → 多轮渐进拆除直到倒塌。
+
+## User Directives (来自对话记录，持久生效)
+
+### 1. 功能优先级
+- **渐进式拆除** 是核心价值：必须支持多轮杆件拆除，直到结构完全倒塌，不是只拆一根
+- **应力比云图** 必须显示：结构模型要能切换 Deformation / Stress Ratio 视图，用颜色直观表示每根杆件的危险程度
+- **对话可回顾**：切换/重载对话后必须恢复完整状态（结构模型 + 分析结果 + 倒塌动画 + 应力云图）
+- **动画要真实**：不要 ASCII art 占位符，要 SVG 物理倒塌动画
+- **日志要有可读性**：不要 dump 原始 JSON，要提取关键指标用人类可读格式显示
+
+### 2. UI/UX 要求
+- 对话框要宽，数据不能折行
+- 选项卡名字要简洁（Disp / Forces / Compare / Dev）
+- 按钮位置描述要准确（Demolish 在左下角聊天输入框下方，不是右侧面板）
+- 设置面板要有存储控制（清空对话、清空记忆、导出备份）
+
+### 3. 技术决策
+- **不用 Unity**：倒塌动画用纯 SVG + requestAnimationFrame 实现，不需要外部客户端
+- **不用 Three.js**：2D SVG 框架可视化即可满足当前需求
+- **OpenSees 高精度**：已修复（之前前端没传 structure 参数），OpenSeesPy 在 Windows venv 中可用
+- **mem0 有本地 fallback**：gateway/memory.py 有 local_memory.json 备选方案，不依赖 OpenAI API key
+- **对话存储在 localStorage**：不需要后端数据库
+- **Agent memory 存储**：gateway/local_memory.json（服务器端）
+
+### 4. 代码风格
+- 不写注释（除非 WHY 不明显）
+- 不做过度抽象
+- 编辑已有文件优先于新建文件
+- 不改动不相关代码
+
+### 5. 国际化
+- 中英文双语支持
+- 翻译文件：frontend/lib/i18n.ts
+
+## Current Architecture
+
+```
+gateway/          ← FastAPI 后端，LLM 引擎 + Agent Loop
+  main.py         ← API + WebSocket 入口
+  llm_engine.py   ← SYSTEM_PROMPT + OpenAI SDK 封装
+  agent_loop.py   ← ReAct agent (think → act → observe)
+  memory.py       ← mem0 + local JSON fallback
+  mcp_hub.py      ← MCP 多服务器管理
+mcp_servers/
+  anastruct_server/  ← 快速线性分析 (anaStruct)
+  opensees_server/   ← 高精度分析 (OpenSeesPy)
+  unity_simulator/   ← 拆除动作 + 结构修改
+frontend/
+  app/page.tsx       ← 主页面（65% 以上的逻辑在这里）
+  components/
+    frame-visualization.tsx  ← SVG 结构模型 + 应力云图 + 倒塌动画
+    verification-panel.tsx   ← 双轨验证面板（Displacements/Forces/Compare/Dev）
+    sidebar.tsx
+    floating-toolbar.tsx
+    mechanical-summary.tsx
+  lib/
+    i18n.ts     ← 中英文翻译
+    api.ts      ← REST + WebSocket 客户端
+```
+
+## Key Files to Know
+- **SYSTEM_PROMPT** 在 `gateway/llm_engine.py`，控制 AI 行为
+- **verify endpoint** 在 `gateway/main.py`，处理 OpenSees 对比验证
+- **会话恢复** 在 `frontend/app/page.tsx` 的 `restoreStateFromMessages()` 函数
+- **应力比计算** 在 `frame-visualization.tsx`，用 `FY=235e6` (钢屈服强度)
+- **倒塌判定**：所有柱被拆除 或 位移 >100mm 或 分析不收敛
+
+## Feature Status
+- [x] 框架生成 + 快速分析
+- [x] 关键柱识别
+- [x] 渐进式多轮拆除（AI 自动重新分析）
+- [x] 应力比云图（绿色<30%, 黄色30-60%, 橙色60-85%, 红色>85%）
+- [x] SVG 倒塌动画（requestAnimationFrame）
+- [x] OpenSees 高精度验证（已修复 structure 参数传递）
+- [x] 对话完整状态恢复（结构 + 分析 + 倒塌 + 应力）
+- [x] 日志可读性优化
+- [x] 设置面板存储管理
+- [x] 本地记忆 fallback (local_memory.json)
+- [ ] 3D 可视化（暂不需要）
+- [ ] 物理引擎倒塌（暂不需要）
+
+## 用户联系
+- 语言偏好：中文（但代码用英文）
+- 期望：尽快发挥价值，功能要实用
+- 频繁要求：宽对话框、简洁标签、可读日志、持久化状态
