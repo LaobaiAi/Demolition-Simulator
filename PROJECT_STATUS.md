@@ -239,20 +239,25 @@ curl -X POST http://localhost:8000/tools/call \
 | gateway/agent_loop | tests/test_agent_loop.py | 6 | ✅ 全部通过 |
 | gateway/api | tests/test_api.py | 5 | ✅ 全部通过（需 gateway 运行中） |
 | gateway/memory | tests/test_memory.py | 5 | ✅ 全部通过 |
+| demo_calculator | tests/test_server.py | 9 | ✅ 全部通过 |
+| anastruct_server | tests/test_server.py | 19 | ✅ 全部通过 |
 | frontend/page | __tests__/page.test.tsx | 7 | ✅ 全部通过 |
-| **合计** | | **39** | **全部通过** |
+| frontend/summary | __tests__/mechanical-summary.test.tsx | 9 | ✅ 全部通过 |
+| opensees_server | tests/ | 0 | ❌ 空目录 |
+| unity_simulator | tests/ | 0 | ❌ 空目录 |
+| **合计** | | **76** | **全部通过** |
 
 ### 7.2 未测试内容
 
 | 内容 | 原因 |
 |------|------|
-| MCP server 工具函数（4 个服务器） | tests/ 目录为空，未编写测试 |
+| opensees_server / unity_simulator | tests/ 目录为空；unity_simulator 依赖 TCP socket mock |
 | Unity C# 脚本 | 无 Unity Editor 环境，无法运行 |
 | WebSocket 实时消息流 | 无 WebSocket 集成测试 |
 | E2E 用户场景 | 无端到端测试框架 |
 | OpenSees 分析 | 当前环境不可用 |
 | WebRTC 视频流 | 缺少 Unity Editor + 前端信令实现 |
-| 前端组件（MechanicalSummary, VerificationPanel） | 未编写组件级测试 |
+| VerificationPanel | 需要 mock API 调用 + recharts 的 ResponsiveContainer |
 
 ### 7.3 手动验证通过的内容
 
