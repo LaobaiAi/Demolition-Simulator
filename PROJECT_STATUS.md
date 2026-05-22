@@ -1,7 +1,7 @@
 # XuanwuAI Demolition Simulator — 项目状态报告
 
 **日期**: 2026-05-22
-**总体完成度**: 约 70%（Day 1–8 基本完成，Day 9–10 未启动）
+**总体完成度**: 约 85%（Day 1–8 基本完成，Day 9–10 已完成，剩余为可测试性问题）
 
 ---
 
@@ -52,13 +52,19 @@
 - MechanicalSummary: 结构力学指标实时展示
 - Agent Log Stream（可暂停/恢复）
 
-### Day 9: Demo 脚本打磨 + UI 优化 ❌ 未开始
-- 无演示流程脚本
-- 无 UI 动画打磨
+### Day 9: Demo 脚本打磨 + UI 优化 ✅ 完成
+- quickActions 更新为结构分析提示词（"Analyze a 2-story 2-bay frame" 等）
+- 拆除确认对话框（红色脉冲按钮 → 确认弹窗含关键柱信息和轴向力）
+- AI 思考时显示步骤进度（"Generating frame..." → "Analyzing structure..." → "Identifying critical column..."）
+- 输入框占位符更新
+- 系统提示词重构：AI 不再自动触发拆除，等待用户确认
 
-### Day 10: 文档 + CI 设置 ❌ 未开始
-- 无 CI/CD 配置
-- 无 API 文档生成
+### Day 10: 文档 + CI 设置 ✅ 完成
+- Git 仓库初始化 + `.gitignore`（Python/Node/Unity/IDE/OS）
+- GitHub Actions CI 配置（backend: pytest, frontend: tsc + lint + vitest + build）
+- `/verify` 端点清理：移除假随机数据，改为 OpenSees 真实比较尝试 + "unavailable" 状态
+- `PROJECT_STATUS.md` 完整项目状态文档（320 行）
+- 初始 commit：54 文件
 
 ---
 
