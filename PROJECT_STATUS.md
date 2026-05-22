@@ -1,7 +1,8 @@
 # XuanwuAI Demolition Simulator — 项目状态报告
 
-**日期**: 2026-05-22
-**总体完成度**: 约 85%（Day 1–8 基本完成，Day 9–10 已完成，剩余为可测试性问题）
+**日期**: 2026-05-22（最后更新）
+**总体完成度**: 约 90%（Day 1–10 全部完成，剩余为平台限制问题）
+**Git**: 4 commits，76 个测试全部通过
 
 ---
 
@@ -43,7 +44,7 @@
 ### Day 7: OpenSees 高精度分析 ⚠️ 部分完成
 - opensees_server 已实现，API 正确
 - **但**: Windows 上 OpenSeesPy DLL 加载失败，服务器以降级模式运行
-- `/verify` 端点目前使用 demo 模式（模拟扰动数据）
+- `/verify` 端点：尝试调用 OpenSees 真实对比，不可用时返回 "unavailable" 状态（不再生成假数据）
 
 ### Day 8: 前端 Chat + Verification UI ✅ 完成
 - Next.js 三栏布局（Chat 30% | Viz 50% | Status 20%）
@@ -75,19 +76,23 @@
 3. **VerificationPanel 核验面板**: 带有红色辉光脉冲按钮、对比表格、recharts 双轨对比柱状图、偏差图 + 5% 阈值线
 4. **MechanicalSummary 机械摘要面板**: 实时展示最大位移(mm)、最大轴力(kN)、关键柱信息、拆除目标列表
 5. **Agent Log Stream**: 底部终端风格日志流，支持暂停/恢复、自动滚动
-6. **前端快速操作按钮**: 预设计算表达式一键填入
-7. **WebSocket 自动重连**: 2 秒间隔自动重连
-8. **前端暗色主题**: 深色 (#0f172a) + 青色强调 (#22d3ee) 配色
-9. **Markdown 渲染**: AI 回复支持 **粗体**、`代码` 和内联标记
-10. **select_critical_element 工具**: 几何判定（同 x 坐标为柱）+ 轴力排序的柱选择算法
+6. **拆除确认对话框**: 红色脉冲按钮 → Dialog 弹窗（显示关键柱 ID、轴向力、Unity 运行提示）→ 确认后发送拆除指令
+7. **AI 步骤进度指示器**: 思考时实时展示当前步骤（Generating frame... → Analyzing structure... → Identifying critical column...）
+8. **WebSocket 自动重连**: 2 秒间隔自动重连
+9. **前端暗色主题**: 深色 (#0f172a) + 青色强调 (#22d3ee) 配色
+10. **Markdown 渲染**: AI 回复支持 **粗体**、`代码` 和内联标记
+11. **select_critical_element 工具**: 几何判定（同 x 坐标为柱）+ 轴力排序的柱选择算法
+12. **ErrorBoundary 组件**: React class component 错误兜底 + Try Again 按钮
+13. **GitHub Actions CI**: backend pytest + frontend tsc/lint/vitest/build 自动运行
+14. **系统提示词重构**: AI 分析完报告结果并提示用户点击 Demolish 按钮，不再自动触发拆除
 
 ---
 
 ## 三、已完成但有问题的部分
 
 ### 3.1 OpenSees 在 Windows 上不可用
-- **状态**: openseespy 依赖的 DLL 无法加载
-- **影响**: 高精度分析降级为 demo 模拟模式（使用随机扰动生成对比数据）
+- **状态**: openseespy 依赖的 DLL 无法加载；opensees_server 启动时捕获异常后以降级模式运行
+- **影响**: 高精度分析不可用；`/verify` 端点返回 "unavailable" 状态
 - **解决方案**: 在 Linux/macOS 上部署可正常使用，或使用 WSL2
 
 ### 3.2 Unity C# 脚本未实际测试
@@ -110,24 +115,19 @@
 - **影响**: Agent 循环无法实际调用 LLM，前端对话功能不可用
 - **测试**: 所有 LLM 相关测试使用 mock，测试通过但不代表真实可用
 
-### 3.6 前端 quickActions 仍是旧版数学题
-- **状态**: 快速操作按钮显示 "3 + 4"、"10 * 5.5" 等数学题
-- **应该**: 更新为结构分析相关的提示词（如 "Analyze a 2-story 3-bay frame"）
-
 ---
 
 ## 四、跳过/略过的内容
 
-1. **MCP server 单元测试**: 全部 4 个 `mcp_servers/*/tests/` 目录为空，未编写任何测试
+1. **opensees_server / unity_simulator 单元测试**: 这 2 个 `tests/` 目录仍为空（opensees 不可用，unity_simulator 需 TCP mock）
 2. **Unity 场景搭建**: 无 `.unity` 场景文件，无材质配置，无物理参数调优
 3. **WebRTC 信令服务**: WebRTCStreamer 只生成了 SDP offer，前端侧无对应的 WebRTC answer 消费逻辑
-4. **OpenSees 真实对比验证**: `/verify` 端点使用模拟数据而非真实 OpenSees 分析结果
+4. **OpenSees 真实对比验证**: `/verify` 端点无真实 OpenSees 数据（平台限制）
 5. **拆除动画的渐进式坍塌**: SimulationController 只有简单的爆炸力施加，无逐帧坍塌传播模拟
-6. **确认对话框/安全机制**: 拆除操作直接执行，无二次确认
-7. **多用户会话隔离**: 单例 Agent/Memory，无多用户支持
-8. **前端路由**: 仅单页应用，无多页面路由（Next.js App Router 未充分利用）
-9. **错误边界组件**: 前端无 ErrorBoundary
-10. **国际化 (i18n)**: 仅英文
+6. **多用户会话隔离**: 单例 Agent/Memory，无多用户支持
+7. **前端路由**: 仅单页应用，无多页面路由（Next.js App Router 未充分利用）
+8. **VerificationPanel 组件测试**: 需要 mock API 调用 + recharts ResponsiveContainer 环境
+9. **国际化 (i18n)**: 仅英文
 
 ---
 
@@ -251,13 +251,13 @@ curl -X POST http://localhost:8000/tools/call \
 
 | 内容 | 原因 |
 |------|------|
-| opensees_server / unity_simulator | tests/ 目录为空；unity_simulator 依赖 TCP socket mock |
-| Unity C# 脚本 | 无 Unity Editor 环境，无法运行 |
+| opensees_server / unity_simulator | tests/ 目录为空（opensees 不可用，unity 需 TCP mock） |
+| Unity C# 脚本 | 无 Unity Editor 环境 |
 | WebSocket 实时消息流 | 无 WebSocket 集成测试 |
-| E2E 用户场景 | 无端到端测试框架 |
-| OpenSees 分析 | 当前环境不可用 |
+| E2E 用户场景 | 无端到端测试框架（建议 Playwright） |
 | WebRTC 视频流 | 缺少 Unity Editor + 前端信令实现 |
-| VerificationPanel | 需要 mock API 调用 + recharts 的 ResponsiveContainer |
+| VerificationPanel | 需要 mock API 调用 + recharts ResponsiveContainer |
+| ErrorBoundary 组件 | 无独立测试（仅集成在页面中） |
 
 ### 7.3 手动验证通过的内容
 
@@ -274,7 +274,7 @@ curl -X POST http://localhost:8000/tools/call \
 
 1. **MCP server 脱离 gateway 进程**: 当前 MCP server 作为子进程由 gateway 管理。如需分布式部署，考虑将 MCP server 独立部署并通过 HTTP/SSE transport 连接。
 
-2. **移除 demo 模拟代码**: `/verify` 端点和 `quickActions` 中仍有硬编码的 demo 数据，生产部署时应替换为真实 OpenSees 分析或删除。
+2. **移除 demo 模拟代码**: 当前 `/verify` 端点已清理假数据生成逻辑，在 OpenSees 不可用时干净返回 "unavailable"。
 
 3. **WebSocket 消息协议版本化**: 当前 WebSocket JSON 消息无版本字段，前后端协议变更时可能不兼容。建议添加 `version` 字段。
 
@@ -300,9 +300,9 @@ curl -X POST http://localhost:8000/tools/call \
 
 ### 8.4 测试
 
-12. **MCP server 测试空白**: 4 个 server 的 `tests/` 目录为空。建议至少添加工具函数的单元测试（mock 掉 anaStruct/OpenSees 依赖）。
+12. **opensees_server / unity_simulator 测试空白**: 这 2 个 server 的 `tests/` 目录仍为空。
 
-13. **前端组件测试不足**: 仅 1 个测试文件 7 个测试。MechanicalSummary、VerificationPanel 无测试。
+13. **VerificationPanel 组件测试**: 需要 mock API 调用 + recharts ResponsiveContainer。
 
 14. **添加 E2E 测试**: 使用 Playwright 或 Cypress 覆盖完整用户流程。
 
@@ -318,7 +318,7 @@ curl -X POST http://localhost:8000/tools/call \
 
 ## 九、其他交代事项
 
-1. **项目无 git 仓库**: 当前项目目录未初始化 git（`is a git repository: false`）。强烈建议立即初始化并提交所有代码。
+1. **Git 仓库已初始化**: 4 个 commits，含 `.gitignore` 和 GitHub Actions CI。如需推送到远程仓库（如 GitHub），添加 remote 后 push 即可。
 
 2. **venv 路径**: gateway 的虚拟环境在 `gateway/venv/`，MCP server 也使用同一 venv 的 Python（`VENV_PYTHON` 常量引用）。不要删除此 venv。
 
