@@ -43,6 +43,7 @@ next-env.d.ts
 [Oo]bj/
 [Bb]uild/
 [Ll]ibrary/
+[Uu]ser[Ss]ettings/
 *.unitypackage
 *.sln
 *.csproj
