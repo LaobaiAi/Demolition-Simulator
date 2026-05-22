@@ -71,7 +71,7 @@ class AgentLoop:
                     logger.info(f"Tool call: {tc['name']}({tc['arguments']})")
 
                     # Add assistant's tool call to messages
-                    messages.append({
+                    assistant_msg: dict[str, Any] = {
                         "role": "assistant",
                         "content": response.get("content"),
                         "tool_calls": [
@@ -84,7 +84,11 @@ class AgentLoop:
                                 },
                             }
                         ],
-                    })
+                    }
+                    # Preserve reasoning_content for DeepSeek thinking mode
+                    if response.get("reasoning_content"):
+                        assistant_msg["reasoning_content"] = response["reasoning_content"]
+                    messages.append(assistant_msg)
 
                     # Execute the tool
                     result = await self.hub.call_tool(tc["name"], tc["arguments"])

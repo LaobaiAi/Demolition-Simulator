@@ -1,9 +1,8 @@
 """SessionMemory wraps mem0 for persistent conversation context."""
 
 import logging
+import os
 from typing import Any
-
-from mem0 import Memory
 
 logger = logging.getLogger(__name__)
 
@@ -17,11 +16,26 @@ class SessionMemory:
 
     def __init__(self, user_id: str = "default"):
         self.user_id = user_id
+        self._memory = None
+        self._try_init()
+
+    def _try_init(self) -> None:
+        """Attempt to initialize mem0. Gracefully degrades if unavailable."""
         try:
+            from mem0 import Memory
             self._memory = Memory()
+            logger.info("mem0 persistent memory initialized")
         except Exception as e:
             logger.warning(f"mem0 init failed: {e}. Running without persistent memory.")
             self._memory = None
+
+    def reconfigure(self, api_key: str | None = None, base_url: str | None = None) -> None:
+        """Reinitialize mem0 with new credentials (e.g. after frontend settings change)."""
+        if api_key:
+            os.environ["OPENAI_API_KEY"] = api_key
+        if base_url:
+            os.environ["OPENAI_BASE_URL"] = base_url
+        self._try_init()
 
     def add(self, message: str, metadata: dict[str, Any] | None = None) -> None:
         """Store a message in memory."""

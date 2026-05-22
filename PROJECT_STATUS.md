@@ -1,8 +1,8 @@
 # XuanwuAI Demolition Simulator — 项目状态报告
 
 **日期**: 2026-05-22（最后更新）
-**总体完成度**: 约 90%（Day 1–10 全部完成，剩余为平台限制问题）
-**Git**: 4 commits，76 个测试全部通过
+**总体完成度**: 约 92%（Day 1–10 全部完成，LLM 已配置可用）
+**Git**: 6 commits，82 个测试全部通过（33 backend + 33 gateway + 16 frontend）
 
 ---
 
@@ -85,6 +85,10 @@
 12. **ErrorBoundary 组件**: React class component 错误兜底 + Try Again 按钮
 13. **GitHub Actions CI**: backend pytest + frontend tsc/lint/vitest/build 自动运行
 14. **系统提示词重构**: AI 分析完报告结果并提示用户点击 Demolish 按钮，不再自动触发拆除
+15. **JSON 序列化三层防护**: 全局 `json.dumps` 猴子补丁 + `_sanitize_for_json` 递归清洗 + `_normalize_content` LLM 内容规范化，彻底解决 TextContent 等非标准对象序列化问题
+16. **浮动工具栏 FloatingToolbar**: 可自由拖动的浮动面板（CSS 变量方案，SSR 安全），含 Gateway 连接状态、工具数量、LLM 设置入口、清空聊天、快捷分析指令
+17. **按模型记忆 LLM 配置**: localStorage 以 model 为 key 存储 `{api_key, base_url}`，切换模型自动回填 URL/Key
+18. **DeepSeek 思维链兼容**: 保留并回传 `reasoning_content` 字段，支持 DeepSeek v4-pro 等推理模型
 
 ---
 
@@ -102,18 +106,19 @@
 - **原因**: 当前环境无 Unity Editor 2021.3 LTS
 
 ### 3.3 mem0 记忆系统需要 OpenAI API Key
-- **状态**: 初始化失败时静默降级，返回空上下文
-- **影响**: 跨会话记忆功能实际不可用
-- **日志**: `mem0 init failed: Missing credentials`
+- **状态**: 初始化失败时静默降级，返回空上下文。现已添加 `reconfigure()` 方法，前端保存 LLM 设置时自动同步 API Key 并重新初始化
+- **当前**: 依赖于 mem0 库对 DeepSeek API 的兼容性（embeddings 接口）
+- **日志**: 前端保存设置后自动重试初始化
 
 ### 3.4 MCP SDK 在 Windows 上的 cancel scope 问题
 - **现象**: uvicorn reload 模式下偶发 `RuntimeError: Attempted to exit cancel scope in a different task`
 - **影响**: 开发时重启偶发崩溃，生产环境（无 reload）不受影响
 
-### 3.5 没有配置 LLM API Key
-- **状态**: 代码支持通过环境变量 `OPENAI_API_KEY` 或构造函数参数传入
-- **影响**: Agent 循环无法实际调用 LLM，前端对话功能不可用
-- **测试**: 所有 LLM 相关测试使用 mock，测试通过但不代表真实可用
+### 3.5 没有配置 LLM API Key ✅ 已解决
+- **状态**: 前端 LLM Settings 对话框支持手动输入 API Key / Base URL / Model，localStorage 按模型记忆
+- **后端**: `POST /settings/llm` 端点运行时更新 LLM Engine 配置，无需重启
+- **E2E 验证**: generate_simple_frame → analyze_frame → select_critical_element 全管线通过真实 LLM 调用验证
+- **注意**: 使用 DeepSeek 思维链模式需保留 `reasoning_content` 字段（已修复）
 
 ---
 
@@ -239,13 +244,14 @@ curl -X POST http://localhost:8000/tools/call \
 | gateway/agent_loop | tests/test_agent_loop.py | 6 | ✅ 全部通过 |
 | gateway/api | tests/test_api.py | 5 | ✅ 全部通过（需 gateway 运行中） |
 | gateway/memory | tests/test_memory.py | 5 | ✅ 全部通过 |
+| gateway/integration | tests/test_textcontent_fix.py | 1 | ✅ 全部通过 |
 | demo_calculator | tests/test_server.py | 9 | ✅ 全部通过 |
 | anastruct_server | tests/test_server.py | 19 | ✅ 全部通过 |
 | frontend/page | __tests__/page.test.tsx | 7 | ✅ 全部通过 |
 | frontend/summary | __tests__/mechanical-summary.test.tsx | 9 | ✅ 全部通过 |
 | opensees_server | tests/ | 0 | ❌ 空目录 |
 | unity_simulator | tests/ | 0 | ❌ 空目录 |
-| **合计** | | **76** | **全部通过** |
+| **合计** | | **82** | **全部通过** |
 
 ### 7.2 未测试内容
 

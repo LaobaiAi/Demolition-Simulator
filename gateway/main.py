@@ -221,7 +221,7 @@ class LLMSettingsRequest(BaseModel):
 @app.post("/settings/llm")
 async def configure_llm(req: LLMSettingsRequest):
     """Update LLM configuration at runtime from the frontend."""
-    global llm_engine
+    global llm_engine, memory
     if llm_engine is None:
         return JSONResponse({"status": "error", "message": "LLM engine not initialized"}, status_code=503)
     llm_engine.configure(
@@ -229,6 +229,9 @@ async def configure_llm(req: LLMSettingsRequest):
         api_key=req.api_key,
         base_url=req.base_url,
     )
+    # Also set env vars for mem0 and try to reinitialize memory
+    if memory and (req.api_key or req.base_url):
+        memory.reconfigure(api_key=req.api_key, base_url=req.base_url)
     return {
         "status": "ok",
         "config": {

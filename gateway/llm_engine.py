@@ -160,9 +160,13 @@ class LLMEngine:
                 for tc in message.tool_calls
             ]
 
+        # Preserve reasoning_content for DeepSeek thinking mode
+        reasoning = getattr(message, "reasoning_content", None)
+
         return {
             "content": content,
             "tool_calls": tool_calls,
+            "reasoning_content": reasoning,
             "raw": response,
         }
 
