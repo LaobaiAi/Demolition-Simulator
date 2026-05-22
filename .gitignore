@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+.pytest_cache/
+*.pyc
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Unity
+[Mm]eta/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Ll]ibrary/
+*.unitypackage
+*.sln
+*.csproj
+*.userprefs
+
+# Testing
+coverage/
+.coverage
+
+# Claude
+.claude/
+
+# Logs
+*.log
