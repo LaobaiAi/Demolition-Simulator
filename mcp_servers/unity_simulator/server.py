@@ -22,9 +22,9 @@ TOOLS = [
     Tool(
         name="apply_demolition_action",
         description=(
-            "Trigger a demolition animation in the Unity simulation. "
-            "Specify which structural elements should fail and the force multiplier "
-            "to control the collapse intensity."
+            "Remove structural elements and trigger collapse animation in the frontend. "
+            "Pass the full current structure to get back a modified version (without failed elements) "
+            "for progressive re-analysis. Specify which elements fail and the force multiplier."
         ),
         inputSchema={
             "type": "object",
@@ -32,22 +32,27 @@ TOOLS = [
                 "failed_elements": {
                     "type": "array",
                     "items": {"type": "integer"},
-                    "description": "List of element IDs to demolish (0-based). At least one required.",
+                    "description": "List of element IDs to demolish. At least one required.",
                 },
                 "force_multiplier": {
                     "type": "number",
-                    "description": "Multiplier for demolition forces (default 1.5). Higher = more dramatic collapse.",
+                    "description": "Multiplier for demolition forces (default 1.5).",
                     "default": 1.5,
                 },
-                "structure_summary": {
+                "structure": {
                     "type": "object",
-                    "description": "Optional structure metadata for context display in Unity",
+                    "description": "The full current structure including nodes, elements, loads, supports. Required for progressive re-analysis.",
                     "properties": {
-                        "spans": {"type": "integer"},
-                        "stories": {"type": "integer"},
-                        "max_displacement": {"type": "number"},
-                        "max_axial_force": {"type": "number"},
+                        "nodes": {"type": "array"},
+                        "elements": {"type": "array"},
+                        "loads": {"type": "array"},
+                        "supports": {"type": "array"},
                     },
+                },
+                "round": {
+                    "type": "integer",
+                    "description": "Current demolition round number (1-based).",
+                    "default": 1,
                 },
             },
             "required": ["failed_elements"],
@@ -111,20 +116,70 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             if not failed_elements:
                 return [TextContent(type="text", text=json.dumps({"error": "At least one failed_element ID is required"}))]
 
+            round_num = arguments.get("round", 1)
+            structure = arguments.get("structure")
+
+            # Compute modified structure (without failed elements) for progressive re-analysis
+            modified_structure = None
+            collapsed = False
+            remaining_columns = 0
+            total_columns_original = 0
+            if structure and "elements" in structure:
+                orig_elements = structure.get("elements", [])
+                # Filter out failed elements
+                failed_set = set(failed_elements)
+                modified_elements = [e for e in orig_elements if e.get("id") not in failed_set]
+                modified_structure = {
+                    "nodes": structure.get("nodes", []),
+                    "elements": modified_elements,
+                    "loads": structure.get("loads", []),
+                    "supports": structure.get("supports", []),
+                }
+                # Count remaining columns and detect collapse
+                if modified_structure["nodes"] and modified_elements:
+                    nodes_by_id = {n["id"]: n for n in modified_structure["nodes"]}
+                    total_columns_original = sum(1 for e in orig_elements
+                        if abs(nodes_by_id.get(e.get("node_i"), {}).get("x", -999) -
+                               nodes_by_id.get(e.get("node_j"), {}).get("x", 999)) < 0.01)
+                    for elem in modified_elements:
+                        ni = nodes_by_id.get(elem.get("node_i"))
+                        nj = nodes_by_id.get(elem.get("node_j"))
+                        if ni and nj and abs(ni.get("x", 0) - nj.get("x", 0)) < 0.01:
+                            remaining_columns += 1
+                # Collapse detection: no columns left, or >2/3 columns lost (progressive collapse threshold)
+                if remaining_columns == 0 or (total_columns_original > 0 and remaining_columns < total_columns_original * 0.34):
+                    collapsed = True
+
+            # Try Unity, fall back to simulated
             command = {
                 "action": "demolish",
                 "failed_elements": failed_elements,
                 "force_multiplier": arguments.get("force_multiplier", 1.5),
             }
-            if "structure_summary" in arguments:
-                command["structure_summary"] = arguments["structure_summary"]
+            unity_result = _send_to_unity(command)
 
-            result = _send_to_unity(command)
+            result = {
+                "status": "completed",
+                "round": round_num,
+                "failed_elements": failed_elements,
+                "force_multiplier": arguments.get("force_multiplier", 1.5),
+                "collapsed": collapsed,
+                "remaining_columns": remaining_columns,
+                "note": f"Round {round_num}: {len(failed_elements)} element(s) removed. {remaining_columns} columns remaining." + (" STRUCTURE COLLAPSED!" if collapsed else ""),
+            }
+            if modified_structure:
+                result["modified_structure"] = modified_structure
+
+            if "error" in unity_result:
+                result["status"] = "simulated"
+
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
         elif name == "reset_simulation":
             command = {"action": "reset"}
             result = _send_to_unity(command)
+            if "error" in result:
+                result = {"status": "simulated", "action": "reset", "note": "Scene reset in browser."}
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
         else:

@@ -114,35 +114,49 @@ def _analyze_structure(structure):
 
     ss = SystemElements()
 
+    # Track mapping: anaStruct internal element ID (1-based) -> original element ID
+    elem_id_map = {}
     for elem in elements:
         n1 = node_coords[elem["node_i"]]
         n2 = node_coords[elem["node_j"]]
         E = elem.get("E", 210e9)
         A = elem.get("A", 0.005)
         I = elem.get("I", 1e-5)
-        ss.add_element(location=[n1, n2], EA=E * A, EI=E * I, g=0)
+        ana_id = ss.add_element(location=[n1, n2], EA=E * A, EI=E * I, g=0)
+        elem_id_map[ana_id] = elem["id"]
+
+    # Build reverse mapping: coordinates -> anaStruct node ID
+    coord_to_ana = {}
+    for orig_id, coord in node_coords.items():
+        ana_node = ss.find_node_id(coord)
+        if ana_node is not None:
+            coord_to_ana[orig_id] = ana_node
 
     for sup in supports:
         nid = sup["node_id"]
-        coord = node_coords[nid]
+        ana_id = coord_to_ana.get(nid)
+        if ana_id is None:
+            continue  # Node not present in system (no elements connected)
         sup_type = sup.get("type", "fixed")
         if sup_type == "fixed":
-            ss.add_support_fixed(node_id=ss.find_node_id(coord))
+            ss.add_support_fixed(node_id=ana_id)
         elif sup_type == "hinged":
-            ss.add_support_hinged(node_id=ss.find_node_id(coord))
+            ss.add_support_hinged(node_id=ana_id)
         elif sup_type == "roller":
-            ss.add_support_roll(node_id=ss.find_node_id(coord), direction=2)
+            ss.add_support_roll(node_id=ana_id, direction=2)
 
     if loads:
         for load in loads:
             nid = load["node_id"]
-            coord = node_coords[nid]
+            ana_id = coord_to_ana.get(nid)
+            if ana_id is None:
+                continue  # Node not present in system
             Fx = load.get("Fx", 0)
             Fy = load.get("Fy", 0)
             if Fx != 0:
-                ss.point_load(node_id=ss.find_node_id(coord), Fx=Fx)
+                ss.point_load(node_id=ana_id, Fx=Fx)
             if Fy != 0:
-                ss.point_load(node_id=ss.find_node_id(coord), Fy=Fy)
+                ss.point_load(node_id=ana_id, Fy=Fy)
 
     try:
         ss.solve()
@@ -150,19 +164,36 @@ def _analyze_structure(structure):
         return {"error": f"Structural analysis failed: {e}"}
 
     node_displacements = []
-    for node_id_val in range(1, len(ss.node_map) + 1):
-        d = ss.get_node_displacements(node_id=node_id_val)
-        node_displacements.append({"node_id": node_id_val, "ux": float(d["ux"]), "uy": float(d["uy"])})
+    for orig_id in sorted(node_coords.keys()):
+        ana_id = coord_to_ana.get(orig_id)
+        if ana_id is None:
+            node_displacements.append({"node_id": orig_id, "ux": 0.0, "uy": 0.0})
+            continue
+        d = ss.get_node_displacements(node_id=ana_id)
+        node_displacements.append({"node_id": orig_id, "ux": float(d["ux"]), "uy": float(d["uy"])})
 
     element_forces = []
-    for elem_id in range(1, len(ss.element_map) + 1):
-        results = ss.get_element_results(element_id=elem_id, verbose=False)
-        element_forces.append({"element_id": elem_id, "Nmax": float(results["Nmax"]), "Nmin": float(results["Nmin"]),
-                               "Mmax": float(results["Mmax"]), "Mmin": float(results["Mmin"]),
-                               "Qmax": float(results["Qmax"]), "Qmin": float(results["Qmin"])})
+    for ana_id in range(1, len(ss.element_map) + 1):
+        try:
+            results = ss.get_element_results(element_id=ana_id, verbose=False)
+            orig_elem_id = elem_id_map.get(ana_id, ana_id - 1)
+            element_forces.append({
+                "element_id": orig_elem_id,
+                "Nmax": float(results["Nmax"]), "Nmin": float(results["Nmin"]),
+                "Mmax": float(results["Mmax"]), "Mmin": float(results["Mmin"]),
+                "Qmax": float(results["Qmax"]), "Qmin": float(results["Qmin"]),
+            })
+        except Exception:
+            continue  # Skip elements that failed to solve
 
-    max_disp = max(abs(d["ux"]) + abs(d["uy"]) for d in node_displacements)
-    max_axial = max(max(abs(ef["Nmax"]), abs(ef["Nmin"])) for ef in element_forces)
+    if node_displacements:
+        max_disp = max(abs(d["ux"]) + abs(d["uy"]) for d in node_displacements)
+    else:
+        max_disp = 0.0
+    if element_forces:
+        max_axial = max(max(abs(ef["Nmax"]), abs(ef["Nmin"])) for ef in element_forces)
+    else:
+        max_axial = 0.0
 
     return {"node_displacements": node_displacements, "element_forces": element_forces,
             "max_displacement": max_disp, "max_axial_force": max_axial}
@@ -178,7 +209,7 @@ def _select_critical_element(structure, analysis_result):
 
     force_by_id = {}
     for ef in element_forces:
-        eid = ef["element_id"] - 1  # convert 1-based to 0-based
+        eid = ef["element_id"]
         force_by_id[eid] = {"Nmax": abs(ef.get("Nmax", 0)), "Nmin": abs(ef.get("Nmin", 0))}
 
     # Find columns (vertical: same x-coordinate at both nodes)
@@ -231,7 +262,13 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             structure = arguments.get("structure", {})
             if not structure:
                 return [TextContent(type="text", text="Error: 'structure' argument is required")]
-            result = _analyze_structure(structure)
+            try:
+                result = _analyze_structure(structure)
+            except Exception as e:
+                logger.exception("analyze_frame failed")
+                result = {"error": f"Analysis error: {e}", "node_displacements": [], "element_forces": [],
+                          "max_displacement": 0, "max_axial_force": 0,
+                          "warning": "Structure may be unstable after element removal."}
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
         elif name == "select_critical_element":
