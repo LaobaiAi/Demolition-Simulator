@@ -499,10 +499,10 @@ export default function Home() {
                 className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[85%] rounded-xl px-4 py-2.5 text-sm ${
+                  className={`max-w-[85%] rounded-xl px-4 py-2.5 text-sm overflow-hidden ${
                     msg.role === "user"
                       ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-foreground"
+                      : "bg-muted text-foreground max-h-[360px] overflow-y-auto"
                   } animate-fade-in-up`}
                 >
                   {msg.role === "ai" ? (
@@ -534,9 +534,9 @@ export default function Home() {
                                 className="text-[10px] text-muted-foreground font-mono bg-secondary/50 rounded px-2 py-1"
                               >
                                 {step.type === "tool_call"
-                                  ? `${step.name}(${JSON.stringify(step.arguments)})`
+                                  ? `${step.name}(${JSON.stringify(step.arguments).slice(0, 120)})`
                                   : step.type === "tool_result"
-                                    ? `→ ${JSON.stringify(step.result)}`
+                                    ? `→ ${JSON.stringify(step.result).slice(0, 200)}`
                                     : ""}
                               </div>
                             ))}

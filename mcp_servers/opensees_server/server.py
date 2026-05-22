@@ -86,10 +86,17 @@ TOOLS = [
 
 _OPENSEES_AVAILABLE = False
 try:
-    import openseespy.opensees as ops
+    # On Windows, try to add MKL DLL search path before importing
+    import os as _os
+    _venv_bin = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "gateway", "venv", "Library", "bin")
+    if _os.path.exists(_venv_bin) and hasattr(_os, "add_dll_directory"):
+        _os.add_dll_directory(_os.path.abspath(_venv_bin))
+        logger.info(f"Added DLL search directory: {_venv_bin}")
+    import openseespy.opensees as ops  # noqa: F811
     _OPENSEES_AVAILABLE = True
+    logger.info("OpenSeesPy loaded successfully — high-fidelity analysis available")
 except Exception:
-    pass
+    logger.warning("OpenSeesPy not available — running in degraded mode")
 
 
 def _run_opensees_analysis(structure):
