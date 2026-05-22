@@ -9,6 +9,26 @@ from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
+
+def _normalize_content(content: Any) -> str | None:
+    """Normalize message.content which may be str, list[ContentBlock], or None."""
+    if content is None:
+        return None
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if hasattr(block, "text"):
+                parts.append(block.text)
+            elif isinstance(block, dict) and "text" in block:
+                parts.append(block["text"])
+            elif isinstance(block, str):
+                parts.append(block)
+        return "".join(parts) if parts else None
+    return str(content)
+
+
 SYSTEM_PROMPT = """You are XuanwuAI, an intelligent engineering assistant specialized in structural analysis and demolition simulation.
 
 ## Your Capabilities
@@ -124,6 +144,9 @@ class LLMEngine:
         choice = response.choices[0]
         message = choice.message
 
+        # Normalize content: OpenAI SDK may return str, list[ContentBlock], or None
+        content = _normalize_content(message.content)
+
         tool_calls = None
         if message.tool_calls:
             tool_calls = [
@@ -138,7 +161,7 @@ class LLMEngine:
             ]
 
         return {
-            "content": message.content,
+            "content": content,
             "tool_calls": tool_calls,
             "raw": response,
         }

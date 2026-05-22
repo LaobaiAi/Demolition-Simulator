@@ -88,7 +88,7 @@ class MCPClientHub:
                         texts.append(item.text)
                     elif isinstance(item, dict) and "text" in item:
                         texts.append(item["text"])
-                return {"result": texts[0] if len(texts) == 1 else texts, "raw": result.content}
+                return {"result": texts[0] if len(texts) == 1 else texts}
             return {"result": str(result)}
         except Exception as e:
             logger.exception(f"Tool call '{tool_name}' failed")

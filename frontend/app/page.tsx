@@ -33,6 +33,7 @@ import {
 import { fetchTools, type Tool } from "@/lib/api";
 import { VerificationPanel } from "@/components/verification-panel";
 import { MechanicalSummary, type StructuralMetrics } from "@/components/mechanical-summary";
+import { FloatingToolbar } from "@/components/floating-toolbar";
 
 interface ChatMessage {
   role: "user" | "ai";
@@ -64,31 +65,69 @@ export default function Home() {
   const [demolishDialogOpen, setDemolishDialogOpen] = useState(false);
   const [demolishReady, setDemolishReady] = useState(false);
 
-  // LLM settings
+  // LLM settings — per-model profiles persisted in localStorage
+  const LLM_STORAGE_KEY = "xuanwu_llm_profiles";
+  const COMMON_MODELS = ["gpt-4o", "gpt-4o-mini", "deepseek-v4-pro", "deepseek-v4-chat", "claude-sonnet-4-6", "claude-opus-4-7"];
+
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [llmApiKey, setLlmApiKey] = useState("");
   const [llmBaseUrl, setLlmBaseUrl] = useState("");
   const [llmModel, setLlmModel] = useState("gpt-4o");
   const [llmStatus, setLlmStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
+  function loadProfiles(): Record<string, { api_key: string; base_url: string }> {
+    try {
+      const saved = localStorage.getItem(LLM_STORAGE_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {};
+  }
+
+  function saveProfiles(profiles: Record<string, { api_key: string; base_url: string }>) {
+    localStorage.setItem(LLM_STORAGE_KEY, JSON.stringify(profiles));
+  }
+
   // Load saved settings on mount
   useEffect(() => {
-    const saved = localStorage.getItem("xuanwu_llm_settings");
-    if (saved) {
+    const profiles = loadProfiles();
+    const saved = localStorage.getItem("xuanwu_llm_settings"); // legacy migration
+    if (saved && Object.keys(profiles).length === 0) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.apiKey) setLlmApiKey(parsed.apiKey);
-        if (parsed.baseUrl) setLlmBaseUrl(parsed.baseUrl);
-        if (parsed.model) setLlmModel(parsed.model);
-        // Apply to backend
-        fetch("http://localhost:8000/settings/llm", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(parsed),
-        }).catch(() => {});
+        const model = parsed.model || "gpt-4o";
+        profiles[model] = { api_key: parsed.api_key || "", base_url: parsed.base_url || "" };
+        saveProfiles(profiles);
+        localStorage.removeItem("xuanwu_llm_settings");
       } catch {}
     }
+    // Load last-used model
+    const lastModel = localStorage.getItem("xuanwu_last_model") || "gpt-4o";
+    setLlmModel(lastModel);
+    const profile = profiles[lastModel];
+    if (profile) {
+      setLlmApiKey(profile.api_key || "");
+      setLlmBaseUrl(profile.base_url || "");
+      // Apply to backend
+      fetch("http://localhost:8000/settings/llm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: lastModel, api_key: profile.api_key, base_url: profile.base_url }),
+      }).catch(() => {});
+    }
   }, []);
+
+  const handleModelChange = (newModel: string) => {
+    setLlmModel(newModel);
+    const profiles = loadProfiles();
+    const profile = profiles[newModel];
+    if (profile) {
+      setLlmApiKey(profile.api_key || "");
+      setLlmBaseUrl(profile.base_url || "");
+    } else {
+      setLlmApiKey("");
+      setLlmBaseUrl("");
+    }
+  };
 
   const saveLlmSettings = async () => {
     setLlmStatus("saving");
@@ -104,7 +143,11 @@ export default function Home() {
         body: JSON.stringify(config),
       });
       if (!res.ok) throw new Error("Failed");
-      localStorage.setItem("xuanwu_llm_settings", JSON.stringify(config));
+      // Save per-model profile
+      const profiles = loadProfiles();
+      profiles[llmModel] = { api_key: llmApiKey, base_url: llmBaseUrl };
+      saveProfiles(profiles);
+      localStorage.setItem("xuanwu_last_model", llmModel);
       setLlmStatus("saved");
       setTimeout(() => setLlmStatus("idle"), 2000);
     } catch {
@@ -355,6 +398,28 @@ export default function Home() {
     "Analyze a 4-story 3-bay frame",
     "Analyze a 1-story 2-bay frame",
   ];
+
+  const sendQuickAction = useCallback((action: string) => {
+    if (status === "loading") return;
+    setMessages((prev) => [...prev, { role: "user", content: action }]);
+    setStatus("loading");
+    pendingStepsRef.current = [];
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "message", content: action }));
+    }
+  }, [status]);
+
+  const handleClearChat = useCallback(() => {
+    setMessages([]);
+    setLogEntries([]);
+    setAnalysisResult(null);
+    setStructuralMetrics(null);
+    setFailedElements([]);
+    setMemorySnippets([]);
+    setCurrentStep("");
+    setDemolishReady(false);
+    pendingStepsRef.current = [];
+  }, []);
 
   const getLogIcon = (type: string) => {
     switch (type) {
@@ -715,7 +780,7 @@ export default function Home() {
             <div className="flex items-center gap-2">
               <Brain className="h-3.5 w-3.5 text-primary/60" />
               <span className="text-xs text-muted-foreground">
-                LLM: {process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o"}
+                LLM: {llmModel}
               </span>
             </div>
           </div>
@@ -818,11 +883,17 @@ export default function Home() {
               <input
                 type="text"
                 value={llmModel}
-                onChange={(e) => setLlmModel(e.target.value)}
+                onChange={(e) => handleModelChange(e.target.value)}
                 placeholder="gpt-4o"
+                list="llm-model-presets"
                 className="mt-1 h-8 w-full rounded-lg border border-border bg-transparent px-2.5 py-1 text-sm outline-none focus:border-primary/50 transition-colors"
               />
-              <p className="text-[10px] text-muted-foreground mt-0.5">e.g. gpt-4o, gpt-4o-mini, deepseek-v4-pro, claude-sonnet-4-6</p>
+              <datalist id="llm-model-presets">
+                {COMMON_MODELS.map((m) => (
+                  <option key={m} value={m} />
+                ))}
+              </datalist>
+              <p className="text-[10px] text-muted-foreground mt-0.5">URL &amp; Key are remembered per model when you save</p>
             </div>
           </div>
           <DialogFooter className="flex items-center gap-2">
@@ -886,6 +957,16 @@ export default function Home() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Floating Toolbar */}
+      <FloatingToolbar
+        wsConnected={wsConnected}
+        toolsCount={tools.length}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onClearChat={handleClearChat}
+        quickActions={quickActions}
+        onQuickAction={sendQuickAction}
+      />
     </div>
   );
 }

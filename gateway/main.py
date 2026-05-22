@@ -7,6 +7,35 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any
 
+# ---------------------------------------------------------------------------
+# Monkey-patch json.dumps to silently convert non-serializable objects
+# (TextContent, etc.) into strings.  Must run before anything that calls
+# json.dumps, including FastAPI's websocket.send_json.
+# ---------------------------------------------------------------------------
+_original_dumps = json.dumps
+
+
+def _patched_dumps(obj: Any, **kwargs: Any) -> str:
+    def _walk(o: Any) -> Any:
+        if o is None or isinstance(o, (bool, int, float, str)):
+            return o
+        if isinstance(o, (list, tuple)):
+            return [_walk(i) for i in o]
+        if isinstance(o, dict):
+            return {str(k): _walk(v) for k, v in o.items()}
+        if hasattr(o, "text"):
+            return str(o.text)
+        if hasattr(o, "model_dump"):
+            return _walk(o.model_dump())
+        return str(o)
+
+    return _original_dumps(_walk(obj), **kwargs)
+
+
+json.dumps = _patched_dumps
+
+# ---------------------------------------------------------------------------
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -19,6 +48,24 @@ from memory import SessionMemory
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gateway")
+logger.info("JSON monkey-patch applied — all json.dumps calls are now TextContent-safe")
+
+
+def _sanitize_for_json(obj: Any) -> Any:
+    """Recursively convert non-JSON-serializable objects to safe primitives."""
+    if obj is None or isinstance(obj, (bool, int, float, str)):
+        return obj
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_for_json(item) for item in obj]
+    if isinstance(obj, dict):
+        return {str(k): _sanitize_for_json(v) for k, v in obj.items()}
+    # Anything else (TextContent, objects, etc.) → string representation
+    try:
+        if hasattr(obj, "text"):
+            return str(obj.text)
+    except Exception:
+        pass
+    return str(obj)
 
 # --- MCP Server configurations ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -210,6 +257,10 @@ async def get_llm_config():
 @app.websocket("/ws/chat")
 async def ws_chat(websocket: WebSocket):
     await websocket.accept()
+
+    async def _safe_send(data: dict[str, Any]) -> None:
+        await websocket.send_json(_sanitize_for_json(data))
+
     history: list[dict[str, Any]] = []
     try:
         while True:
@@ -223,7 +274,7 @@ async def ws_chat(websocket: WebSocket):
                     continue
 
                 # Echo user message back so frontend can display it
-                await websocket.send_json({
+                await _safe_send({
                     "type": "user_echo",
                     "content": user_message,
                 })
@@ -234,7 +285,7 @@ async def ws_chat(websocket: WebSocket):
                     if memory:
                         memory_context = memory.get_memory_context(user_message)
                         if memory_context:
-                            await websocket.send_json({
+                            await _safe_send({
                                 "type": "memory",
                                 "content": memory_context,
                             })
@@ -243,7 +294,7 @@ async def ws_chat(websocket: WebSocket):
                     try:
                         steps = await agent.run(user_message, history, memory_context)
                         for step in steps:
-                            await websocket.send_json(step)
+                            await _safe_send(step)
                             await asyncio.sleep(0.05)
 
                         # Update conversation history
@@ -267,12 +318,12 @@ async def ws_chat(websocket: WebSocket):
 
                     except Exception as e:
                         logger.exception("Agent loop error")
-                        await websocket.send_json({
+                        await _safe_send({
                             "type": "error",
                             "content": f"Agent error: {e}",
                         })
                 else:
-                    await websocket.send_json({
+                    await _safe_send({
                         "type": "response",
                         "content": "Agent not initialized. Check server configuration.",
                     })
@@ -281,7 +332,7 @@ async def ws_chat(websocket: WebSocket):
                 tool_name = msg.get("tool_name", "")
                 arguments = msg.get("arguments", {})
                 result = await hub.call_tool(tool_name, arguments)
-                await websocket.send_json({
+                await _safe_send({
                     "type": "tool_result",
                     "tool": tool_name,
                     "result": result,
