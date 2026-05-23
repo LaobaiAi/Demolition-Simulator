@@ -86,17 +86,24 @@ TOOLS = [
 
 _OPENSEES_AVAILABLE = False
 try:
-    # On Windows, try to add MKL DLL search path before importing
+    # On Windows, try multiple paths for MKL/Tcl DLL search before importing
     import os as _os
-    _venv_bin = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "gateway", "venv", "Library", "bin")
-    if _os.path.exists(_venv_bin) and hasattr(_os, "add_dll_directory"):
-        _os.add_dll_directory(_os.path.abspath(_venv_bin))
-        logger.info(f"Added DLL search directory: {_venv_bin}")
+    _file_dir = _os.path.dirname(_os.path.abspath(__file__))
+    # conda layout: venv/Library/bin
+    _conda_bin = _os.path.join(_file_dir, "..", "..", "gateway", "venv", "Library", "bin")
+    # pip layout: venv/Lib/site-packages/<pkg>   (DLLs may be alongside the .pyd)
+    _openseespy_dir = _os.path.join(_file_dir, "..", "..", "gateway", "venv", "Lib", "site-packages", "openseespy")
+    _dll_paths = [p for p in (_conda_bin, _openseespy_dir) if _os.path.exists(p)]
+    if hasattr(_os, "add_dll_directory"):
+        for _p in _dll_paths:
+            _os.add_dll_directory(_os.path.abspath(_p))
+            logger.info(f"Added DLL search directory: {_p}")
+
     import openseespy.opensees as ops  # noqa: F811
     _OPENSEES_AVAILABLE = True
     logger.info("OpenSeesPy loaded successfully — high-fidelity analysis available")
-except Exception:
-    logger.warning("OpenSeesPy not available — running in degraded mode")
+except Exception as _e:
+    logger.warning(f"OpenSeesPy not available — running in degraded mode ({_e})")
 
 
 def _run_opensees_analysis(structure):
@@ -236,12 +243,17 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             structure = arguments.get("structure", {})
             if not structure:
                 return [TextContent(type="text", text="Error: 'structure' argument is required")]
-            result = _run_opensees_analysis(structure)
+            result = await asyncio.wait_for(
+                asyncio.to_thread(_run_opensees_analysis, structure),
+                timeout=60.0,
+            )
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
         else:
             return [TextContent(type="text", text=f"Error: Unknown tool '{name}'")]
 
+    except asyncio.TimeoutError:
+        return [TextContent(type="text", text=json.dumps({"error": "OpenSees analysis timed out (>60s)"}))]
     except Exception as e:
         logger.exception(f"Tool call failed: {name}")
         return [TextContent(type="text", text=json.dumps({"error": str(e)}))]

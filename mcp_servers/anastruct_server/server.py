@@ -196,7 +196,8 @@ def _analyze_structure(structure):
         max_axial = 0.0
 
     return {"node_displacements": node_displacements, "element_forces": element_forces,
-            "max_displacement": max_disp, "max_axial_force": max_axial}
+            "max_displacement": max_disp, "max_axial_force": max_axial,
+            "solver": "anaStruct (2D linear elastic)"}
 
 
 def _select_critical_element(structure, analysis_result):
@@ -210,7 +211,11 @@ def _select_critical_element(structure, analysis_result):
     force_by_id = {}
     for ef in element_forces:
         eid = ef["element_id"]
-        force_by_id[eid] = {"Nmax": abs(ef.get("Nmax", 0)), "Nmin": abs(ef.get("Nmin", 0))}
+        n_max = abs(ef.get("Nmax", 0))
+        n_min = abs(ef.get("Nmin", 0))
+        n_abs = abs(ef.get("N", 0))
+        axial = max(n_max, n_min, n_abs)
+        force_by_id[eid] = {"Nmax": axial, "Nmin": 0}
 
     # Find columns (vertical: same x-coordinate at both nodes)
     columns = []
@@ -263,7 +268,13 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             if not structure:
                 return [TextContent(type="text", text="Error: 'structure' argument is required")]
             try:
-                result = _analyze_structure(structure)
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(_analyze_structure, structure),
+                    timeout=30.0,
+                )
+            except asyncio.TimeoutError:
+                result = {"error": "anaStruct analysis timed out (>30s)", "node_displacements": [],
+                          "element_forces": [], "max_displacement": 0, "max_axial_force": 0}
             except Exception as e:
                 logger.exception("analyze_frame failed")
                 result = {"error": f"Analysis error: {e}", "node_displacements": [], "element_forces": [],
