@@ -43,7 +43,7 @@ jobs:
       - name: TypeScript check
         run: npx tsc --noEmit
       - name: Lint
-        run: npx next lint
+        run: npm run lint
       - name: Run tests
         run: npx vitest run
       - name: Build
