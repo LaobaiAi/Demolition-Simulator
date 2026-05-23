@@ -17,6 +17,8 @@ import {
   PlayCircle,
   Zap,
   ListOrdered,
+  Square,
+  Library,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,8 +37,25 @@ import { VerificationPanel } from "@/components/verification-panel";
 import { MechanicalSummary, type StructuralMetrics } from "@/components/mechanical-summary";
 import { FloatingToolbar } from "@/components/floating-toolbar";
 import { FrameVisualization } from "@/components/frame-visualization";
+import { UnityVideoPanel } from "@/components/unity-video-panel";
 import { Sidebar, type Conversation } from "@/components/sidebar";
 import { t, getSavedLang, saveLang, type Lang } from "@/lib/i18n";
+import { useTheme, THEMES } from "@/components/theme-provider";
+
+/** Fetch with AbortController timeout. */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs = 8000,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 interface FrameNode { id: number; x: number; y: number; }
 interface FrameElement { id: number; node_i: number; node_j: number; E?: number; A?: number; I?: number; }
@@ -154,6 +173,34 @@ interface StepEvent {
   content?: string;
 }
 
+function SettingsTabs({
+  tabs,
+  activeTab,
+  onTabChange,
+}: {
+  tabs: { key: string; label: string }[];
+  activeTab: string;
+  onTabChange: (key: string) => void;
+}) {
+  return (
+    <div className="flex border-b border-border mb-1">
+      {tabs.map((tab) => (
+        <button
+          key={tab.key}
+          onClick={() => onTabChange(tab.key)}
+          className={`flex-1 px-3 py-2 text-sm font-medium transition-colors cursor-pointer border-b-2 -mb-[1px] ${
+            activeTab === tab.key
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function Home() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -167,10 +214,15 @@ export default function Home() {
   const [structuralMetrics, setStructuralMetrics] = useState<StructuralMetrics | null>(null);
   const [failedElements, setFailedElements] = useState<number[]>([]);
   const [currentStep, setCurrentStep] = useState("");
+  const [streamingText, setStreamingText] = useState("");
   const [demolishDialogOpen, setDemolishDialogOpen] = useState(false);
   const [demolishReady, setDemolishReady] = useState(false);
   const [frameStructure, setFrameStructure] = useState<FrameStructure | null>(null);
   const [nodeDisplacements, setNodeDisplacements] = useState<NodeDisp[] | null>(null);
+  const [analysisSolver, setAnalysisSolver] = useState<string | null>(null);
+  const [vizMode, setVizMode] = useState<"svg" | "unity">("svg");
+  const { theme, setTheme } = useTheme();
+  const [settingsTab, setSettingsTab] = useState("llm");
 
   // Conversation management
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -194,6 +246,10 @@ export default function Home() {
     }
   }, [sidebarCollapsed, sidebarReady]);
   const [convLoaded, setConvLoaded] = useState(false);
+  const [demoLibraryOpen, setDemoLibraryOpen] = useState(false);
+  const [demoRunning, setDemoRunning] = useState(false);
+  const [demoStatus, setDemoStatus] = useState("");
+  const demoRef = useRef<{ running: boolean; phase: string }>({ running: false, phase: "" });
 
   // Load conversations from localStorage on mount
   useEffect(() => {
@@ -255,6 +311,7 @@ export default function Home() {
     setMessages([]);
     setLogEntries([]);
     setAnalysisResult(null);
+    setAnalysisSolver(null);
     setStructuralMetrics(null);
     setFailedElements([]);
     setMemorySnippets([]);
@@ -296,6 +353,7 @@ export default function Home() {
       setMessages([]);
       setFrameStructure(null);
       setAnalysisResult(null);
+      setAnalysisSolver(null);
       setNodeDisplacements(null);
       setStructuralMetrics(null);
       setFailedElements([]);
@@ -405,31 +463,49 @@ export default function Home() {
 
   // Load saved settings on mount
   useEffect(() => {
-    const profiles = loadProfiles();
-    const saved = localStorage.getItem("xuanwu_llm_settings"); // legacy migration
-    if (saved && Object.keys(profiles).length === 0) {
+    const initFromBackend = async () => {
+      // Backend is the source of truth — fetch its config first
       try {
-        const parsed = JSON.parse(saved);
-        const model = parsed.model || "gpt-4o";
-        profiles[model] = { api_key: parsed.api_key || "", base_url: parsed.base_url || "" };
-        saveProfiles(profiles);
-        localStorage.removeItem("xuanwu_llm_settings");
+        const res = await fetchWithTimeout("http://localhost:8000/settings/llm");
+        if (res.ok) {
+          const backend = await res.json();
+          if (backend.has_api_key && backend.model) {
+            setLlmModel(backend.model);
+            setLlmApiKey("\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"); // masked placeholder
+            setLlmBaseUrl(backend.base_url || "");
+            localStorage.setItem("xuanwu_last_model", backend.model);
+            return; // backend has valid config, use it
+          }
+        }
       } catch {}
-    }
-    // Load last-used model
-    const lastModel = localStorage.getItem("xuanwu_last_model") || "gpt-4o";
-    setLlmModel(lastModel);
-    const profile = profiles[lastModel];
-    if (profile) {
-      setLlmApiKey(profile.api_key || "");
-      setLlmBaseUrl(profile.base_url || "");
-      // Apply to backend
-      fetch("http://localhost:8000/settings/llm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: lastModel, api_key: profile.api_key, base_url: profile.base_url }),
-      }).catch(() => {});
-    }
+
+      // Fallback: load from localStorage
+      const profiles = loadProfiles();
+      const saved = localStorage.getItem("xuanwu_llm_settings"); // legacy migration
+      if (saved && Object.keys(profiles).length === 0) {
+        try {
+          const parsed = JSON.parse(saved);
+          const model = parsed.model || "gpt-4o";
+          profiles[model] = { api_key: parsed.api_key || "", base_url: parsed.base_url || "" };
+          saveProfiles(profiles);
+          localStorage.removeItem("xuanwu_llm_settings");
+        } catch {}
+      }
+      const lastModel = localStorage.getItem("xuanwu_last_model") || "gpt-4o";
+      setLlmModel(lastModel);
+      const profile = profiles[lastModel];
+      if (profile) {
+        setLlmApiKey(profile.api_key || "");
+        setLlmBaseUrl(profile.base_url || "");
+        // Sync localStorage value to backend so it stays consistent
+        fetchWithTimeout("http://localhost:8000/settings/llm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: lastModel, api_key: profile.api_key, base_url: profile.base_url }),
+        }).catch(() => {});
+      }
+    };
+    initFromBackend();
   }, []);
 
   const handleModelChange = (newModel: string) => {
@@ -447,21 +523,24 @@ export default function Home() {
 
   const saveLlmSettings = async () => {
     setLlmStatus("saving");
-    const config = {
-      api_key: llmApiKey || undefined,
-      base_url: llmBaseUrl || undefined,
+    const config: Record<string, string | undefined> = {
       model: llmModel || undefined,
     };
+    if (llmBaseUrl) config.base_url = llmBaseUrl;
+    if (llmApiKey && llmApiKey !== "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022") {
+      config.api_key = llmApiKey;
+    }
     try {
-      const res = await fetch("http://localhost:8000/settings/llm", {
+      const res = await fetchWithTimeout("http://localhost:8000/settings/llm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
       });
       if (!res.ok) throw new Error("Failed");
-      // Save per-model profile
+      // Save per-model profile (preserve existing key if masked)
       const profiles = loadProfiles();
-      profiles[llmModel] = { api_key: llmApiKey, base_url: llmBaseUrl };
+      const existingKey = llmApiKey !== "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" ? llmApiKey : (profiles[llmModel]?.api_key || "");
+      profiles[llmModel] = { api_key: existingKey, base_url: llmBaseUrl };
       saveProfiles(profiles);
       localStorage.setItem("xuanwu_last_model", llmModel);
       setLlmStatus("saved");
@@ -506,6 +585,7 @@ export default function Home() {
         if (data.type === "user_echo") {
           // Reset for new message
           setCurrentStep("");
+          setStreamingText("");
           setDemolishReady(false);
           return;
         }
@@ -520,13 +600,14 @@ export default function Home() {
         }
 
         if (data.type === "response") {
-          // Final response - commit to messages
+          // Final response - commit to messages (compact steps to save storage)
+          const compacted = pendingStepsRef.current.map(compactStep);
           setMessages((prev) => [
             ...prev,
             {
               role: "ai",
               content: data.content || "",
-              steps: [...pendingStepsRef.current],
+              steps: compacted,
             },
           ]);
           // Also add as a log entry
@@ -536,6 +617,7 @@ export default function Home() {
           ]);
           pendingStepsRef.current = [];
           setStatus("idle");
+          setStreamingText("");
         } else if (data.type === "error") {
           setMessages((prev) => [
             ...prev,
@@ -544,6 +626,7 @@ export default function Home() {
           setLogEntries((prev) => [...prev, data]);
           pendingStepsRef.current = [];
           setStatus("idle");
+          setStreamingText("");
         } else {
           // Tool calls, tool results, thinking steps
           pendingStepsRef.current = [...pendingStepsRef.current, data];
@@ -560,6 +643,11 @@ export default function Home() {
               high_fidelity_analysis: t("step.verifying", L),
             };
             setCurrentStep(stepLabels[data.name] || `Running ${data.name}...`);
+          }
+
+          // Show streamed thinking/reasoning content in real-time
+          if (data.type === "thinking" && data.content) {
+            setStreamingText((prev) => prev + data.content);
           }
 
           // Capture generated frame structure for visualization
@@ -589,17 +677,40 @@ export default function Home() {
                 typeof data.result === "string"
                   ? JSON.parse(data.result)
                   : data.result;
-              if (parsed.max_displacement !== undefined) {
+              if (parsed.max_displacement !== undefined && !("error" in parsed)) {
                 setAnalysisResult(parsed);
+                if (parsed.solver) setAnalysisSolver(parsed.solver);
                 if (parsed.node_displacements) {
                   setNodeDisplacements(parsed.node_displacements);
                 }
+
+                // Auto-detect critical element from element forces (if available)
+                const elemForces = parsed.element_forces as Array<{element_id: number; Nmax: number; Nmin: number}> | undefined;
+                let autoCritId: number | null = null;
+                let autoCritAxial: number | null = null;
+                if (elemForces && elemForces.length > 0) {
+                  let maxForce = 0;
+                  let bestId = 0;
+                  for (const ef of elemForces) {
+                    const absN = Math.max(Math.abs(ef.Nmax), Math.abs(ef.Nmin));
+                    if (absN > maxForce) {
+                      maxForce = absN;
+                      bestId = ef.element_id;
+                    }
+                  }
+                  autoCritId = bestId;
+                  autoCritAxial = maxForce;
+                  // Auto-activate demolish button — no need to wait for select_critical_element
+                  setDemolishReady(true);
+                  setCurrentStep("");
+                }
+
                 // Update mechanical summary with analysis values
                 setStructuralMetrics((prev) => ({
                   maxDisplacement: parsed.max_displacement ?? 0,
                   maxAxialForce: parsed.max_axial_force ?? 0,
-                  criticalElementId: prev?.criticalElementId ?? null,
-                  criticalAxialForce: prev?.criticalAxialForce ?? null,
+                  criticalElementId: autoCritId ?? prev?.criticalElementId ?? null,
+                  criticalAxialForce: autoCritAxial ?? prev?.criticalAxialForce ?? null,
                   columnCount: prev?.columnCount ?? 0,
                   failedElements: prev?.failedElements ?? [],
                 }));
@@ -714,6 +825,16 @@ export default function Home() {
     }
   }, [input, status]);
 
+  const handleStop = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
+    setStatus("idle");
+    setStreamingText("");
+    setCurrentStep("");
+    pendingStepsRef.current = [];
+  }, []);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -734,6 +855,71 @@ export default function Home() {
 
     wsRef.current.send(JSON.stringify({ type: "message", content: msg }));
   }, [structuralMetrics]);
+
+  const runUnityFullFlowDemo = useCallback(async () => {
+    setDemoLibraryOpen(false);
+    setDemoRunning(true);
+    demoRef.current = { running: true, phase: "launching" };
+    setDemoStatus(t("demo.launching", langRef.current));
+
+    try {
+      const res = await fetch("http://localhost:8000/unity/launch", { method: "POST" });
+      if (!res.ok) {
+        setDemoStatus(t("demo.launch_failed", langRef.current));
+        setTimeout(() => { setDemoRunning(false); demoRef.current.running = false; }, 3000);
+        return;
+      }
+    } catch {
+      setDemoStatus(t("demo.launch_failed", langRef.current));
+      setTimeout(() => { setDemoRunning(false); demoRef.current.running = false; }, 3000);
+      return;
+    }
+
+    setVizMode("unity");
+    demoRef.current.phase = "analyzing";
+    setDemoStatus(t("demo.sending", langRef.current));
+
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      const msg = t("quick.2x2", langRef.current);
+      setMessages((prev) => [...prev, { role: "user", content: msg }]);
+      setStatus("loading");
+      pendingStepsRef.current = [];
+      wsRef.current.send(JSON.stringify({ type: "message", content: msg }));
+    } else {
+      setDemoStatus(t("demo.ws_failed", langRef.current));
+      setTimeout(() => { setDemoRunning(false); demoRef.current.running = false; }, 3000);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!demoRef.current.running) return;
+    if (!demolishReady) return;
+    if (!structuralMetrics?.criticalElementId) return;
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+    demoRef.current.phase = "demolishing";
+    setDemoStatus(t("demo.auto_demolish", langRef.current));
+
+    const timer = setTimeout(() => {
+      const msg = `demolish element ${structuralMetrics.criticalElementId}`;
+      setMessages((prev) => [...prev, { role: "user", content: msg }]);
+      setStatus("loading");
+      setDemolishReady(false);
+
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: "message", content: msg }));
+      }
+
+      setDemoStatus(t("demo.completed", langRef.current));
+      setTimeout(() => {
+        demoRef.current.running = false;
+        setDemoRunning(false);
+        setDemoStatus("");
+      }, 2500);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [demolishReady, structuralMetrics]);
 
   const quickActions = [
     t("quick.2x2", lang),
@@ -757,10 +943,12 @@ export default function Home() {
     setMessages([]);
     setLogEntries([]);
     setAnalysisResult(null);
+    setAnalysisSolver(null);
     setStructuralMetrics(null);
     setFailedElements([]);
     setMemorySnippets([]);
     setCurrentStep("");
+    setStreamingText("");
     setDemolishReady(false);
     setFrameStructure(null);
     setNodeDisplacements(null);
@@ -846,6 +1034,79 @@ export default function Home() {
     return String(v);
   }
 
+  /** Strip verbose fields from a step — keep only what restoreStateFromMessages needs. */
+  function compactStep(step: StepEvent): StepEvent {
+    if (step.type === "tool_call") {
+      return { type: step.type, name: step.name };
+    }
+    if (step.type === "tool_result" && step.name && step.result) {
+      let parsed: any;
+      try {
+        parsed = typeof step.result === "string" ? JSON.parse(step.result) : step.result;
+      } catch {
+        return { type: step.type, name: step.name };
+      }
+      const keep: Record<string, unknown> = {};
+      if (step.name === "generate_simple_frame") {
+        if (parsed.nodes) keep.nodes = parsed.nodes;
+        if (parsed.elements) keep.elements = parsed.elements;
+      } else if (step.name === "analyze_frame") {
+        if (parsed.max_displacement !== undefined) keep.max_displacement = parsed.max_displacement;
+        if (parsed.max_axial_force !== undefined) keep.max_axial_force = parsed.max_axial_force;
+        if (parsed.node_displacements) keep.node_displacements = parsed.node_displacements;
+        if (parsed.element_forces) keep.element_forces = parsed.element_forces;
+        if (parsed.solver) keep.solver = parsed.solver;
+      } else if (step.name === "select_critical_element") {
+        if (parsed.critical_element_id !== undefined) keep.critical_element_id = parsed.critical_element_id;
+        if (parsed.critical_axial_force_N !== undefined) keep.critical_axial_force_N = parsed.critical_axial_force_N;
+        if (parsed.column_count !== undefined) keep.column_count = parsed.column_count;
+      } else if (step.name === "apply_demolition_action") {
+        if (parsed.failed_elements) keep.failed_elements = parsed.failed_elements;
+      }
+      return { type: step.type, name: step.name, result: keep };
+    }
+    return step;
+  }
+
+  /** Generate a short human-readable label for one step in the tool chain. */
+  function stepBrief(step: StepEvent): string {
+    const toolNames: Record<string, string> = {
+      generate_simple_frame: t("step.generating_brief", lang),
+      analyze_frame: t("step.analyzing_brief", lang),
+      select_critical_element: t("step.critical_brief", lang),
+      apply_demolition_action: t("step.demolishing_brief", lang),
+      high_fidelity_analysis: "OpenSees",
+      pynite_analysis: "PyNite",
+      fapp_analysis: "FAPP",
+    };
+    if (step.type === "tool_call") {
+      return toolNames[step.name || ""] || step.name || "?";
+    }
+    if (step.type === "tool_result" && step.name) {
+      const briefs: Record<string, (r: any) => string> = {
+        generate_simple_frame: (r) => {
+          const n = (r.nodes as any[] | undefined)?.length ?? 0;
+          const e = (r.elements as any[] | undefined)?.length ?? 0;
+          return `${n}点${e}杆`;
+        },
+        analyze_frame: (r) => `max ${((r.max_displacement ?? 0) as number * 1000).toFixed(2)}mm`,
+        select_critical_element: (r) => `柱#${r.critical_element_id}`,
+        apply_demolition_action: (r) => {
+          const fe = r.failed_elements as number[] | undefined;
+          return fe?.length ? `塌 #${fe.join(",")}` : "";
+        },
+        high_fidelity_analysis: (r) => `${r.solver ? (r.solver as string).split(" ")[0] : ""} ${((r.max_displacement ?? 0) as number * 1000).toFixed(2)}mm`,
+      };
+      const fn = briefs[step.name];
+      if (!fn) return "";
+      let parsed: any;
+      try { parsed = typeof step.result === "string" ? JSON.parse(step.result) : step.result; } catch { return ""; }
+      if (!parsed || typeof parsed !== "object") return "";
+      return fn(parsed);
+    }
+    return "";
+  }
+
   return (
     <div className="flex h-screen w-full overflow-hidden">
       {/* Sidebar */}
@@ -860,6 +1121,7 @@ export default function Home() {
         onTogglePin={togglePinConversation}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenDemoLibrary={() => setDemoLibraryOpen(true)}
       />
 
       {/* Panels container */}
@@ -918,22 +1180,31 @@ export default function Home() {
                       />
                       {msg.steps && msg.steps.length > 0 && (
                         <details className="mt-2">
-                          <summary className="text-[10px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                            {msg.steps.length} tool call(s)
+                          <summary className="text-[10px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors select-none">
+                            {msg.steps.filter((s) => s.type === "tool_call").map((s) => stepBrief(s)).join(" → ")}
+                            {" · "}
+                            {msg.steps.filter((s) => s.type === "tool_result").map((s) => stepBrief(s)).filter(Boolean).join(", ")}
                           </summary>
-                          <div className="mt-1 space-y-1">
-                            {msg.steps.map((step, j) => (
-                              <div
-                                key={j}
-                                className="text-[10px] text-muted-foreground font-mono bg-secondary/50 rounded px-2 py-1"
-                              >
-                                {step.type === "tool_call"
-                                  ? `${step.name}(${JSON.stringify(step.arguments).slice(0, 120)})`
-                                  : step.type === "tool_result"
-                                    ? `→ ${JSON.stringify(step.result).slice(0, 200)}`
-                                    : ""}
-                              </div>
-                            ))}
+                          <div className="mt-1.5 space-y-0.5">
+                            {msg.steps.map((step, j) => {
+                              const brief = stepBrief(step);
+                              return (
+                                <div
+                                  key={j}
+                                  className="text-[10px] font-mono bg-secondary/40 rounded px-2 py-0.5 flex items-center gap-1.5"
+                                >
+                                  <span className={
+                                    step.type === "tool_call"
+                                      ? "text-amber-400/80 shrink-0"
+                                      : "text-emerald-400/80 shrink-0"
+                                  }>
+                                    {step.type === "tool_call" ? "▶" : "✔"}
+                                  </span>
+                                  <span className="text-muted-foreground">{step.name}</span>
+                                  {brief && <span className="text-foreground/60">{brief}</span>}
+                                </div>
+                              );
+                            })}
                           </div>
                         </details>
                       )}
@@ -955,6 +1226,11 @@ export default function Home() {
                     <div className="flex items-center gap-1.5 text-[11px] text-primary/80 animate-pulse">
                       <ListOrdered className="h-3 w-3" />
                       {currentStep}
+                    </div>
+                  )}
+                  {streamingText && (
+                    <div className="text-[11px] text-muted-foreground/60 max-w-[400px] leading-relaxed">
+                      {streamingText.slice(-300)}
                     </div>
                   )}
                 </div>
@@ -1004,23 +1280,62 @@ export default function Home() {
               className="flex-1"
               disabled={status === "loading"}
             />
-            <Button
-              onClick={sendMessage}
-              disabled={!input.trim() || status === "loading"}
-              size="icon"
-            >
-              {status === "loading" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
+            {status === "loading" ? (
+              <Button
+                onClick={handleStop}
+                size="icon"
+                variant="destructive"
+                className="shrink-0"
+                title={t("chat.stop", lang)}
+              >
+                <Square className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button
+                onClick={sendMessage}
+                disabled={!input.trim()}
+                size="icon"
+              >
                 <Send className="h-4 w-4" />
-              )}
-            </Button>
+              </Button>
+            )}
           </div>
         </div>
       </div>
 
       {/* Center Panel: Visualization (50%) */}
       <div className="flex w-[50%] flex-col border-r border-border bg-[#0a0f1a]">
+        {/* Visualization mode toggle */}
+        <div className="flex items-center justify-between border-b border-border px-4 py-1.5">
+          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+            {vizMode === "svg" ? "SVG 2D View" : "Unity 3D View"}
+          </span>
+          <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-0.5">
+            <button
+              onClick={() => setVizMode("svg")}
+              className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${
+                vizMode === "svg"
+                  ? "bg-primary/20 text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              SVG
+            </button>
+            <button
+              onClick={() => setVizMode("unity")}
+              className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${
+                vizMode === "unity"
+                  ? "bg-primary/20 text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Unity
+            </button>
+          </div>
+        </div>
+
+        {vizMode === "svg" ? (
+          <>
         {/* Structure visualization */}
         <FrameVisualization
           structure={frameStructure}
@@ -1031,11 +1346,15 @@ export default function Home() {
           elementForces={analysisResult?.element_forces as Array<{element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number}> | undefined}
         />
 
-        {/* Verification panel */}
+        {/* Verification panel — centered below visualization */}
         {analysisResult && (
-          <div className="px-4 pb-2">
-            <VerificationPanel fastResult={analysisResult} structure={frameStructure as Record<string, unknown> | null} lang={lang} />
+          <div className="flex items-center justify-center px-4 pb-2">
+            <VerificationPanel fastResult={analysisResult} structure={frameStructure as Record<string, unknown> | null} lang={lang} analysisSolver={analysisSolver ?? undefined} />
           </div>
+        )}
+          </>
+        ) : (
+          <UnityVideoPanel onStreamConnected={() => setVizMode("unity")} />
         )}
 
         {/* Log Stream at bottom of center panel */}
@@ -1191,178 +1510,238 @@ export default function Home() {
       </div>
       {/* End panels container */}
 
-      {/* LLM Settings Dialog */}
+      {/* Settings Dialog */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent className="border-border">
+        <DialogContent className="border-border max-w-2xl h-[540px] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings className="h-4 w-4 text-primary" />
               {t("settings.title", lang)}
             </DialogTitle>
-            <DialogDescription className="text-muted-foreground">
-              {t("settings.desc", lang)}
-            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("settings.api_key", lang)}</label>
-              <input
-                type="password"
-                value={llmApiKey}
-                onChange={(e) => setLlmApiKey(e.target.value)}
-                placeholder="sk-..."
-                className="mt-1 h-8 w-full rounded-lg border border-border bg-transparent px-2.5 py-1 text-sm outline-none focus:border-primary/50 transition-colors"
-              />
-              <p className="text-[10px] text-muted-foreground mt-0.5">Required for most providers (OpenAI, DeepSeek, etc.)</p>
+
+          {/* Tab bar */}
+          <SettingsTabs
+            tabs={[
+              { key: "llm", label: t("settings.tab_llm", lang) },
+              { key: "appearance", label: t("settings.tab_appearance", lang) },
+              { key: "storage", label: t("settings.tab_storage", lang) },
+            ]}
+            activeTab={settingsTab}
+            onTabChange={setSettingsTab}
+          />
+
+          <div className="flex-1 overflow-y-auto min-h-0">
+          {/* LLM Tab */}
+          {settingsTab === "llm" && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-muted-foreground uppercase tracking-wide">{t("settings.api_key", lang)}</label>
+                <input
+                  type="password"
+                  value={llmApiKey}
+                  onChange={(e) => setLlmApiKey(e.target.value)}
+                  placeholder="sk-..."
+                  className="mt-1 h-9 w-full rounded-lg border border-border bg-transparent px-2.5 py-1 text-base outline-none focus:border-primary/50 transition-colors"
+                />
+                <p className="text-xs text-muted-foreground mt-0.5">{t("settings.api_key_hint", lang)}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground uppercase tracking-wide">{t("settings.base_url", lang)}</label>
+                <input
+                  type="text"
+                  value={llmBaseUrl}
+                  onChange={(e) => setLlmBaseUrl(e.target.value)}
+                  placeholder="https://api.openai.com/v1"
+                  className="mt-1 h-9 w-full rounded-lg border border-border bg-transparent px-2.5 py-1 text-base outline-none focus:border-primary/50 transition-colors"
+                />
+                <p className="text-xs text-muted-foreground mt-0.5">{t("settings.base_url_hint", lang)}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground uppercase tracking-wide">{t("settings.model", lang)}</label>
+                <input
+                  type="text"
+                  value={llmModel}
+                  onChange={(e) => handleModelChange(e.target.value)}
+                  placeholder="gpt-4o"
+                  list="llm-model-presets"
+                  className="mt-1 h-9 w-full rounded-lg border border-border bg-transparent px-2.5 py-1 text-base outline-none focus:border-primary/50 transition-colors"
+                />
+                <datalist id="llm-model-presets">
+                  {COMMON_MODELS.map((m) => (
+                    <option key={m} value={m} />
+                  ))}
+                </datalist>
+                <p className="text-xs text-muted-foreground mt-0.5">{t("settings.model_hint", lang)}</p>
+              </div>
+              <DialogFooter className="flex items-center gap-2 pt-2">
+                {llmStatus === "saved" && (
+                  <span className="text-xs text-emerald-400 mr-auto">{t("settings.saved", lang)}</span>
+                )}
+                {llmStatus === "error" && (
+                  <span className="text-xs text-red-400 mr-auto">{t("settings.failed", lang)}</span>
+                )}
+                <Button variant="outline" onClick={() => setSettingsOpen(false)}>
+                  {t("settings.cancel", lang)}
+                </Button>
+                <Button onClick={saveLlmSettings} disabled={llmStatus === "saving"}>
+                  {llmStatus === "saving" ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                      {t("settings.saving", lang)}
+                    </>
+                  ) : (
+                    t("settings.save", lang)
+                  )}
+                </Button>
+              </DialogFooter>
             </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("settings.base_url", lang)}</label>
-              <input
-                type="text"
-                value={llmBaseUrl}
-                onChange={(e) => setLlmBaseUrl(e.target.value)}
-                placeholder="https://api.openai.com/v1"
-                className="mt-1 h-8 w-full rounded-lg border border-border bg-transparent px-2.5 py-1 text-sm outline-none focus:border-primary/50 transition-colors"
-              />
-              <p className="text-[10px] text-muted-foreground mt-0.5">Leave empty for OpenAI default. Set custom endpoint for other providers.</p>
+          )}
+
+          {/* Appearance Tab */}
+          {settingsTab === "appearance" && (
+            <div className="space-y-5">
+              {/* Language */}
+              <div>
+                <label className="text-sm font-medium text-muted-foreground uppercase tracking-wide">{t("settings.language", lang)}</label>
+                <div className="mt-2 flex items-center gap-3">
+                  <button
+                    onClick={() => handleLangChange("en")}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                      lang === "en"
+                        ? "bg-primary/20 text-primary border border-primary/50"
+                        : "bg-muted text-muted-foreground border border-border hover:bg-muted/80"
+                    }`}
+                  >
+                    English
+                  </button>
+                  <button
+                    onClick={() => handleLangChange("zh")}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                      lang === "zh"
+                        ? "bg-primary/20 text-primary border border-primary/50"
+                        : "bg-muted text-muted-foreground border border-border hover:bg-muted/80"
+                    }`}
+                  >
+                    中文
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1.5">{t("settings.language_hint", lang)}</p>
+              </div>
+              {/* Theme */}
+              <div>
+                <label className="text-sm font-medium text-muted-foreground uppercase tracking-wide">{t("settings.theme", lang)}</label>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {THEMES.map((t2) => {
+                    const active = theme === t2.key;
+                    return (
+                      <button
+                        key={t2.key}
+                        onClick={() => setTheme(t2.key)}
+                        className={`flex flex-col items-center gap-1.5 rounded-lg p-2 border transition-all cursor-pointer ${
+                          active
+                            ? "border-primary bg-primary/10 ring-1 ring-primary/30"
+                            : "border-border bg-muted/20 hover:border-muted-foreground/40"
+                        }`}
+                      >
+                        <div className="flex gap-0.5">
+                          {t2.colors.map((c, i) => (
+                            <span
+                              key={i}
+                              className="w-5 h-5 rounded-full border border-white/10"
+                              style={{ backgroundColor: c }}
+                            />
+                          ))}
+                        </div>
+                        <span
+                          className={`text-xs font-medium ${
+                            active ? "text-primary" : "text-foreground"
+                          }`}
+                        >
+                          {lang === "zh" ? t2.nameZh : t2.name}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("settings.model", lang)}</label>
-              <input
-                type="text"
-                value={llmModel}
-                onChange={(e) => handleModelChange(e.target.value)}
-                placeholder="gpt-4o"
-                list="llm-model-presets"
-                className="mt-1 h-8 w-full rounded-lg border border-border bg-transparent px-2.5 py-1 text-sm outline-none focus:border-primary/50 transition-colors"
-              />
-              <datalist id="llm-model-presets">
-                {COMMON_MODELS.map((m) => (
-                  <option key={m} value={m} />
-                ))}
-              </datalist>
-              <p className="text-[10px] text-muted-foreground mt-0.5">URL &amp; Key are remembered per model when you save</p>
-            </div>
-            {/* Language Switch */}
-            <div className="border-t border-border pt-4">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("settings.language", lang)}</label>
-              <div className="mt-2 flex items-center gap-3">
+          )}
+
+          {/* Storage Tab */}
+          {settingsTab === "storage" && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 px-3 py-2">
+                <div>
+                  <span className="text-sm text-foreground">{t("settings.conv_storage", lang)}</span>
+                  <p className="text-xs text-muted-foreground">{t("settings.conv_storage_hint", lang)}</p>
+                </div>
                 <button
-                  onClick={() => handleLangChange("en")}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    lang === "en"
-                      ? "bg-primary/20 text-primary border border-primary/50"
-                      : "bg-muted text-muted-foreground border border-border hover:bg-muted/80"
-                  }`}
+                  onClick={() => {
+                    if (confirm(t("settings.clear_conv_confirm", lang))) {
+                      localStorage.removeItem(CONV_STORAGE);
+                      localStorage.removeItem(CONV_ACTIVE);
+                      setConversations([]);
+                      setMessages([]);
+                      setActiveConvId(null);
+                      setFrameStructure(null);
+                      setAnalysisResult(null);
+                      setAnalysisSolver(null);
+                      setFailedElements([]);
+                      setDemolishReady(false);
+                    }
+                  }}
+                  className="px-3 py-1 text-xs font-medium text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-colors cursor-pointer shrink-0"
                 >
-                  English
-                </button>
-                <button
-                  onClick={() => handleLangChange("zh")}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    lang === "zh"
-                      ? "bg-primary/20 text-primary border border-primary/50"
-                      : "bg-muted text-muted-foreground border border-border hover:bg-muted/80"
-                  }`}
-                >
-                  中文
+                  {t("settings.clear", lang)}
                 </button>
               </div>
-              <p className="text-[10px] text-muted-foreground mt-1.5">{t("settings.language_hint", lang)}</p>
-            </div>
-            {/* Storage & Memory Management */}
-            <div className="border-t border-border pt-4">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("settings.storage", lang)}</label>
-              <div className="mt-2 space-y-3">
-                {/* Conversations */}
-                <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 px-3 py-2">
-                  <div>
-                    <span className="text-xs text-foreground">{t("settings.conv_storage", lang)}</span>
-                    <p className="text-[10px] text-muted-foreground">{t("settings.conv_storage_hint", lang)}</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      if (confirm(t("settings.clear_conv_confirm", lang))) {
-                        localStorage.removeItem(CONV_STORAGE);
-                        localStorage.removeItem(CONV_ACTIVE);
-                        setConversations([]);
-                        setMessages([]);
-                        setActiveConvId(null);
-                        setFrameStructure(null);
-                        setAnalysisResult(null);
-                        setFailedElements([]);
-                        setDemolishReady(false);
-                      }
-                    }}
-                    className="px-3 py-1 text-[10px] font-medium text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-colors cursor-pointer shrink-0"
-                  >
-                    {t("settings.clear", lang)}
-                  </button>
+              <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 px-3 py-2">
+                <div>
+                  <span className="text-sm text-foreground">{t("settings.memory_storage", lang)}</span>
+                  <p className="text-xs text-muted-foreground">{t("settings.memory_storage_hint", lang)}</p>
                 </div>
-                {/* Agent Memory */}
-                <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 px-3 py-2">
-                  <div>
-                    <span className="text-xs text-foreground">{t("settings.memory_storage", lang)}</span>
-                    <p className="text-[10px] text-muted-foreground">{t("settings.memory_storage_hint", lang)}</p>
-                  </div>
-                  <button
-                    onClick={async () => {
-                      try {
-                        await fetch("http://localhost:8000/settings/memory/clear", { method: "POST" });
-                        setMemorySnippets([]);
-                      } catch {}
-                    }}
-                    className="px-3 py-1 text-[10px] font-medium text-amber-400 border border-amber-500/30 rounded-lg hover:bg-amber-500/10 transition-colors cursor-pointer shrink-0"
-                  >
-                    {t("settings.clear", lang)}
-                  </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      await fetchWithTimeout("http://localhost:8000/settings/memory/clear", { method: "POST" });
+                      setMemorySnippets([]);
+                    } catch {}
+                  }}
+                  className="px-3 py-1 text-xs font-medium text-amber-400 border border-amber-500/30 rounded-lg hover:bg-amber-500/10 transition-colors cursor-pointer shrink-0"
+                >
+                  {t("settings.clear", lang)}
+                </button>
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 px-3 py-2">
+                <div>
+                  <span className="text-sm text-foreground">{t("settings.export", lang)}</span>
+                  <p className="text-xs text-muted-foreground">{t("settings.export_hint", lang)}</p>
                 </div>
-                {/* Export conversations */}
-                <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 px-3 py-2">
-                  <div>
-                    <span className="text-xs text-foreground">{t("settings.export", lang)}</span>
-                    <p className="text-[10px] text-muted-foreground">{t("settings.export_hint", lang)}</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const data = localStorage.getItem(CONV_STORAGE) || "[]";
-                      const blob = new Blob([data], { type: "application/json" });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url;
-                      a.download = "xuanwu_conversations_backup.json";
-                      a.click();
-                      URL.revokeObjectURL(url);
-                    }}
-                    className="px-3 py-1 text-[10px] font-medium text-primary border border-primary/30 rounded-lg hover:bg-primary/10 transition-colors cursor-pointer shrink-0"
-                  >
-                    {t("settings.download", lang)}
-                  </button>
-                </div>
+                <button
+                  onClick={() => {
+                    const data = localStorage.getItem(CONV_STORAGE) || "[]";
+                    const blob = new Blob([data], { type: "application/json" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = "xuanwu_conversations_backup.json";
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="px-3 py-1 text-xs font-medium text-primary border border-primary/30 rounded-lg hover:bg-primary/10 transition-colors cursor-pointer shrink-0"
+                >
+                  {t("settings.download", lang)}
+                </button>
+              </div>
+              <div className="pt-3">
+                <Button variant="outline" className="w-full" onClick={() => setSettingsOpen(false)}>
+                  {t("settings.close", lang)}
+                </Button>
               </div>
             </div>
+          )}
           </div>
-          <DialogFooter className="flex items-center gap-2">
-            {llmStatus === "saved" && (
-              <span className="text-xs text-emerald-400 mr-auto">{t("settings.saved", lang)}</span>
-            )}
-            {llmStatus === "error" && (
-              <span className="text-xs text-red-400 mr-auto">{t("settings.failed", lang)}</span>
-            )}
-            <Button variant="outline" onClick={() => setSettingsOpen(false)}>
-              {t("settings.cancel", lang)}
-            </Button>
-            <Button onClick={saveLlmSettings} disabled={llmStatus === "saving"}>
-              {llmStatus === "saving" ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                  {t("settings.saving", lang)}
-                </>
-              ) : (
-                "Save"
-              )}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1403,6 +1782,92 @@ export default function Home() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Demo Library Dialog */}
+      <Dialog open={demoLibraryOpen} onOpenChange={setDemoLibraryOpen}>
+        <DialogContent className="border-border max-w-xl h-[480px] flex flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Library className="h-5 w-5 text-primary" />
+              {t("demo.title", lang)}
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              {t("demo.title_desc", lang)}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto min-h-0 space-y-3 py-2">
+            {/* Unity Full Flow Demo */}
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 hover:border-primary/40 transition-colors">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <Play className="h-4 w-4 text-primary" />
+                    {t("demo.unity_full_flow", lang)}
+                  </h3>
+                  <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
+                    {t("demo.unity_full_flow_desc", lang)}
+                  </p>
+                  <div className="mt-3 flex items-center gap-3 text-[10px] text-muted-foreground/70">
+                    <span className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                      Launch Unity
+                    </span>
+                    <span>→</span>
+                    <span className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+                      Generate
+                    </span>
+                    <span>→</span>
+                    <span className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                      Analyze
+                    </span>
+                    <span>→</span>
+                    <span className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+                      Demolish
+                    </span>
+                  </div>
+                </div>
+                <Button
+                  onClick={runUnityFullFlowDemo}
+                  disabled={demoRunning}
+                  className="shrink-0"
+                  size="sm"
+                >
+                  {demoRunning ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                      {t("demo.running", lang)}
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="h-3.5 w-3.5 mr-1.5" />
+                      {t("demo.run", lang)}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Placeholder for future demos */}
+            <div className="rounded-xl border border-border border-dashed bg-muted/10 p-4 text-center">
+              <p className="text-xs text-muted-foreground/50">
+                More demos coming soon...
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Demo running overlay */}
+      {demoRunning && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-full border border-primary/30 bg-[#0f172a]/95 backdrop-blur-sm px-5 py-2.5 shadow-xl shadow-black/30 animate-in fade-in slide-in-from-bottom-2">
+          <Loader2 className="h-4 w-4 text-primary animate-spin" />
+          <span className="text-sm text-foreground font-medium">{demoStatus}</span>
+        </div>
+      )}
 
       {/* Floating Toolbar */}
       <FloatingToolbar

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Eye, Film, AlertTriangle, Maximize2, Minimize2 } from "lucide-react";
+import { Eye, Film, AlertTriangle, Maximize2, Minimize2, Settings2 } from "lucide-react";
 
 interface FrameNode {
   id: number;
@@ -79,6 +79,8 @@ export function FrameVisualization({
   const [svgScale, setSvgScale] = useState(1);
   const [svgPanX, setSvgPanX] = useState(0);
   const [svgPanY, setSvgPanY] = useState(0);
+  const [legendScale, setLegendScale] = useState(1);
+  const [legendSettingsOpen, setLegendSettingsOpen] = useState(false);
   const svgContainerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ active: boolean; startX: number; startY: number; panX: number; panY: number }>({
     active: false,
@@ -267,31 +269,70 @@ export function FrameVisualization({
             Animation
           </button>
         </div>
-        {/* View mode toggle (only on structure tab with stress data) */}
-        {tab === "structure" && hasStress && (
-          <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-0.5">
+        {/* View mode toggle + Settings */}
+        <div className="flex items-center gap-2">
+          {tab === "structure" && hasStress && (
+            <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-0.5">
+              <button
+                onClick={() => setViewMode("deformation")}
+                className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${
+                  viewMode === "deformation"
+                    ? "bg-primary/20 text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Deformation
+              </button>
+              <button
+                onClick={() => setViewMode("stress")}
+                className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${
+                  viewMode === "stress"
+                    ? "bg-primary/20 text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Stress Ratio
+              </button>
+            </div>
+          )}
+          <div className="relative">
             <button
-              onClick={() => setViewMode("deformation")}
-              className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${
-                viewMode === "deformation"
-                  ? "bg-primary/20 text-primary"
-                  : "text-muted-foreground hover:text-foreground"
+              onClick={() => setLegendSettingsOpen(!legendSettingsOpen)}
+              className={`p-1.5 rounded-md border transition-all cursor-pointer ${
+                legendSettingsOpen
+                  ? "bg-primary/20 border-primary text-primary"
+                  : "bg-background/80 border-border text-muted-foreground hover:text-foreground hover:border-primary/50"
               }`}
+              title="Legend settings"
             >
-              Deformation
+              <Settings2 className="h-3.5 w-3.5" />
             </button>
-            <button
-              onClick={() => setViewMode("stress")}
-              className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${
-                viewMode === "stress"
-                  ? "bg-primary/20 text-primary"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Stress Ratio
-            </button>
+            {legendSettingsOpen && (
+              <div className="absolute right-0 top-full mt-1 z-20 bg-[#0f172a] border border-border rounded-lg p-3 shadow-xl min-w-[160px]">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-2">Legend Size</div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setLegendScale((s) => Math.max(0.5, s - 0.1))}
+                    className="w-6 h-6 rounded border border-border text-muted-foreground hover:text-foreground hover:border-primary/50 text-xs cursor-pointer"
+                  >-</button>
+                  <span className="text-xs font-mono text-foreground min-w-[36px] text-center">{(legendScale * 100).toFixed(0)}%</span>
+                  <button
+                    onClick={() => setLegendScale((s) => Math.min(2.5, s + 0.1))}
+                    className="w-6 h-6 rounded border border-border text-muted-foreground hover:text-foreground hover:border-primary/50 text-xs cursor-pointer"
+                  >+</button>
+                </div>
+                <input
+                  type="range"
+                  min={50}
+                  max={250}
+                  value={Math.round(legendScale * 100)}
+                  onChange={(e) => setLegendScale(Number(e.target.value) / 100)}
+                  className="w-full mt-2 h-1 accent-primary cursor-pointer"
+                />
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       {/* Content */}
@@ -323,7 +364,7 @@ export function FrameVisualization({
           )}
           <svg
             viewBox={`0 0 ${svgW} ${svgH}`}
-            className="w-full h-full max-w-[600px] max-h-[400px]"
+            className="w-full h-full"
             style={{ cursor: exploreMode ? (dragRef.current.active ? "grabbing" : "grab") : "default" }}
             onWheel={handleWheel}
             onMouseDown={handleMouseDown}
@@ -558,9 +599,10 @@ export function FrameVisualization({
               );
             })}
 
-            {/* Legend */}
+            </g>
+            {/* Legend — fixed position, not affected by pan/zoom */}
             {tab === "structure" && viewMode === "stress" && hasStress ? (
-              <g transform={`translate(${svgW - 180}, 20)`}>
+              <g transform={`translate(10, 10) scale(${legendScale})`}>
                 <rect x={0} y={0} width={170} height={90} rx={6} fill="#0f172a" stroke="#1e293b" strokeWidth={1} />
                 <text x={10} y={18} fill="#94a3b8" fontSize={9}>Stress Ratio</text>
                 {[0, 30, 60, 85, 100].map((pct, i) => (
@@ -575,7 +617,7 @@ export function FrameVisualization({
                 </text>
               </g>
             ) : (
-              <g transform={`translate(${svgW - 180}, 20)`}>
+              <g transform={`translate(10, 10) scale(${legendScale})`}>
                 <rect x={0} y={0} width={170} height={90} rx={6} fill="#0f172a" stroke="#1e293b" strokeWidth={1} />
                 <text x={10} y={20} fill="#94a3b8" fontSize={9}>Legend</text>
                 <line x1={10} y1={32} x2={40} y2={32} stroke="#22d3ee" strokeWidth={2} />
@@ -597,7 +639,6 @@ export function FrameVisualization({
                 </text>
               </g>
             )}
-            </g>
           </svg>
         </div>
       ) : (
@@ -739,7 +780,7 @@ function CollapseAnimation({
       )}
       <svg
         viewBox={`0 0 ${svgW} ${svgH}`}
-        className="w-full h-full max-w-[600px] max-h-[400px]"
+        className="w-full h-full"
         style={{ cursor: animExplore ? (dragRef.current.active ? "grabbing" : "grab") : "default" }}
         onWheel={(e) => {
           if (!animExplore) return;

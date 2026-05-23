@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Settings,
   MoreHorizontal,
+  Library,
 } from "lucide-react";
 
 export interface Conversation {
@@ -36,6 +37,7 @@ interface Props {
   onTogglePin: (id: string) => void;
   onToggleCollapse: () => void;
   onOpenSettings: () => void;
+  onOpenDemoLibrary: () => void;
 }
 
 export function Sidebar({
@@ -49,6 +51,7 @@ export function Sidebar({
   onTogglePin,
   onToggleCollapse,
   onOpenSettings,
+  onOpenDemoLibrary,
 }: Props) {
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -134,8 +137,15 @@ export function Sidebar({
             </button>
           ))}
         </div>
-        {/* Bottom: Settings + 玄武 */}
+        {/* Bottom: Demo Library + Settings + 玄武 */}
         <div className="flex flex-col items-center gap-2 pb-2">
+          <button
+            onClick={onOpenDemoLibrary}
+            className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-muted transition-colors cursor-pointer"
+            title="Demo Library"
+          >
+            <Library className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+          </button>
           <button
             onClick={onOpenSettings}
             className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-muted transition-colors cursor-pointer"
@@ -274,7 +284,14 @@ export function Sidebar({
       </div>
 
       {/* Footer */}
-      <div className="border-t border-border p-3">
+      <div className="border-t border-border p-3 space-y-1">
+        <button
+          onClick={onOpenDemoLibrary}
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
+        >
+          <Library className="h-3.5 w-3.5" />
+          Demo Library
+        </button>
         <button
           onClick={onOpenSettings}
           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"

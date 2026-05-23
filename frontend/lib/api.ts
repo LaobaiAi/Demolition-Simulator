@@ -47,6 +47,7 @@ export interface VerificationResult {
   status: "verified" | "warning" | "error" | "unavailable";
   demo_mode?: boolean;
   message?: string;
+  solver?: string;
   comparison: {
     max_displacement: MetricComparison;
     max_axial_force: MetricComparison;
@@ -63,6 +64,39 @@ export async function verifyAnalysis(
     body: JSON.stringify({ fast_result: fastResult, structure: structure || null }),
   });
   if (!res.ok) throw new Error(`Verification failed: ${res.status}`);
+  return res.json();
+}
+
+export interface SolverResult {
+  max_displacement?: number;
+  max_axial_force?: number;
+  error?: string;
+}
+
+export interface MultiSolverResult {
+  solvers: Record<string, SolverResult>;
+  consensus: {
+    max_displacement: number;
+    max_axial_force: number;
+  };
+  solver_count: number;
+  deviations: Record<string, {
+    displacement_diff_pct: number;
+    axial_diff_pct: number;
+    is_outlier: boolean;
+  }>;
+}
+
+export async function verifyMulti(
+  fastResult: Record<string, unknown>,
+  structure: Record<string, unknown>
+): Promise<MultiSolverResult> {
+  const res = await fetch(`${API_BASE}/verify/multi`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fast_result: fastResult, structure }),
+  });
+  if (!res.ok) throw new Error(`Multi-verification failed: ${res.status}`);
   return res.json();
 }
 
