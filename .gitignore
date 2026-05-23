@@ -56,5 +56,11 @@ coverage/
 # Claude
 .claude/
 
+# LLM config (contains API keys)
+gateway/llm_config.json
+
+# Runtime data
+gateway/local_memory.json
+
 # Logs
 *.log

@@ -19,8 +19,9 @@
 - 设置面板要有存储控制（清空对话、清空记忆、导出备份）
 
 ### 3. 技术决策
-- **不用 Unity**：倒塌动画用纯 SVG + requestAnimationFrame 实现，不需要外部客户端
-- **不用 Three.js**：2D SVG 框架可视化即可满足当前需求
+- **Unity 3D 物理引擎**：通过 WebRTC 提供 3D 实时倒塌可视化，MCP server + Unity Editor 按需启动
+- **SVG 2D 降级方案**：当 Unity 未运行时自动 fallback 到 SVG + requestAnimationFrame
+- **不用 Three.js**：2D SVG 框架可视化即可满足降级需求
 - **OpenSees 高精度**：已修复（之前前端没传 structure 参数），OpenSeesPy 在 Windows venv 中可用
 - **mem0 有本地 fallback**：gateway/memory.py 有 local_memory.json 备选方案，不依赖 OpenAI API key
 - **对话存储在 localStorage**：不需要后端数据库
@@ -48,11 +49,20 @@ gateway/          ← FastAPI 后端，LLM 引擎 + Agent Loop
 mcp_servers/
   anastruct_server/  ← 快速线性分析 (anaStruct)
   opensees_server/   ← 高精度分析 (OpenSeesPy)
-  unity_simulator/   ← 拆除动作 + 结构修改
+  unity_simulator/   ← 拆除动作 + 结构修改 + Unity TCP 通信
+unity_project/
+  Assets/Scripts/
+    SimulationController.cs  ← TCP 监听 :5005, 物理拆除
+    FrameBuilder.cs          ← 程序化框架建模
+    WebRTCStreamer.cs        ← 相机画面 WebRTC 推流
+    WebRTCSignaling.cs       ← SDP 信令桥接到 Gateway
+    Editor/
+      XuanwuAISceneSetup.cs  ← 一键场景搭建菜单
 frontend/
   app/page.tsx       ← 主页面（65% 以上的逻辑在这里）
   components/
     frame-visualization.tsx  ← SVG 结构模型 + 应力云图 + 倒塌动画
+    unity-video-panel.tsx    ← Unity WebRTC 视频面板（3D 视图）
     verification-panel.tsx   ← 双轨验证面板（Displacements/Forces/Compare/Dev）
     sidebar.tsx
     floating-toolbar.tsx
@@ -65,9 +75,11 @@ frontend/
 ## Key Files to Know
 - **SYSTEM_PROMPT** 在 `gateway/llm_engine.py`，控制 AI 行为
 - **verify endpoint** 在 `gateway/main.py`，处理 OpenSees 对比验证
+- **WebRTC signaling** 在 `gateway/main.py` (/webrtc/offer, /webrtc/answer)，Unity ↔ 前端 SDP 交换
 - **会话恢复** 在 `frontend/app/page.tsx` 的 `restoreStateFromMessages()` 函数
 - **应力比计算** 在 `frame-visualization.tsx`，用 `FY=235e6` (钢屈服强度)
 - **倒塌判定**：所有柱被拆除 或 位移 >100mm 或 分析不收敛
+- **Unity 场景搭建**：Unity Editor → Tools → XuanwuAI → Setup Scene（一键创建）
 
 ## Feature Status
 - [x] 框架生成 + 快速分析
@@ -80,8 +92,8 @@ frontend/
 - [x] 日志可读性优化
 - [x] 设置面板存储管理
 - [x] 本地记忆 fallback (local_memory.json)
-- [ ] 3D 可视化（暂不需要）
-- [ ] 物理引擎倒塌（暂不需要）
+- [x] Unity 3D 物理引擎集成（WebRTC 视频流 + 一键启动 + 自动搭建场景 + 自动 Play 模式）
+- [x] 前端一键 Launch Unity（无需手动打开 Editor / Setup Scene / Play）
 
 ## 用户联系
 - 语言偏好：中文（但代码用英文）
