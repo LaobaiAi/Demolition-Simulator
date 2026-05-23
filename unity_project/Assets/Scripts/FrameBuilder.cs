@@ -156,8 +156,8 @@ public class FrameBuilder : MonoBehaviour
         // Add Rigidbody
         var rb = go.AddComponent<Rigidbody>();
         rb.mass = elementMass;
-        rb.linearDamping = 0.1f;
-        rb.angularDamping = 0.1f;
+        rb.drag = 0.1f;
+        rb.angularDrag = 0.1f;
 
         // Assign material
         if (material != null)

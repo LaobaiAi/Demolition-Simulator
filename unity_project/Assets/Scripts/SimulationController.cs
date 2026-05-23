@@ -20,7 +20,6 @@ using System.Threading;
 ///   {"action": "demolish", "failed_elements": [0, 3], "force_multiplier": 1.5}
 ///   {"action": "reset"}
 /// </summary>
-[RequireComponent(typeof(SimulationController))]
 public class SimulationController : MonoBehaviour
 {
     [Header("Network Settings")]
@@ -68,7 +67,7 @@ public class SimulationController : MonoBehaviour
                 position = element.transform.position,
                 rotation = element.transform.rotation,
                 rigidbody = rb,
-                velocity = rb != null ? rb.linearVelocity : Vector3.zero,
+                velocity = rb != null ? rb.velocity : Vector3.zero,
                 angularVelocity = rb != null ? rb.angularVelocity : Vector3.zero,
             });
         }
@@ -274,7 +273,7 @@ public class SimulationController : MonoBehaviour
 
             if (snapshot.rigidbody != null)
             {
-                snapshot.rigidbody.linearVelocity = Vector3.zero;
+                snapshot.rigidbody.velocity = Vector3.zero;
                 snapshot.rigidbody.angularVelocity = Vector3.zero;
                 snapshot.rigidbody.mass = 1f;
             }

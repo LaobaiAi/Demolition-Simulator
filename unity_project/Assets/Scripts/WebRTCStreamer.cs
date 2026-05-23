@@ -40,9 +40,6 @@ public class WebRTCStreamer : MonoBehaviour
 
     void Start()
     {
-        // Try to get WebRTC support
-        WebRTC.Initialize();
-
         _streamCamera = GetComponent<Camera>();
         if (_streamCamera == null)
         {
@@ -69,7 +66,7 @@ public class WebRTCStreamer : MonoBehaviour
         _streamCamera.targetTexture = _renderTexture;
 
         // Create video track from camera
-        _videoTrack = _streamCamera.CaptureStreamTrack(streamWidth, streamHeight, targetFrameRate);
+        _videoTrack = _streamCamera.CaptureStreamTrack(streamWidth, streamHeight);
         if (_videoTrack == null)
         {
             Debug.LogError("[WebRTCStreamer] Failed to create video track.");
@@ -175,8 +172,6 @@ public class WebRTCStreamer : MonoBehaviour
 
         if (_streamCamera != null)
             _streamCamera.targetTexture = null;
-
-        WebRTC.Dispose();
 
         if (enableDebugLog)
             Debug.Log("[WebRTCStreamer] Streaming stopped.");
