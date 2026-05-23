@@ -42,7 +42,9 @@ class AgentLoop:
             {"role": "system", "content": system_content},
         ]
         if history:
-            messages.extend(history)
+            for h in history:
+                h_clean = {k: v for k, v in h.items() if k != "reasoning_content"}
+                messages.append(h_clean)
         messages.append({"role": "user", "content": user_message})
 
         tools_list = await self.hub.list_tools()

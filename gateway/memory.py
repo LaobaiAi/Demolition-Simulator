@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import threading
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -62,7 +63,8 @@ class SessionMemory:
             os.environ["OPENAI_API_KEY"] = api_key
         if base_url:
             os.environ["OPENAI_BASE_URL"] = base_url
-        self._try_init()
+        # Init mem0 in background thread — avoid blocking the HTTP response
+        threading.Thread(target=self._try_init, daemon=True).start()
 
     def add(self, message: str, metadata: dict[str, Any] | None = None) -> None:
         if self._memory is not None:

@@ -3,11 +3,19 @@
 import json
 import logging
 import os
-from typing import Any
+from typing import Any, AsyncGenerator
 
+import httpx
 from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
+
+
+def _build_http_client() -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        transport=httpx.AsyncHTTPTransport(retries=1),
+        timeout=httpx.Timeout(60.0, connect=10.0),
+    )
 
 
 def _normalize_content(content: Any) -> str | None:
@@ -36,7 +44,9 @@ You have access to these engineering tools:
 - **Structural generation** (generate_simple_frame): Create a 2D steel frame with specified spans, stories, dimensions.
 - **Structural analysis** (analyze_frame): Analyze a frame and get node displacements, element forces, max values.
 - **Critical element selection** (select_critical_element): Identify the most stressed column for demolition.
-- **High-fidelity verification** (high_fidelity_analysis): Run OpenSees nonlinear analysis for independent verification.
+- **High-fidelity verification** (high_fidelity_analysis): Run OpenSees 2D linear elastic analysis for independent verification.
+- **3D cross-validation** (pynite_analysis): Run PyNiteFEA 3D linear elastic analysis. Use when 2D results are uncertain or deviating — provides an independent 3D perspective.
+- **3D cross-validation** (fapp_analysis): Run FAPP direct stiffness 3D linear elastic analysis. Another independent 3D solver for consensus verification.
 - **Demolition simulation** (apply_demolition_action): Remove an element from the structure and trigger collapse animation in the frontend. Pass the full structure so the modified version (without failed elements) can be returned for re-analysis.
 
 ## Structural Analysis Workflow
@@ -103,7 +113,7 @@ class LLMEngine:
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.base_url = base_url or os.getenv("OPENAI_BASE_URL")
 
-        client_kwargs: dict[str, Any] = {"_enforce_credentials": False}
+        client_kwargs: dict[str, Any] = {"http_client": _build_http_client()}
         if self.api_key:
             client_kwargs["api_key"] = self.api_key
         if self.base_url:
@@ -120,7 +130,7 @@ class LLMEngine:
         if base_url is not None:
             self.base_url = base_url
 
-        client_kwargs: dict[str, Any] = {"_enforce_credentials": False}
+        client_kwargs: dict[str, Any] = {"http_client": _build_http_client()}
         if self.api_key:
             client_kwargs["api_key"] = self.api_key
         if self.base_url:
@@ -144,6 +154,7 @@ class LLMEngine:
         kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
+            "extra_body": {"thinking": {"type": "disabled"}},
         }
 
         if tools:
@@ -204,3 +215,89 @@ class LLMEngine:
                 },
             })
         return formatted
+
+    async def chat_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str = "auto",
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """Streaming chat completion — yields chunks as they arrive.
+
+        Yields dicts with keys:
+            - type: "reasoning_chunk" (DeepSeek thinking), "content_chunk", or "stream_complete"
+            - On stream_complete: includes content, tool_calls (parsed), reasoning_content
+        """
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "stream": True,
+            "extra_body": {"thinking": {"type": "disabled"}},
+        }
+
+        if tools:
+            kwargs["tools"] = tools
+            if tool_choice == "auto":
+                kwargs["tool_choice"] = "auto"
+
+        stream = await self.client.chat.completions.create(**kwargs)
+
+        reasoning_parts: list[str] = []
+        content_parts: list[str] = []
+        tool_bufs: dict[int, dict[str, Any]] = {}
+
+        async for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+
+            reasoning = getattr(delta, "reasoning_content", None) or ""
+            if reasoning:
+                reasoning_parts.append(reasoning)
+                yield {"type": "reasoning_chunk", "content": reasoning}
+
+            if delta.content:
+                content_parts.append(delta.content)
+                yield {"type": "content_chunk", "content": delta.content}
+
+            if delta.tool_calls:
+                for td in delta.tool_calls:
+                    idx = td.index
+                    if idx not in tool_bufs:
+                        tool_bufs[idx] = {"id": "", "name": "", "arguments": ""}
+                    if td.id:
+                        tool_bufs[idx]["id"] = td.id
+                    if td.function and td.function.name:
+                        tool_bufs[idx]["name"] += td.function.name
+                    if td.function and td.function.arguments:
+                        tool_bufs[idx]["arguments"] += td.function.arguments
+
+        reasoning_full = "".join(reasoning_parts)
+        content_full = "".join(content_parts)
+
+        if tool_bufs:
+            parsed_calls = []
+            for idx in sorted(tool_bufs.keys()):
+                buf = tool_bufs[idx]
+                try:
+                    args = json.loads(buf["arguments"])
+                except (json.JSONDecodeError, TypeError):
+                    args = buf["arguments"]
+                parsed_calls.append({
+                    "id": buf["id"],
+                    "name": buf["name"],
+                    "arguments": args,
+                })
+            yield {
+                "type": "stream_complete",
+                "tool_calls": parsed_calls,
+                "reasoning_content": reasoning_full,
+                "content": content_full,
+            }
+        else:
+            yield {
+                "type": "stream_complete",
+                "content": content_full,
+                "reasoning_content": reasoning_full,
+                "tool_calls": None,
+            }
