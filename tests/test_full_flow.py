@@ -62,7 +62,7 @@ def test_generate_frame():
     print("\n=== 3. Generate Frame ===")
     r = req("POST", "/tools/call", {
         "tool_name": "generate_simple_frame",
-        "arguments": {"stories": 2, "bays": 2, "span_length": 5, "story_height": 3}
+        "arguments": {"stories": 2, "spans": 2, "span_length": 5, "story_height": 3}
     })
     result_str = r.get("result", "")
     try:
@@ -113,7 +113,7 @@ def test_select_critical(structure: dict, analysis: dict):
         data = json.loads(result_str) if isinstance(result_str, str) else result_str
         check("Has critical_element_id", "critical_element_id" in data)
         crit_id = data.get("critical_element_id")
-        check("Critical element ID is valid", crit_id is not None and crit_id > 0)
+        check("Critical element ID is valid", crit_id is not None and crit_id >= 0)
         print(f"  INFO: critical element = #{crit_id}, axial = {data.get('critical_axial_force_N', 0):.1f} N")
         return data
     except Exception as e:

@@ -68,6 +68,31 @@ function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+// Normalize element forces from any analysis tool. Different tools use different
+// field names: anaStruct (Nmax/Nmin), PyNite/FAPP/OpenSees (N).
+// Returns { elementId, absMaxAxial } or null.
+function extractMaxAxialForce(elemForces: Record<string, unknown>[] | undefined): { elementId: number; absMaxAxial: number } | null {
+  if (!elemForces || elemForces.length === 0) return null;
+  let maxForce = 0;
+  let bestId = 0;
+  for (const ef of elemForces) {
+    // anaStruct format: Nmax, Nmin
+    // PyNite/FAPP/OpenSees format: N
+    const Nmax = typeof ef.Nmax === "number" ? ef.Nmax : 0;
+    const Nmin = typeof ef.Nmin === "number" ? ef.Nmin : 0;
+    const N = typeof ef.N === "number" ? ef.N : 0;
+    const absN = Nmax !== 0 || Nmin !== 0
+      ? Math.max(Math.abs(Nmax), Math.abs(Nmin))
+      : Math.abs(N);
+    if (absN > maxForce) {
+      maxForce = absN;
+      bestId = (ef.element_id as number) || (ef.elem_id as number) || 0;
+    }
+  }
+  if (bestId === 0) return null;
+  return { elementId: bestId, absMaxAxial: maxForce };
+}
+
 // Rebuild full application state from stored conversation messages
 interface RestoredState {
   frameStructure: FrameStructure | null;
@@ -90,6 +115,8 @@ function restoreStateFromMessages(msgs: ChatMessage[]): RestoredState {
   const failedSet = new Set<number>();
   let demolishReady = false;
 
+  const ANALYSIS_TOOLS = new Set(["analyze_frame", "pynite_analysis", "fapp_analysis", "high_fidelity_analysis"]);
+
   for (const msg of msgs) {
     if (msg.role !== "ai" || !msg.steps) continue;
     for (const step of msg.steps) {
@@ -104,14 +131,23 @@ function restoreStateFromMessages(msgs: ChatMessage[]): RestoredState {
         if (parsed.nodes && parsed.elements) {
           frameStructure = parsed as FrameStructure;
         }
-      } else if (step.name === "analyze_frame") {
-        if (parsed.max_displacement !== undefined) {
+      } else if (ANALYSIS_TOOLS.has(step.name)) {
+        if (parsed.max_displacement !== undefined && !("error" in parsed)) {
           analysisResult = parsed;
           if (parsed.node_displacements) {
             nodeDisplacements = parsed.node_displacements as NodeDisp[];
           }
           maxDisp = parsed.max_displacement ?? 0;
           maxAxial = parsed.max_axial_force ?? 0;
+
+          // Auto-detect critical element from any analysis tool
+          const elemForces = parsed.element_forces as Record<string, unknown>[] | undefined;
+          const extracted = extractMaxAxialForce(elemForces);
+          if (extracted) {
+            critElId = extracted.elementId;
+            critAxial = extracted.absMaxAxial;
+            demolishReady = true;
+          }
         }
       } else if (step.name === "select_critical_element") {
         if (parsed.critical_element_id !== undefined) {
@@ -638,6 +674,8 @@ export default function Home() {
             const stepLabels: Record<string, string> = {
               generate_simple_frame: t("step.generating", L),
               analyze_frame: t("step.analyzing", L),
+              pynite_analysis: t("step.analyzing", L),
+              fapp_analysis: t("step.analyzing", L),
               select_critical_element: t("step.critical", L),
               apply_demolition_action: t("step.demolishing", L),
               high_fidelity_analysis: t("step.verifying", L),
@@ -666,10 +704,12 @@ export default function Home() {
             } catch { /* ignore */ }
           }
 
-          // Capture structural analysis results for verification
+          // Capture structural analysis results for verification (all analysis tools)
+          const ANALYSIS_TOOLS = new Set(["analyze_frame", "pynite_analysis", "fapp_analysis", "high_fidelity_analysis"]);
           if (
             data.type === "tool_result" &&
-            data.name === "analyze_frame" &&
+            data.name &&
+            ANALYSIS_TOOLS.has(data.name) &&
             data.result
           ) {
             try {
@@ -685,21 +725,11 @@ export default function Home() {
                 }
 
                 // Auto-detect critical element from element forces (if available)
-                const elemForces = parsed.element_forces as Array<{element_id: number; Nmax: number; Nmin: number}> | undefined;
-                let autoCritId: number | null = null;
-                let autoCritAxial: number | null = null;
-                if (elemForces && elemForces.length > 0) {
-                  let maxForce = 0;
-                  let bestId = 0;
-                  for (const ef of elemForces) {
-                    const absN = Math.max(Math.abs(ef.Nmax), Math.abs(ef.Nmin));
-                    if (absN > maxForce) {
-                      maxForce = absN;
-                      bestId = ef.element_id;
-                    }
-                  }
-                  autoCritId = bestId;
-                  autoCritAxial = maxForce;
+                const elemForces = parsed.element_forces as Record<string, unknown>[] | undefined;
+                const extracted = extractMaxAxialForce(elemForces);
+                const autoCritId = extracted?.elementId ?? null;
+                const autoCritAxial = extracted?.absMaxAxial ?? null;
+                if (autoCritId !== null) {
                   // Auto-activate demolish button — no need to wait for select_critical_element
                   setDemolishReady(true);
                   setCurrentStep("");
@@ -1050,6 +1080,8 @@ export default function Home() {
       if (step.name === "generate_simple_frame") {
         if (parsed.nodes) keep.nodes = parsed.nodes;
         if (parsed.elements) keep.elements = parsed.elements;
+        if (parsed.loads) keep.loads = parsed.loads;
+        if (parsed.supports) keep.supports = parsed.supports;
       } else if (step.name === "analyze_frame") {
         if (parsed.max_displacement !== undefined) keep.max_displacement = parsed.max_displacement;
         if (parsed.max_axial_force !== undefined) keep.max_axial_force = parsed.max_axial_force;
@@ -1090,6 +1122,8 @@ export default function Home() {
           return `${n}点${e}杆`;
         },
         analyze_frame: (r) => `max ${((r.max_displacement ?? 0) as number * 1000).toFixed(2)}mm`,
+        pynite_analysis: (r) => `${r.solver ? (r.solver as string).split(" ")[0] : ""} ${((r.max_displacement ?? 0) as number * 1000).toFixed(2)}mm`,
+        fapp_analysis: (r) => `${r.solver ? (r.solver as string).split(" ")[0] : ""} ${((r.max_displacement ?? 0) as number * 1000).toFixed(2)}mm`,
         select_critical_element: (r) => `柱#${r.critical_element_id}`,
         apply_demolition_action: (r) => {
           const fe = r.failed_elements as number[] | undefined;

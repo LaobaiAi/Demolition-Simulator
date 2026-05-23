@@ -29,7 +29,7 @@ exit /b
 
 :gateway_frontend
 echo Starting Gateway Backend...
-start "Gateway" cmd /k "cd /d "%~dp0gateway" && venv\Scripts\activate && python main.py"
+start "Gateway" cmd /k "cd /d "%~dp0gateway" && "venv\Scripts\python.exe" main.py"
 
 timeout /t 4 /nobreak >nul
 

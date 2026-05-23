@@ -3,6 +3,13 @@
 import asyncio
 import json
 import logging
+import os
+import sys
+
+# Ensure gateway venv packages are available (anastruct, etc.)
+_VENV_SITE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "gateway", "venv", "Lib", "site-packages")
+if os.path.isdir(_VENV_SITE) and _VENV_SITE not in sys.path:
+    sys.path.insert(0, _VENV_SITE)
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server

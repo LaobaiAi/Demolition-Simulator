@@ -164,7 +164,7 @@ export function FrameVisualization({
     );
   }
 
-  const { nodes, elements, loads, supports } = structure;
+  const { nodes, elements, loads = [], supports = [] } = structure;
 
   // Compute bounds
   const minX = Math.min(...nodes.map((n) => n.x));
@@ -660,7 +660,7 @@ function CollapseAnimation({
   structure: FrameStructure;
   failedElements: number[];
 }) {
-  const { nodes, elements, loads, supports } = structure;
+  const { nodes, elements, loads = [], supports = [] } = structure;
   const animRef = useRef<HTMLDivElement>(null);
   const [frame, setFrame] = useState(0);
   const rafRef = useRef<number>(0);
