@@ -18,6 +18,15 @@ from mcp.types import Tool, TextContent
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("anastruct_server")
 
+# Import anaStruct at module level (not inside the async handler thread)
+# to avoid C extension import issues on Windows thread pool
+try:
+    from anastruct import SystemElements
+    _ANASTRUCT_AVAILABLE = True
+except ImportError:
+    _ANASTRUCT_AVAILABLE = False
+    logger.warning("anastruct not available, analysis will fail")
+
 server = Server("anastruct-server")
 
 TOOLS = [
@@ -113,7 +122,9 @@ def _generate_frame(spans=2, stories=2, span_length=6.0, story_height=3.0, E=210
 
 def _analyze_structure(structure):
     """Run anaStruct analysis on a structure definition."""
-    from anastruct import SystemElements
+    if not _ANASTRUCT_AVAILABLE:
+        return {"error": "anastruct package not available", "node_displacements": [],
+                "element_forces": [], "max_displacement": 0, "max_axial_force": 0}
 
     nodes = structure["nodes"]
     elements = structure["elements"]
@@ -281,13 +292,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             if not structure:
                 return [TextContent(type="text", text="Error: 'structure' argument is required")]
             try:
-                result = await asyncio.wait_for(
-                    asyncio.to_thread(_analyze_structure, structure),
-                    timeout=30.0,
-                )
-            except asyncio.TimeoutError:
-                result = {"error": "anaStruct analysis timed out (>30s)", "node_displacements": [],
-                          "element_forces": [], "max_displacement": 0, "max_axial_force": 0}
+                # Run synchronous analysis directly (completes in <50ms for typical frames)
+                loop = asyncio.get_running_loop()
+                result = await loop.run_in_executor(None, _analyze_structure, structure)
             except Exception as e:
                 logger.exception("analyze_frame failed")
                 result = {"error": f"Analysis error: {e}", "node_displacements": [], "element_forces": [],

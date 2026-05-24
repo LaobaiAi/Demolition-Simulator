@@ -188,10 +188,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             structure = arguments.get("structure", {})
             if not structure:
                 return [TextContent(type="text", text="Error: 'structure' argument is required")]
-            result = await asyncio.wait_for(
-                asyncio.to_thread(_run_fapp, structure),
-                timeout=30.0,
-            )
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, _run_fapp, structure)
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
         else:
             return [TextContent(type="text", text=f"Error: Unknown tool '{name}'")]

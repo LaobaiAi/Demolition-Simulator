@@ -12,6 +12,14 @@ from mcp.types import Tool, TextContent
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("pynite_server")
 
+# Import at module level to avoid thread pool issues on Windows
+try:
+    from Pynite import FEModel3D
+    _PYNITE_AVAILABLE = True
+except ImportError:
+    _PYNITE_AVAILABLE = False
+    logger.warning("PyNite not available")
+
 server = Server("pynite-server")
 
 TOOLS = [
@@ -89,8 +97,9 @@ TOOLS = [
 
 
 def _run_pynite(struct):
-    from Pynite import FEModel3D
-
+    if not _PYNITE_AVAILABLE:
+        return {"error": "PyNite not available", "node_displacements": [], "element_forces": [],
+                "max_displacement": 0, "max_axial_force": 0}
     model = FEModel3D()
     nodes = struct["nodes"]
     elements = struct["elements"]
@@ -100,25 +109,18 @@ def _run_pynite(struct):
     E = 210e9
     model.add_material("Steel", E, 81e9, 0.3, 7850)
 
-    def_A = 0.005
-    def_Iy = 1e-4
-    def_Iz = 1e-4
-    def_J = 1e-8
-
-    if elements:
-        def_A = elements[0].get("A", def_A)
-        def_Iy = elements[0].get("Iy", elements[0].get("I", def_Iy))
-        def_Iz = elements[0].get("Iz", elements[0].get("I", def_Iz))
-        def_J = elements[0].get("J", def_J)
-
-    model.add_section("Beam", def_A, def_Iy, def_Iz, def_J)
-
     for n in nodes:
         z = n.get("z", 0)
         model.add_node(str(n["id"]), n["x"], n["y"], z)
 
     for elem in elements:
-        model.add_member(str(elem["id"]), str(elem["node_i"]), str(elem["node_j"]), "Steel", "Beam")
+        A = elem.get("A", 0.005)
+        Iy = elem.get("Iy", elem.get("I", 1e-4))
+        Iz = elem.get("Iz", elem.get("I", 1e-4))
+        J = elem.get("J", 1e-8)
+        section_name = f"Section_{elem['id']}"
+        model.add_section(section_name, A, Iy, Iz, J)
+        model.add_member(str(elem["id"]), str(elem["node_i"]), str(elem["node_j"]), "Steel", section_name)
 
     for sup in supports:
         nid = str(sup["node_id"])
@@ -183,10 +185,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             structure = arguments.get("structure", {})
             if not structure:
                 return [TextContent(type="text", text="Error: 'structure' argument is required")]
-            result = await asyncio.wait_for(
-                asyncio.to_thread(_run_pynite, structure),
-                timeout=30.0,
-            )
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, _run_pynite, structure)
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
         else:
             return [TextContent(type="text", text=f"Error: Unknown tool '{name}'")]

@@ -245,7 +245,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 return [TextContent(type="text", text="Error: 'structure' argument is required")]
             result = await asyncio.wait_for(
                 asyncio.to_thread(_run_opensees_analysis, structure),
-                timeout=60.0,
+                timeout=15.0,  # 60→15s: faster failure when unavailable
             )
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
@@ -253,7 +253,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return [TextContent(type="text", text=f"Error: Unknown tool '{name}'")]
 
     except asyncio.TimeoutError:
-        return [TextContent(type="text", text=json.dumps({"error": "OpenSees analysis timed out (>60s)"}))]
+        return [TextContent(type="text", text=json.dumps({"error": "OpenSees analysis timed out (>15s)"}))]
     except Exception as e:
         logger.exception(f"Tool call failed: {name}")
         return [TextContent(type="text", text=json.dumps({"error": str(e)}))]
