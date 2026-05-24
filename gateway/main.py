@@ -152,6 +152,13 @@ SERVER_CONFIGS = [
         "cwd": os.path.join(CAIAO_SERVERS_DIR, "frame_generator"),
         "tools": ["generate_frame", "generate_frame_3d", "generate_from_text", "list_materials"],
     },
+    {
+        "name": "quick_analysis_server",
+        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
+        "args": ["server.py"],
+        "cwd": os.path.join(CAIAO_SERVERS_DIR, "quick_analysis_server"),
+        "tools": ["quick_analysis"],
+    },
     # P1: Declarative composite pipeline — auto-registered by _build_composite_handlers
     {
         "name": "run_full_analysis",

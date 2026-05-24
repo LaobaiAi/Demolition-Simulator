@@ -122,11 +122,70 @@ The CAIAO protocol is the project's **unified server abstraction** — every sol
 |-------|-----------|
 | **Frontend** | Next.js 16, TypeScript, Tailwind CSS, shadcn/ui, Recharts |
 | **Gateway** | FastAPI, WebSocket, OpenAI SDK, ReAct agent loop |
-| **CAIAO Bus** | CAIAO protocol (MCP SDK stdio transport), 4 tool servers, 10+ tools |
+| **CAIAO Bus** | CAIAO protocol (MCP SDK stdio transport), 5 tool servers, 10+ tools |
 | **2D Analysis** | anaStruct (linear elastic), OpenSeesPy (nonlinear) |
 | **3D Physics** | Unity 2021.3 LTS, C# Rigidbody + ConfigurableJoint |
 | **Streaming** | WebRTC (Unity → browser), WebSocket (agent steps) |
 | **Memory** | mem0 (SQLite) with local JSON fallback |
+
+---
+
+## ⚡ CAIAOServerizer Paradigm
+
+> **CAIAO Server 是系统的最小原子单元，类比 LLM 的 token。**
+
+### The Token Merge
+
+就像 BPE 把高频 token 对合并为新 token一样，我们把高频的 Server 调用序列合并为新的原子 Server。
+
+```
+                     ┌──────────────────┐
+                     │     TOKEN 1      │
+                     │  generate_frame  │
+                     └────────┬─────────┘
+                              │
+                     ┌────────▼─────────┐
+                     │     TOKEN 2      │
+                     │  analyze_frame   │
+                     └────────┬─────────┘
+                              │
+                     ┌────────▼─────────┐
+                     │     TOKEN 3      │
+                     │select_critical   │
+                     └────────┬─────────┘
+                              │
+                 ═════════════╪═══════════════
+                   CAIAOServerizer MERGE ⚡
+                 ═════════════╪═══════════════
+                              │
+                     ┌────────▼─────────┐
+                     │ ⚡ MERGED SERVER │
+                     │ quick_analysis   │
+                     │ ┌─────────────┐  │
+                     │ │ generate    │  │
+                     │ │ analyze     │  │
+                     │ │ select crit │  │
+                     │ └─────────────┘  │
+                     └──────────────────┘
+```
+
+**Pipeline A** (`quick_analysis_server`) 是 CAIAOServerizer 的第一个产物：
+`generate_frame` + `analyze_frame` + `select_critical_element` 三个原子 Server
+被合并为一个调用。不仅减少了 LLM 的决策成本，更消除了两次子进程通信和 JSON 序列化。
+
+| 对比维度 | 合并前 (3 次调用) | 合并后 (1 次调用) |
+|---------|-----------------|-----------------|
+| 子进程通信 | 3 次 stdio round-trip | 1 次 |
+| JSON 序列化 | 3 次 | 1 次 |
+| 延迟估算 | ~900ms + IPC 开销 | ~300ms |
+| 原子性 | 部分步骤可能失败 | 全有或全无 |
+| LLM 决策 | 3 次 tool call | 1 次 |
+
+> **Roadmap:** Pipeline A 只是第一步。接下来将合并 3D 全分析管线（`generate_frame_3d → pynite_analysis`）、
+> 多求解器验证套件（4 求解器共识）、以及拆除循环（`apply_demolition → re-analyze → select_critical`）。
+>
+> 详见 [`ARCHITECTURE.md`](ARCHITECTURE.md#caiaoserverizer-paradigm-token-merge) 和
+> `dev-notes/architecture/2026-05-25-caiaoserverizer-first-merge.md`
 
 ---
 
@@ -238,7 +297,9 @@ curl http://localhost:8000/tools    # list of registered CAIAO tools
 │   ├── opensees_server/      High-fidelity nonlinear analysis
 │   ├── pynite_server/        3D FEM analysis (PyNite)
 │   ├── fapp_server/          3D FEM analysis (FAPP)
-│   └── unity_simulator/      Demolition commands → TCP relay to Unity
+│   ├── unity_simulator/      Demolition commands → TCP relay to Unity
+│   ├── frame_generator/      Parametric frame generation (2D + 3D)
+│   └── quick_analysis_server/  ⚡ First CAIAOServerizer merge: Pipeline A
 │
 ├── frontend/                 Next.js 16 SPA
 │   ├── app/
@@ -314,6 +375,7 @@ cd frontend && npx vitest run                # 16 tests
 | Persistent LLM config | Done |
 | Local memory fallback | Done |
 | Multi-solver deep verify (4 solvers) | Done |
+| ⚡ CAIAOServerizer token merge #1 (Pipeline A) | Done — `quick_analysis` replaces 3 calls with 1 |
 | Mobile responsive layout | Planned |
 | Multi-user session isolation | Planned |
 

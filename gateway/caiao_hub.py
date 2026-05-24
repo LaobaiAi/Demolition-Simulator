@@ -163,10 +163,8 @@ class CAIAOClientHub:
                     tool_args = arguments
 
                 # Call the tool
-                logger.info(f"Pipeline step {i}: calling '{tool_name}' with args keys={list(tool_args.keys())}")
                 raw = await self.call_tool(tool_name, tool_args)
                 if "error" in raw:
-                    logger.error(f"Pipeline step {i} failed: {raw['error']}")
                     return {
                         "status": "partial",
                         "error": f"Step {i} ({tool_name}): {raw['error']}",
@@ -465,9 +463,7 @@ class CAIAOClientHub:
                 # P2: Semantic fallback — try fuzzy match before giving up
                 semantic_match = self._semantic_search(tool_name)
                 if semantic_match and semantic_match["name"] != tool_name:
-                    logger.info(f"Semantic routing '{tool_name}' → '{semantic_match['name']}' (score={semantic_match['score']})")
-                    # Recurse with matched name
-                    logger.info(f"Arguments preserved: {list(arguments.keys())}")
+                    logger.info(f"Semantic routing '{tool_name}' → '{semantic_match['name']}'")
                     return await self.call_tool(semantic_match["name"], arguments)
                 suggestions = f" Did you mean '{semantic_match['name']}'?" if semantic_match else ""
                 return {"error": f"Tool '{tool_name}' not found in any registered server.{suggestions}"}

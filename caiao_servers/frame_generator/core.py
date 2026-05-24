@@ -204,7 +204,7 @@ class FrameGenerator:
             for col in range(cfg.num_bays_x + 1):
                 x = col * cfg.span_x_m
                 y = row * cfg.story_height_m
-                nodes.append({"id": nid, "x": x, "y": y})
+                nodes.append({"id": nid, "x": x, "y": y, "z": 0})
                 grid[(col, row)] = nid
                 nid += 1
 
@@ -308,6 +308,12 @@ class FrameGenerator:
         threejs_objects: list[dict[str, Any]] = []
 
         # Columns
+        # Column section properties for analysis readiness
+        A_col = col_w * col_d
+        I_col_y = col_d * col_w ** 3 / 12
+        I_col_z = col_w * col_d ** 3 / 12
+        J_col = A_col * min(col_w, col_d) ** 2 / 12
+
         col_id = 0
         for story_idx in range(1, cfg.num_stories + 1):
             for xi, x in enumerate(x_coords):
@@ -325,6 +331,11 @@ class FrameGenerator:
                         "width": col_w,
                         "depth": col_d,
                         "height": cfg.story_height_m,
+                        "E": self._E,
+                        "A": A_col,
+                        "Iy": I_col_y,
+                        "Iz": I_col_z,
+                        "J": J_col,
                         "material": {"concrete": cfg.concrete_grade if cfg.material_type == "concrete" else "", "color": col_color},
                         "isCorner": is_corner,
                         "isEdge": is_edge,
@@ -363,6 +374,12 @@ class FrameGenerator:
                     col_id += 1
 
         # Beams
+        # Beam section properties for analysis readiness
+        A_beam = beam_w * beam_d
+        I_beam_y = beam_d * beam_w ** 3 / 12
+        I_beam_z = beam_w * beam_d ** 3 / 12
+        J_beam = A_beam * min(beam_w, beam_d) ** 2 / 12
+
         beam_id = 0
         for story_idx in range(1, cfg.num_stories + 1):
             z = z_coords[story_idx]
@@ -380,6 +397,11 @@ class FrameGenerator:
                         "end": [x2, z, y],
                         "width": beam_w,
                         "height": beam_d,
+                        "E": self._E,
+                        "A": A_beam,
+                        "Iy": I_beam_y,
+                        "Iz": I_beam_z,
+                        "J": J_beam,
                         "material": {"concrete": cfg.concrete_grade if cfg.material_type == "concrete" else "", "color": beam_color},
                         "story": story_idx,
                         "gridIndex": [xi, yi, story_idx],
@@ -415,6 +437,11 @@ class FrameGenerator:
                         "end": [x, z, y2],
                         "width": beam_w,
                         "height": beam_d,
+                        "E": self._E,
+                        "A": A_beam,
+                        "Iy": I_beam_y,
+                        "Iz": I_beam_z,
+                        "J": J_beam,
                         "material": {"concrete": cfg.concrete_grade if cfg.material_type == "concrete" else "", "color": beam_color},
                         "story": story_idx,
                         "gridIndex": [xi, yi, story_idx],

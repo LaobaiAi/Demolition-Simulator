@@ -121,6 +121,69 @@ if __name__ == "__main__":
 3. Register in `gateway/main.py` → `SERVER_CONFIGS` list with `"lazy": True` for heavyweight solvers
 4. Restart Gateway — tool appears in `/tools` automatically
 
+## CAIAOServerizer Paradigm: Token Merge
+
+### Concept
+
+在 CAIAOServerizer 范式中，CAIAO Server 是**最小原子单元**，类比 LLM 的 token。
+就像 LLM 把 token 组合成意义，我们把 CAIAO Server 组合成工程流水线（pipeline）。
+
+当某个 Server 序列反复高频出现时，就将它**合并（merge）**为一个新的原子 Server——
+这正是 BPE（Byte-Pair Encoding）合并高频 token 对的方式。
+
+```
+# 合并前：3 次子进程调用（3 个 "token"）
+generate_frame  →  analyze_frame  →  select_critical_element
+
+# 合并后：1 次子进程调用（1 个 "token"）
+quick_analysis  ←  Pipeline A（三步合并为一个原子 Server）
+```
+
+### ⚡ First Merge: Pipeline A (2026-05-25)
+
+`quick_analysis_server` 是 CAIAOServerizer 的第一个手动 token merge。
+它将 `generate_frame` + `analyze_frame` + `select_critical_element` 三个
+此前独立的原子 Server 合并为一个独立 Server：
+
+```
+caiao_servers/quick_analysis_server/
+  └── server.py  ← imports: frame_generator.core + anastruct_server.server
+```
+
+| 对比 | 合并前 | 合并后 |
+|------|--------|--------|
+| 子进程通信 | 3 次 | 1 次 |
+| LLM 决策 | 3 次 or composite | 1 次 |
+| 原子性 | 部分失败风险 | 全有或全无 |
+| 延迟 | ~300ms × 3 + IPC | ~300ms total |
+
+**详细记录：** `dev-notes/architecture/2026-05-25-caiaoserverizer-first-merge.md`
+
+### Merge Roadmap
+
+| # | Merge | 涉及 Server | 状态 |
+|---|-------|-------------|------|
+| 1 | **Quick Analysis** (Pipeline A) | generate_frame + anastruct.analyze + anastruct.select_critical | ✅ Done |
+| 2 | **3D Full Analysis** | generate_frame_3d + pynite_analysis + select_critical | 📋 Planned |
+| 3 | **Verify Suite** | anastruct + opensees + pynite + fapp → consensus | 📋 Planned |
+| 4 | **Demolition Cycle** | apply_demolition + analyze + select_critical | 📋 Planned |
+
+### How to Create a Merge
+
+```python
+from frame_generator.core import FrameGenerator
+from anastruct_server.server import _analyze_structure
+
+def my_merged_tool(args):
+    cfg = FrameGeneratorConfig(**args)
+    structure = FrameGenerator(cfg).generate()
+    analysis = _analyze_structure(structure)
+    critical = _select_critical_element(structure, analysis)
+    return {"structure": structure, "analysis": analysis, "critical": critical}
+```
+
+See `caiao_servers/quick_analysis_server/server.py` for the full example.
+
 ## Verification
 
 Check at any time: `GET /tools` should return all registered tools grouped by server. If a tool isn't there, its CAIAO Server isn't running.
