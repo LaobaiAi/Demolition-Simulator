@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agent_loop import AgentLoop
 from llm_engine import LLMEngine
-from mcp_hub import MCPClientHub
+from caiao_hub import CAIAOClientHub
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -35,7 +35,7 @@ def _complete(content: str = "", tool_calls=None, reasoning: str = ""):
 
 @pytest.fixture
 def mock_hub():
-    hub = MagicMock(spec=MCPClientHub)
+    hub = MagicMock(spec=CAIAOClientHub)
     hub.list_tools = AsyncMock(return_value=[
         {
             "name": "add",

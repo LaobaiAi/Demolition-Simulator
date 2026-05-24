@@ -1,4 +1,4 @@
-"""Tests for anastruct_server MCP server."""
+"""Tests for anastruct_server CAIAO server."""
 
 import pytest
 from server import _generate_frame, _analyze_structure, _select_critical_element

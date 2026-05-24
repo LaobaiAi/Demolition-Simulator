@@ -88,7 +88,7 @@ class MockLLM:
 
 
 class MockHub:
-    """Mock MCP hub that returns fake tool results."""
+    """Mock CAIAO hub that returns fake tool results."""
     async def list_tools(self):
         return [
             {"name": "generate_simple_frame", "description": "Generate frame", "input_schema": {}},

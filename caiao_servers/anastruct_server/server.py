@@ -1,4 +1,4 @@
-"""anaStruct MCP Server - 2D frame analysis and generation."""
+"""anaStruct CAIAO Server - 2D frame analysis and generation."""
 
 import asyncio
 import json
@@ -18,7 +18,7 @@ from mcp.types import Tool, TextContent
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("anastruct_server")
 
-app = Server("anastruct-server")
+server = Server("anastruct-server")
 
 TOOLS = [
     Tool(
@@ -33,7 +33,10 @@ TOOLS = [
                 "story_height": {"type": "number", "description": "Height of each story in meters (default 3.0)", "default": 3.0},
                 "E": {"type": "number", "description": "Young's modulus in Pa (default 210e9 for steel)", "default": 210e9},
                 "A": {"type": "number", "description": "Cross-sectional area in m^2 (default 0.005)", "default": 0.005},
-                "I": {"type": "number", "description": "Moment of inertia in m^4 (default 1e-5)", "default": 1e-5},
+                "I": {"type": "number", "description": "Moment of inertia about out-of-plane axis in m^4 (default 1e-5)", "default": 1e-5},
+                "Iy": {"type": "number", "description": "Moment of inertia about local y-axis in m^4 (default 1e-5)", "default": 1e-5},
+                "Iz": {"type": "number", "description": "Moment of inertia about local z-axis in m^4 (default 1e-5)", "default": 1e-5},
+                "J": {"type": "number", "description": "Torsional constant in m^4 (default 1e-8)", "default": 1e-8},
             },
             "required": [],
         },
@@ -49,7 +52,7 @@ TOOLS = [
                     "description": "Structure definition with nodes, elements, loads, and supports",
                     "properties": {
                         "nodes": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "integer"}, "x": {"type": "number"}, "y": {"type": "number"}}, "required": ["id", "x", "y"]}},
-                        "elements": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "integer"}, "node_i": {"type": "integer"}, "node_j": {"type": "integer"}, "E": {"type": "number"}, "A": {"type": "number"}, "I": {"type": "number"}}, "required": ["id", "node_i", "node_j", "E", "A", "I"]}},
+                        "elements": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "integer"}, "node_i": {"type": "integer"}, "node_j": {"type": "integer"}, "E": {"type": "number"}, "A": {"type": "number"}, "I": {"type": "number"}, "Iy": {"type": "number"}, "Iz": {"type": "number"}, "J": {"type": "number"}}, "required": ["id", "node_i", "node_j", "E", "A", "I"]}},
                         "loads": {"type": "array", "items": {"type": "object", "properties": {"node_id": {"type": "integer"}, "Fx": {"type": "number"}, "Fy": {"type": "number"}}, "required": ["node_id", "Fx", "Fy"]}},
                         "supports": {"type": "array", "items": {"type": "object", "properties": {"node_id": {"type": "integer"}, "type": {"type": "string", "enum": ["fixed", "hinged", "roller"]}}, "required": ["node_id", "type"]}},
                     },
@@ -74,7 +77,7 @@ TOOLS = [
 ]
 
 
-def _generate_frame(spans=2, stories=2, span_length=6.0, story_height=3.0, E=210e9, A=0.005, I=1e-5):
+def _generate_frame(spans=2, stories=2, span_length=6.0, story_height=3.0, E=210e9, A=0.005, I=1e-5, Iy=1e-5, Iz=1e-5, J=1e-8):
     """Generate a standard rectangular frame."""
     nodes = []
     elements = []
@@ -93,13 +96,13 @@ def _generate_frame(spans=2, stories=2, span_length=6.0, story_height=3.0, E=210
     # Columns (vertical)
     for row in range(stories):
         for col in range(spans + 1):
-            elements.append({"id": element_id, "node_i": grid[(col, row)], "node_j": grid[(col, row + 1)], "E": E, "A": A, "I": I})
+            elements.append({"id": element_id, "node_i": grid[(col, row)], "node_j": grid[(col, row + 1)], "E": E, "A": A, "I": I, "Iy": Iy, "Iz": Iz, "J": J})
             element_id += 1
 
     # Beams (horizontal)
     for row in range(1, stories + 1):
         for col in range(spans):
-            elements.append({"id": element_id, "node_i": grid[(col, row)], "node_j": grid[(col + 1, row)], "E": E, "A": A, "I": I})
+            elements.append({"id": element_id, "node_i": grid[(col, row)], "node_j": grid[(col + 1, row)], "E": E, "A": A, "I": I, "Iy": Iy, "Iz": Iz, "J": J})
             element_id += 1
 
     supports = [{"node_id": grid[(col, 0)], "type": "fixed"} for col in range(spans + 1)]
@@ -250,12 +253,12 @@ def _select_critical_element(structure, analysis_result):
     }
 
 
-@app.list_tools()
+@server.list_tools()
 async def list_tools() -> list[Tool]:
     return TOOLS
 
 
-@app.call_tool()
+@server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     try:
         if name == "generate_simple_frame":
@@ -267,6 +270,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 E=arguments.get("E", 210e9),
                 A=arguments.get("A", 0.005),
                 I=arguments.get("I", 1e-5),
+                Iy=arguments.get("Iy", 1e-5),
+                Iz=arguments.get("Iz", 1e-5),
+                J=arguments.get("J", 1e-8),
             )
             return [TextContent(type="text", text=json.dumps(frame, indent=2))]
 
@@ -307,7 +313,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 async def main():
     async with stdio_server() as (read, write):
-        await app.run(read, write, app.create_initialization_options())
+        await server.run(read, write, server.create_initialization_options())
 
 
 if __name__ == "__main__":

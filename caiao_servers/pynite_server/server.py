@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""PyNite MCP Server — 3D finite element analysis with PyNiteFEA."""
+"""PyNite CAIAO Server — 3D finite element analysis with PyNiteFEA."""
 
 import asyncio
 import json
@@ -12,7 +12,7 @@ from mcp.types import Tool, TextContent
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("pynite_server")
 
-app = Server("pynite-server")
+server = Server("pynite-server")
 
 TOOLS = [
     Tool(
@@ -107,8 +107,8 @@ def _run_pynite(struct):
 
     if elements:
         def_A = elements[0].get("A", def_A)
-        def_Iy = elements[0].get("Iy", def_Iy)
-        def_Iz = elements[0].get("Iz", def_Iz)
+        def_Iy = elements[0].get("Iy", elements[0].get("I", def_Iy))
+        def_Iz = elements[0].get("Iz", elements[0].get("I", def_Iz))
         def_J = elements[0].get("J", def_J)
 
     model.add_section("Beam", def_A, def_Iy, def_Iz, def_J)
@@ -171,12 +171,12 @@ def _run_pynite(struct):
     }
 
 
-@app.list_tools()
+@server.list_tools()
 async def list_tools() -> list[Tool]:
     return TOOLS
 
 
-@app.call_tool()
+@server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     try:
         if name == "pynite_analysis":
@@ -199,7 +199,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 async def main():
     async with stdio_server() as (read, write):
-        await app.run(read, write, app.create_initialization_options())
+        await server.run(read, write, server.create_initialization_options())
 
 
 if __name__ == "__main__":

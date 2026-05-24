@@ -41,7 +41,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from mcp_hub import MCPClientHub
+from caiao_hub import CAIAOClientHub
 from llm_engine import LLMEngine
 from agent_loop import AgentLoop
 from memory import SessionMemory
@@ -88,10 +88,10 @@ def _sanitize_for_json(obj: Any) -> Any:
         pass
     return str(obj)
 
-# --- MCP Server configurations ---
+# --- CAIAO Server configurations ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(BASE_DIR)
-MCP_SERVERS_DIR = os.path.join(PROJECT_DIR, "mcp_servers")
+CAIAO_SERVERS_DIR = os.path.join(PROJECT_DIR, "caiao_servers")
 # Check multiple possible venv locations (uv may create it at project root)
 _VENV_CANDIDATES = [
     os.path.join(BASE_DIR, "venv", "Scripts", "python.exe"),
@@ -104,36 +104,40 @@ SERVER_CONFIGS = [
     {
         "name": "anastruct_server",
         "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
-        "args": [os.path.join(MCP_SERVERS_DIR, "anastruct_server", "server.py")],
-        "cwd": os.path.join(MCP_SERVERS_DIR, "anastruct_server"),
+        "args": [os.path.join(CAIAO_SERVERS_DIR, "anastruct_server", "server.py")],
+        "cwd": os.path.join(CAIAO_SERVERS_DIR, "anastruct_server"),
     },
     {
         "name": "opensees_server",
         "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
         "args": ["server.py"],
-        "cwd": os.path.join(MCP_SERVERS_DIR, "opensees_server"),
+        "cwd": os.path.join(CAIAO_SERVERS_DIR, "opensees_server"),
+        "lazy": True,
     },
     {
         "name": "pynite_server",
         "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
         "args": ["server.py"],
-        "cwd": os.path.join(MCP_SERVERS_DIR, "pynite_server"),
+        "cwd": os.path.join(CAIAO_SERVERS_DIR, "pynite_server"),
+        "lazy": True,
     },
     {
         "name": "fapp_server",
         "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
         "args": ["server.py"],
-        "cwd": os.path.join(MCP_SERVERS_DIR, "fapp_server"),
+        "cwd": os.path.join(CAIAO_SERVERS_DIR, "fapp_server"),
+        "lazy": True,
     },
     {
         "name": "unity_simulator",
         "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
         "args": ["server.py"],
-        "cwd": os.path.join(MCP_SERVERS_DIR, "unity_simulator"),
+        "cwd": os.path.join(CAIAO_SERVERS_DIR, "unity_simulator"),
+        "lazy": True,
     },
 ]
 
-hub: MCPClientHub | None = None
+hub: CAIAOClientHub | None = None
 agent: AgentLoop | None = None
 memory: SessionMemory | None = None
 llm_engine: LLMEngine | None = None
@@ -142,8 +146,8 @@ llm_engine: LLMEngine | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global hub, agent, memory, llm_engine
-    logger.info("Starting MCP servers...")
-    hub = MCPClientHub(SERVER_CONFIGS)
+    logger.info("Starting CAIAO servers...")
+    hub = CAIAOClientHub(SERVER_CONFIGS)
     await hub.start_all()
     saved = _load_llm_config()
     llm_engine = LLMEngine(
@@ -157,6 +161,9 @@ async def lifespan(app: FastAPI):
         logger.info(f"Gateway ready — LLM config restored (model={saved.get('model')})")
     else:
         logger.info("Gateway ready — no saved LLM config, configure via /settings/llm")
+
+    # Auto-detect: if TCP port 5005 is open, Unity is running from a previous session
+    _detect_running_unity()
     yield
     logger.info("Shutting down...")
     global _unity_process

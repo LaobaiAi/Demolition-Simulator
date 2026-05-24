@@ -5,7 +5,7 @@ import logging
 from typing import Any, AsyncGenerator
 
 from llm_engine import LLMEngine, SYSTEM_PROMPT
-from mcp_hub import MCPClientHub
+from caiao_hub import CAIAOClientHub
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ MAX_TOOL_ITERATIONS = 5
 class AgentLoop:
     """Orchestrates the ReAct loop: LLM reasoning + tool execution."""
 
-    def __init__(self, llm: LLMEngine, hub: MCPClientHub):
+    def __init__(self, llm: LLMEngine, hub: CAIAOClientHub):
         self.llm = llm
         self.hub = hub
 

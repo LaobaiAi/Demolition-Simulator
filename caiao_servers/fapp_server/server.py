@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""FAPP MCP Server — lightweight 3D frame analysis via direct stiffness method."""
+"""FAPP CAIAO Server — lightweight 3D frame analysis via direct stiffness method."""
 
 import asyncio
 import json
@@ -12,7 +12,7 @@ from mcp.types import Tool, TextContent
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("fapp_server")
 
-app = Server("fapp-server")
+server = Server("fapp-server")
 
 TOOLS = [
     Tool(
@@ -113,8 +113,8 @@ def _run_fapp(struct):
         E = elem.get("E", 210e9)
         A = elem.get("A", 0.005)
         Ayy = Azz = 0.84 * A
-        Iy = elem.get("Iy", 1e-4)
-        Iz = elem.get("Iz", 1e-4)
+        Iy = elem.get("Iy", elem.get("I", 1e-4))
+        Iz = elem.get("Iz", elem.get("I", 1e-4))
         J = elem.get("J", 1e-8)
         i_tag = node_id_to_tag[elem["node_i"]]
         j_tag = node_id_to_tag[elem["node_j"]]
@@ -176,12 +176,12 @@ def _run_fapp(struct):
     }
 
 
-@app.list_tools()
+@server.list_tools()
 async def list_tools() -> list[Tool]:
     return TOOLS
 
 
-@app.call_tool()
+@server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     try:
         if name == "fapp_analysis":
@@ -204,7 +204,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 async def main():
     async with stdio_server() as (read, write):
-        await app.run(read, write, app.create_initialization_options())
+        await server.run(read, write, server.create_initialization_options())
 
 
 if __name__ == "__main__":

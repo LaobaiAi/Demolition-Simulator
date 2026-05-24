@@ -1,4 +1,4 @@
-"""Demo Calculator MCP Server — basic arithmetic tools."""
+"""Demo Calculator CAIAO Server — basic arithmetic tools."""
 
 import asyncio
 import logging
@@ -10,7 +10,7 @@ from mcp.types import Tool, TextContent
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("demo_calculator")
 
-app = Server("demo-calculator")
+server = Server("demo-calculator")
 
 TOOLS = [
     Tool(
@@ -64,12 +64,12 @@ TOOLS = [
 ]
 
 
-@app.list_tools()
+@server.list_tools()
 async def list_tools() -> list[Tool]:
     return TOOLS
 
 
-@app.call_tool()
+@server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     a = float(arguments.get("a", 0))
     b = float(arguments.get("b", 0))
@@ -93,7 +93,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 async def main():
     async with stdio_server() as (read, write):
-        await app.run(read, write, app.create_initialization_options())
+        await server.run(read, write, server.create_initialization_options())
 
 
 if __name__ == "__main__":

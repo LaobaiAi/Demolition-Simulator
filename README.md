@@ -88,7 +88,7 @@ The system follows a **multi-round progressive demolition** workflow: after each
 │  • 2D SVG│                │  │ SDK)     │  │(ReAct)│  │local)   │  │
 │  • Unity │                │  └──────────┘  └──────┘  └─────────┘  │
 │   WebRTC │                │         │                              │
-│          │                │    MCP Hub (stdio subprocesses)         │
+│          │                │    CAIAO Hub (stdio subprocesses)         │
 │          │                │         │                              │
 └──────────┘                └─────────┼──────────────────────────────┘
                                       │
@@ -110,13 +110,19 @@ The system follows a **multi-round progressive demolition** workflow: after each
                                            └──────────────────┘
 ```
 
+### CAIAO Protocol
+
+The CAIAO protocol is the project's **unified server abstraction** — every solver, simulator, and external tool runs as an independent CAIAO Server subprocess communicating via stdio JSON-RPC. The Gateway's `CAIAOClientHub` manages all server lifecycles and routes tool calls by name. This architecture ensures isolation (one crash doesn't cascade), language agnosticism (any language with stdio can be a CAIAO Server), and plug-and-play extensibility (add a solver by writing one file).
+
+> Under the hood, CAIAO Servers use the standard MCP Python SDK (`from mcp.server import Server`) for transport. "CAIAO" is our project's naming convention, not a separate protocol standard. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full contract.
+
 ### Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | **Frontend** | Next.js 16, TypeScript, Tailwind CSS, shadcn/ui, Recharts |
 | **Gateway** | FastAPI, WebSocket, OpenAI SDK, ReAct agent loop |
-| **MCP Bus** | MCP SDK (stdio transport), 4 tool servers, 10+ tools |
+| **CAIAO Bus** | CAIAO protocol (MCP SDK stdio transport), 4 tool servers, 10+ tools |
 | **2D Analysis** | anaStruct (linear elastic), OpenSeesPy (nonlinear) |
 | **3D Physics** | Unity 2021.3 LTS, C# Rigidbody + ConfigurableJoint |
 | **Streaming** | WebRTC (Unity → browser), WebSocket (agent steps) |
@@ -130,7 +136,7 @@ The system follows a **multi-round progressive demolition** workflow: after each
 - **Natural Language Input** — Describe a frame ("2-story 3-bay frame with 6m spans") and the AI handles everything
 - **Progressive Multi-Round Demolition** — Remove critical columns one by one until collapse, with automatic re-analysis after each round
 - **Dual-Track Verification** — Fast (anaStruct linear) vs. High-Fidelity (OpenSees nonlinear) with deviation analysis against a 5% threshold
-- **AI Autonomous Loop** — Agent thinks → acts (calls MCP tools) → observes results → repeats
+- **AI Autonomous Loop** — Agent thinks → acts (calls CAIAO tools) → observes results → repeats
 
 ### Visualization & UX
 - **SVG Frame Visualization** — 2D structure view with deformation overlay, node/element labels, and stress-ratio heatmap (green <30% → yellow 30-60% → orange 60-85% → red >85%)
@@ -200,7 +206,7 @@ npm run dev                  # → http://localhost:3000
 
 ```bash
 curl http://localhost:8000/health   # {"status":"ok"}
-curl http://localhost:8000/tools    # list of registered MCP tools
+curl http://localhost:8000/tools    # list of registered CAIAO tools
 ```
 
 ### 5. (Optional) Launch Unity 3D
@@ -217,17 +223,17 @@ curl http://localhost:8000/tools    # list of registered MCP tools
 ## Project Structure
 
 ```
-├── gateway/                  FastAPI backend + agent loop + MCP hub
+├── gateway/                  FastAPI backend + agent loop + CAIAO hub
 │   ├── main.py               REST API + WebSocket + WebRTC signaling
 │   ├── llm_engine.py         OpenAI SDK + system prompt
 │   ├── agent_loop.py         ReAct agent (think → act → observe)
 │   ├── memory.py             mem0 + local JSON fallback
-│   ├── mcp_hub.py            Multi-server MCP subprocess manager
+│   ├── caiao_hub.py          Multi-server CAIAO subprocess manager
 │   ├── llm_config.json       LLM settings (gitignored)
 │   ├── requirements.txt
 │   └── tests/                33 pytest tests
 │
-├── mcp_servers/              MCP tool servers (stdio transport)
+├── caiao_servers/              CAIAO tool servers (stdio transport)
 │   ├── anastruct_server/     Frame generation + linear analysis + critical selection
 │   ├── opensees_server/      High-fidelity nonlinear analysis
 │   ├── pynite_server/        3D FEM analysis (PyNite)
@@ -277,11 +283,11 @@ curl http://localhost:8000/tools    # list of registered MCP tools
 cd gateway && pytest tests/ -v              # 33 tests
 
 # Gateway integration
-cd gateway && pytest tests/ -v              # API + agent + memory + MCP hub
+cd gateway && pytest tests/ -v              # API + agent + memory + CAIAO hub
 
-# MCP servers
-cd mcp_servers/anastruct_server && pytest tests/ -v   # 19 tests
-cd mcp_servers/demo_calculator && pytest tests/ -v    # 9 tests
+# CAIAO servers
+cd caiao_servers/anastruct_server && pytest tests/ -v   # 19 tests
+cd caiao_servers/demo_calculator && pytest tests/ -v    # 9 tests
 
 # Frontend
 cd frontend && npx vitest run                # 16 tests

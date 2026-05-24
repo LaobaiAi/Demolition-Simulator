@@ -1,4 +1,4 @@
-"""Tests for demo_calculator MCP server."""
+"""Tests for demo_calculator CAIAO server."""
 
 import pytest
 from server import call_tool

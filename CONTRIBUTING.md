@@ -17,15 +17,15 @@
 
 ```
 frontend/          Next.js 16 SPA (TypeScript + Tailwind CSS + shadcn/ui)
-gateway/           FastAPI + Agent Loop + MCP Hub (Python)
-mcp_servers/       MCP tool servers (stdio subprocesses)
+gateway/           FastAPI + Agent Loop + CAIAO Hub (Python)
+caiao_servers/       CAIAO tool servers (stdio subprocesses)
   anastruct_server/    2D frame generation + linear analysis
   opensees_server/     High-fidelity nonlinear analysis
   unity_simulator/     TCP relay to Unity 3D physics engine
 unity_project/     Unity 3D C# scripts (SimulationController, FrameBuilder)
 ```
 
-**Data flow**: User input → WebSocket → Gateway AgentLoop (ReAct) → LLM → MCP tools → Results stream back → Frontend SVG + metrics + demolition
+**Data flow**: User input → WebSocket → Gateway AgentLoop (ReAct) → LLM → CAIAO tools → Results stream back → Frontend SVG + metrics + demolition
 
 ---
 
@@ -37,7 +37,7 @@ unity_project/     Unity 3D C# scripts (SimulationController, FrameBuilder)
 - Python 3.11+
 - Unity 2022.3+ (optional, for 3D simulation)
 
-### Backend (Gateway + MCP Servers)
+### Backend (Gateway + CAIAO Servers)
 
 ```bash
 cd gateway
@@ -116,10 +116,10 @@ This project enforces **[Conventional Commits 1.0.0](https://www.conventionalcom
 | `gateway` | FastAPI backend (`gateway/`) |
 | `agent` | Agent loop logic (`gateway/agent_loop.py`) |
 | `llm` | LLM engine (`gateway/llm_engine.py`) |
-| `mcp` | MCP hub or any MCP server (`gateway/mcp_hub.py`, `mcp_servers/`) |
-| `anastruct` | anaStruct MCP server (`mcp_servers/anastruct_server/`) |
-| `opensees` | OpenSees MCP server (`mcp_servers/opensees_server/`) |
-| `unity` | Unity simulator MCP server or Unity C# scripts |
+| `caiao` | CAIAO hub or any CAIAO server (`gateway/caiao_hub.py`, `caiao_servers/`) |
+| `anastruct` | anaStruct CAIAO server (`caiao_servers/anastruct_server/`) |
+| `opensees` | OpenSees CAIAO server (`caiao_servers/opensees_server/`) |
+| `unity` | Unity simulator CAIAO server or Unity C# scripts |
 | `frontend` | Next.js frontend — general |
 | `viz` | Visualization components (`frame-visualization.tsx`) |
 | `chat` | Chat panel, WebSocket client |
@@ -164,7 +164,7 @@ feat(gateway,frontend): add global Chinese/English language switching
 6. **Breaking changes**: add `!` after type/scope and `BREAKING CHANGE:` in footer
 
 ```
-feat!(mcp): change tool input schema to require explicit units
+feat!(caiao): change tool input schema to require explicit units
 
 BREAKING CHANGE: all tool callers must now pass displacement in meters
 and forces in Newtons. Previously mm and kN were accepted.
@@ -183,7 +183,7 @@ and forces in Newtons. Previously mm and kN were accepted.
 
 ## Code Style
 
-### Python (Gateway + MCP Servers)
+### Python (Gateway + CAIAO Servers)
 
 - **[Black](https://black.readthedocs.io/)** formatting, line length 120
 - **Type hints** on all function signatures (`def foo(x: int) -> str:`)
@@ -233,12 +233,12 @@ export function FrameVisualization({ structure, displacements }: FrameVisualizat
 export default function FrameVisualization(props: any) {
 ```
 
-### MCP Server Convention
+### CAIAO Server Convention
 
-All MCP servers follow this skeleton:
+CAIAO is our project's naming layer on top of the standard MCP SDK. The `mcp` Python package handles stdio transport and JSON-RPC under the hood — we rename the abstraction to `CAIAO Server` to distinguish our project convention. All CAIAO servers follow this skeleton:
 
 ```python
-"""<name> MCP Server — <one-line purpose>."""
+"""<name> CAIAO Server — <one-line purpose>."""
 
 import asyncio, json, logging
 from mcp.server import Server
@@ -270,12 +270,23 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-**Rules**:
+**Protocol rules**:
 - Always return `[TextContent(...)]`, never raw strings
 - Serialize results with `json.dumps`
 - Catch all exceptions and return `{"error": str(e)}`
 - Tool names use `snake_case`
 - Tools registered in `hub.call_tool()` return `{"result": json_string}`
+
+**CAIAO naming conventions** (see `ARCHITECTURE.md` for full details):
+
+| Context | Convention | Example |
+|---------|-----------|---------|
+| Class name | `CAIAO` + PascalCase | `CAIAOClientHub` |
+| Constant | `CAIAO_` + UPPER_SNAKE | `CAIAO_SERVERS_DIR` |
+| Filename | `caiao_` + lowercase | `caiao_hub.py` |
+| Directory | `caiao_servers/` | `caiao_servers/anastruct_server/` |
+| Git scope | `caiao` (lowercase) | `feat(caiao): add ...` |
+| SDK imports | keep `from mcp.server import Server` | external package, not renamed |
 
 ---
 
@@ -325,7 +336,7 @@ fix(agent): unwrap double-wrapped tool results
 
 ## Testing
 
-### Backend Tests (`gateway/tests/`, `mcp_servers/*/tests/`)
+### Backend Tests (`gateway/tests/`, `caiao_servers/*/tests/`)
 
 ```bash
 cd gateway
@@ -336,8 +347,8 @@ pytest -k "tool_call"              # filter by name
 
 - Use `pytest-asyncio` for async tests
 - Mock LLM calls with `unittest.mock` or `pytest-mock`
-- Tool server tests use real MCP session fixtures
-- Aim for > 80% coverage on gateway core (agent_loop, llm_engine, mcp_hub)
+- Tool server tests use real CAIAO session fixtures
+- Aim for > 80% coverage on gateway core (agent_loop, llm_engine, caiao_hub)
 
 ### Frontend Tests (`frontend/__tests__/`)
 
@@ -371,7 +382,7 @@ Before merging, manually verify:
 
 ### Data Format: Tool Results
 
-The MCP hub wraps tool results as `{"result": "<json_string>"}`. The agent loop **must unwrap** before sending to the frontend:
+The CAIAO hub wraps tool results as `{"result": "<json_string>"}`. The agent loop **must unwrap** before sending to the frontend:
 
 ```python
 # agent_loop.py — correct
@@ -386,7 +397,7 @@ steps.append({"type": "tool_result", "name": name, "result": result_data})
 
 - **anaStruct** assigns **1-based** internal IDs
 - **Frontend** expects **0-based** IDs matching the original structure
-- **MCP server responsibility**: map anaStruct IDs back to original IDs before returning
+- **CAIAO server responsibility**: map anaStruct IDs back to original IDs before returning
 
 ```python
 # anastruct_server — correct
@@ -426,7 +437,7 @@ import { t, type Lang } from "@/lib/i18n";
 
 ### Unity Fallback
 
-The `unity_simulator` MCP server must always return `failed_elements` in its result, even when Unity is not reachable. This allows the frontend 2D visualization to function independently:
+The `unity_simulator` CAIAO server must always return `failed_elements` in its result, even when Unity is not reachable. This allows the frontend 2D visualization to function independently:
 
 ```python
 result = _send_to_unity(command)

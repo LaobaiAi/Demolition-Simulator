@@ -31,9 +31,9 @@
 
 **现象**: `Object of type TextContent is not JSON serializable`
 
-**根因**: MCP SDK 的 `TextContent` 类型（Pydantic BaseModel）不能被 `json.dumps` 直接序列化。多个路径都会触发：
+**根因**: CAIAO SDK 的 `TextContent` 类型（Pydantic BaseModel）不能被 `json.dumps` 直接序列化。多个路径都会触发：
 - WebSocket `send_json` 内部调用 `json.dumps`
-- MCP server 返回的 `result.content` 包含 TextContent 对象
+- CAIAO server 返回的 `result.content` 包含 TextContent 对象
 - OpenAI SDK 返回的 content 可能是 `list[ContentBlock]` 而非 `str`
 
 **解决方案**（三层防护）：
@@ -86,7 +86,7 @@ def _normalize_content(content):
     return str(content)
 ```
 
-4. **MCP Hub 去除非序列化字段** (`gateway/mcp_hub.py`):
+4. **CAIAO Hub 去除非序列化字段** (`gateway/caiao_hub.py`):
 ```python
 # 不返回 result.content (包含 TextContent 对象)
 return {"result": texts[0] if len(texts) == 1 else texts}

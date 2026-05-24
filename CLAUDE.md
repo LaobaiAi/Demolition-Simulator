@@ -1,5 +1,15 @@
 # XuanwuAI Demolition Simulator — Project Record
 
+## ⚡ CORE DESIGN PRINCIPLE (read this first)
+**Everything is a CAIAO Server.** Every tool, every solver, every external capability is an independent CAIAO Server process, discovered and routed through a central CAIAO Hub. The LLM never calls anything directly — it tells the AgentLoop what it wants, the AgentLoop routes through the CAIAO Hub, and the Hub dispatches to the correct subprocess.
+
+```
+User → Frontend → WebSocket → Gateway AgentLoop → LLM (decides tool)
+       → CAIAOClientHub → CAIAO Server subprocess (stdio) → Result → User
+```
+
+Adding a new solver/feature = writing one new CAIAO Server file + registering it. No core code changes.
+
 ## What This Project Is
 智能结构拆除模拟器：AI 驱动的渐进式建筑倒塌分析系统。用户输入框架参数 → AI 生成结构 → 分析力学 → 识别关键柱 → 多轮渐进拆除直到倒塌。
 
@@ -19,7 +29,7 @@
 - 设置面板要有存储控制（清空对话、清空记忆、导出备份）
 
 ### 3. 技术决策
-- **Unity 3D 物理引擎**：通过 WebRTC 提供 3D 实时倒塌可视化，MCP server + Unity Editor 按需启动
+- **Unity 3D 物理引擎**：通过 WebRTC 提供 3D 实时倒塌可视化，CAIAO server + Unity Editor 按需启动
 - **SVG 2D 降级方案**：当 Unity 未运行时自动 fallback 到 SVG + requestAnimationFrame
 - **不用 Three.js**：2D SVG 框架可视化即可满足降级需求
 - **OpenSees 高精度**：已修复（之前前端没传 structure 参数），OpenSeesPy 在 Windows venv 中可用
@@ -45,8 +55,8 @@ gateway/          ← FastAPI 后端，LLM 引擎 + Agent Loop
   llm_engine.py   ← SYSTEM_PROMPT + OpenAI SDK 封装
   agent_loop.py   ← ReAct agent (think → act → observe)
   memory.py       ← mem0 + local JSON fallback
-  mcp_hub.py      ← MCP 多服务器管理
-mcp_servers/
+  caiao_hub.py      ← CAIAO 多服务器管理
+caiao_servers/
   anastruct_server/  ← 快速线性分析 (anaStruct)
   opensees_server/   ← 高精度分析 (OpenSeesPy)
   unity_simulator/   ← 拆除动作 + 结构修改 + Unity TCP 通信
@@ -81,6 +91,29 @@ frontend/
 - **倒塌判定**：所有柱被拆除 或 位移 >100mm 或 分析不收敛
 - **Unity 场景搭建**：Unity Editor → Tools → XuanwuAI → Setup Scene（一键创建）
 
+## CAIAO Architecture (enforced)
+
+**CAIAO** is our project-specific naming layer on top of the standard MCP SDK. Every CAIAO Server is technically an MCP Server under the hood — the `mcp` Python package handles stdio transport and JSON-RPC. We rename the abstraction to distinguish our project's convention from the generic protocol.
+
+### Rules
+- **Every new capability must be a CAIAO Server** — never add logic directly to Gateway or frontend that belongs in a solver
+- **Template**: copy `caiao_servers/_template/server.py` to start a new server
+- **Registration**: add to `gateway/main.py` → `SERVER_CONFIGS`
+- **Lazy loading**: use `"lazy": True` for heavyweight solvers (OpenSees, PyNite, FAPP, Unity)
+
+### Naming Convention
+| Context | Convention | Example |
+|---------|-----------|---------|
+| Class name | `CAIAO` + PascalCase | `CAIAOClientHub` |
+| Constant | `CAIAO_` + UPPER_SNAKE | `CAIAO_SERVERS_DIR` |
+| Filename | `caiao_` + lowercase | `caiao_hub.py` |
+| Directory | `caiao_servers/` | `caiao_servers/anastruct_server/` |
+| SDK imports | keep `from mcp.server import Server` | external package, not our naming |
+
+### Docs
+- **Full principle doc**: see `ARCHITECTURE.md`
+- **Dev docs**: see `dev-notes/architecture.md`
+
 ## Feature Status
 - [x] 框架生成 + 快速分析
 - [x] 关键柱识别
@@ -94,6 +127,17 @@ frontend/
 - [x] 本地记忆 fallback (local_memory.json)
 - [x] Unity 3D 物理引擎集成（WebRTC 视频流 + 一键启动 + 自动搭建场景 + 自动 Play 模式）
 - [x] 前端一键 Launch Unity（无需手动打开 Editor / Setup Scene / Play）
+
+### 6. 对话记录到 dev-notes
+- **每次有重要技术决策、架构变更、Bug 根因分析、或用户明确要求时**，将关键对话内容输出到 `dev-notes/` 目录
+- 子文件夹结构：
+  - `dev-notes/decisions/` — 技术决策、方案对比、API 设计讨论
+  - `dev-notes/architecture/` — 架构文档、系统设计
+  - `dev-notes/reference/` — 需求、路线图、Bug 记录等参考资料
+  - 其他子文件夹按需创建
+- 文件名格式：`YYYY-MM-DD-简短描述.md`
+- 内容要点：问题/需求描述 → 分析过程 → 最终方案和关键代码变更 → 遗留问题
+- 避免 dump 原始对话，要提炼有价值的技术内容
 
 ## 用户联系
 - 语言偏好：中文（但代码用英文）

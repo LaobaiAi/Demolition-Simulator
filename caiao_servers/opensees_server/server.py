@@ -1,4 +1,4 @@
-"""OpenSees MCP Server — high-fidelity nonlinear structural analysis."""
+"""OpenSees CAIAO Server — high-fidelity nonlinear structural analysis."""
 
 import asyncio
 import json
@@ -11,7 +11,7 @@ from mcp.types import Tool, TextContent
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("opensees_server")
 
-app = Server("opensees-server")
+server = Server("opensees-server")
 
 TOOLS = [
     Tool(
@@ -231,12 +231,12 @@ def _run_opensees_analysis(structure):
     }
 
 
-@app.list_tools()
+@server.list_tools()
 async def list_tools() -> list[Tool]:
     return TOOLS
 
 
-@app.call_tool()
+@server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     try:
         if name == "high_fidelity_analysis":
@@ -261,7 +261,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 async def main():
     async with stdio_server() as (read, write):
-        await app.run(read, write, app.create_initialization_options())
+        await server.run(read, write, server.create_initialization_options())
 
 
 if __name__ == "__main__":

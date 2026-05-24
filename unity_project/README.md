@@ -250,7 +250,7 @@ Unity 监听 `127.0.0.1:5005`：
 
 | 层级 | 条件 | 行为 |
 |------|------|------|
-| MCP Server | Unity 未运行 | `"status": "simulated"` |
+| CAIAO Server | Unity 未运行 | `"status": "simulated"` |
 | 前端面板 | 无 SDP offer | 显示 Launch 按钮 |
 | 前端面板 | Unity 未安装 | 显示下载链接 |
 | 整体 | Unity 不可用 | SVG 2D 视图正常工作 |

@@ -2,10 +2,35 @@
 title XuanwuAI Demolition Simulator
 cd /d "%~dp0"
 
+setlocal enabledelayedexpansion
+
 echo ============================================
 echo   XuanwuAI Demolition Simulator
 echo ============================================
 echo.
+
+REM Resource Pre-check
+echo [CHECK] Checking system resources before launch...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "& '%~dp0_resource_guard.ps1' -mode precheck"
+set GUARD_EXIT=%errorlevel%
+
+if %GUARD_EXIT% == 2 (
+    echo.
+    echo [ABORT] User cancelled. Exiting.
+    pause
+    exit /b
+)
+if %GUARD_EXIT% == 1 (
+    echo.
+    echo [PAUSE] Resources critical, skipping launch.
+    echo         Close some applications and try again.
+    pause
+    exit /b
+)
+
+echo [OK] Resources OK - proceeding with launch.
+echo.
+
 echo [1] Start Gateway + Frontend
 echo [2] Start Gateway + Frontend + Unity
 echo [3] Start Unity only
@@ -19,7 +44,7 @@ if errorlevel 1 goto gateway_frontend
 
 :all
 call :launch_unity
-call :sleep 2
+call :sleep 5
 goto gateway_frontend
 
 :unity_only
@@ -28,19 +53,31 @@ pause
 exit /b
 
 :gateway_frontend
-echo Starting Gateway Backend...
-start "Gateway" cmd /k "cd /d "%~dp0gateway" && "venv\Scripts\python.exe" main.py"
+echo Starting Gateway Backend (minimized)...
+start "Gateway" /MIN cmd /k "cd /d "%~dp0gateway" && "venv\Scripts\python.exe" main.py"
 
-timeout /t 4 /nobreak >nul
+echo Waiting for Gateway to initialize...
+timeout /t 8 /nobreak >nul
 
-echo Starting Frontend...
-start "Frontend" cmd /k "cd /d "%~dp0frontend" && npm run dev"
+echo Starting Frontend (minimized)...
+start "Frontend" /MIN cmd /k "cd /d "%~dp0frontend" && npm run dev"
 
+REM Wait before resource monitor
+timeout /t 15 /nobreak >nul
+
+REM Background Resource Monitor
+echo Starting background resource monitor (checks every 60s)...
+start /MIN "ResourceMonitor" powershell -NoProfile -ExecutionPolicy Bypass -Command "& '%~dp0_resource_guard.ps1' -mode monitor -checkIntervalSeconds 60"
 echo.
-echo Gateway:  http://localhost:8000
-echo Frontend: http://localhost:3000
+
+echo ============================================
+echo   Gateway:  http://localhost:8000
+echo   Frontend: http://localhost:3000
+echo   Monitor:  running in background
+echo ============================================
 echo.
-echo Close the terminal windows to stop.
+echo [TIP] All windows launched minimized to reduce system load.
+echo.
 pause
 exit /b
 
@@ -48,7 +85,6 @@ exit /b
 echo Looking for Unity Editor...
 set UNITY_EXE=
 
-REM Check Unity Hub (most common for 2021.3 LTS)
 for /d %%d in ("C:\Program Files\Unity\Hub\Editor\*") do (
     if exist "%%d\Editor\Unity.exe" (
         set UNITY_EXE=%%d\Editor\Unity.exe
@@ -56,7 +92,6 @@ for /d %%d in ("C:\Program Files\Unity\Hub\Editor\*") do (
     )
 )
 
-REM Check standalone install
 for /d %%d in ("C:\Program Files\Unity\*") do (
     if exist "%%d\Editor\Unity.exe" (
         set UNITY_EXE=%%d\Editor\Unity.exe
@@ -64,19 +99,18 @@ for /d %%d in ("C:\Program Files\Unity\*") do (
     )
 )
 
-echo Unity Editor not found. Install Unity 2021.3 LTS or set UNITY_PATH.
+echo Unity Editor not found.
 goto :eof
 
 :found_unity
 echo Unity found: %UNITY_EXE%
 echo Launching Unity project...
 
-REM Create auto-play flag
 if not exist "unity_project\Temp" mkdir "unity_project\Temp"
 echo 1 > "unity_project\Temp\auto_play.flag"
 
-start "XuanwuAI Unity" "%UNITY_EXE%" -projectPath "%~dp0unity_project"
-echo Unity Editor launched. Scene will auto-setup and enter Play mode.
+start "XuanwuAI Unity" /MIN "%UNITY_EXE%" -projectPath "%~dp0unity_project"
+echo Unity Editor launched (minimized).
 goto :eof
 
 :sleep

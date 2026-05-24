@@ -8,12 +8,12 @@
 
 ## 一、原始计划的 10 天 MVP 对照
 
-### Day 1: MCP Bus + demo_calculator ✅ 完成
-- demo_calculator MCP server（add/subtract/multiply/divide 4 个工具）
-- MCP SDK stdio transport 通信正常
+### Day 1: CAIAO Bus + demo_calculator ✅ 完成
+- demo_calculator CAIAO server（add/subtract/multiply/divide 4 个工具）
+- CAIAO SDK stdio transport 通信正常
 
 ### Day 2: FastAPI Gateway ✅ 完成
-- FastAPI 应用入口（main.py），lifespan 管理 MCP 生命周期
+- FastAPI 应用入口（main.py），lifespan 管理 CAIAO 生命周期
 - REST API: `/health`, `/tools`, `/tools/call`, `/verify`, `/ws/chat`
 - WebSocket 实时通信
 - CORS 中间件
@@ -28,11 +28,11 @@
 - analyze_frame: 线性弹性分析，返回位移和内力
 - select_critical_element: 基于最大轴力选择关键柱
 
-### Day 5: Unity C# 脚本 + Unity 模拟器 MCP ⚠️ 部分完成
+### Day 5: Unity C# 脚本 + Unity 模拟器 CAIAO ⚠️ 部分完成
 - SimulationController.cs: TCP 监听 → JSON 指令解析 → 物理拆除/重置
 - FrameBuilder.cs: Editor 工具，自动构建框架几何体和关节连接
 - WebRTCStreamer.cs: 摄像头捕获 → WebRTC 推流
-- unity_simulator MCP server: apply_demolition_action / reset_simulation
+- unity_simulator CAIAO server: apply_demolition_action / reset_simulation
 - **但**: 未在 Unity Editor 中实际测试，无场景文件、无预制件
 
 ### Day 6: AI 自主拆除循环 ✅ 完成
@@ -110,7 +110,7 @@
 - **当前**: 依赖于 mem0 库对 DeepSeek API 的兼容性（embeddings 接口）
 - **日志**: 前端保存设置后自动重试初始化
 
-### 3.4 MCP SDK 在 Windows 上的 cancel scope 问题
+### 3.4 CAIAO SDK 在 Windows 上的 cancel scope 问题
 - **现象**: uvicorn reload 模式下偶发 `RuntimeError: Attempted to exit cancel scope in a different task`
 - **影响**: 开发时重启偶发崩溃，生产环境（无 reload）不受影响
 
@@ -215,9 +215,9 @@ curl -X POST http://localhost:8000/tools/call \
 
 1. **端口冲突**: Gateway 使用 8000 端口，前端 3000，Unity TCP 5005。启动前确保端口未被占用。使用 `taskkill /F /IM python.exe` 清理残留进程。
 
-2. **不要同时运行多个 Gateway 实例**: MCP server 通过 stdio 子进程管理，多个 Gateway 实例会导致端口冲突和 MCP server 双重启动。
+2. **不要同时运行多个 Gateway 实例**: CAIAO server 通过 stdio 子进程管理，多个 Gateway 实例会导致端口冲突和 CAIAO server 双重启动。
 
-3. **uvicorn reload 模式**: 开发时默认启用，文件变更自动重启。但偶尔触发 MCP SDK 的 cancel scope 竞态条件导致崩溃——重新手动启动即可。
+3. **uvicorn reload 模式**: 开发时默认启用，文件变更自动重启。但偶尔触发 CAIAO SDK 的 cancel scope 竞态条件导致崩溃——重新手动启动即可。
 
 4. **OpenSees 仅在 Linux/macOS 可用**: Windows 上的 `openseespy` 依赖的 DLL（`openseespywin`）缺少 Visual C++ 运行时组件。服务器会自动降级。
 
@@ -239,7 +239,7 @@ curl -X POST http://localhost:8000/tools/call \
 
 | 模块 | 测试文件 | 测试数 | 状态 |
 |------|---------|--------|------|
-| gateway/mcp_hub | tests/test_mcp_hub.py | 7 | ✅ 全部通过 |
+| gateway/caiao_hub | tests/test_caiao_hub.py | 7 | ✅ 全部通过 |
 | gateway/llm_engine | tests/test_llm_engine.py | 9 | ✅ 全部通过 |
 | gateway/agent_loop | tests/test_agent_loop.py | 6 | ✅ 全部通过 |
 | gateway/api | tests/test_api.py | 5 | ✅ 全部通过（需 gateway 运行中） |
@@ -268,7 +268,7 @@ curl -X POST http://localhost:8000/tools/call \
 ### 7.3 手动验证通过的内容
 
 - generate_simple_frame → analyze_frame → select_critical_element 完整管道
-- Gateway 4 个 MCP server 同时启动（10 个工具注册）
+- Gateway 4 个 CAIAO server 同时启动（10 个工具注册）
 - 前端 TypeScript 编译 + 生产构建
 - REST API 全部端点响应正确
 
@@ -278,7 +278,7 @@ curl -X POST http://localhost:8000/tools/call \
 
 ### 8.1 架构层面
 
-1. **MCP server 脱离 gateway 进程**: 当前 MCP server 作为子进程由 gateway 管理。如需分布式部署，考虑将 MCP server 独立部署并通过 HTTP/SSE transport 连接。
+1. **CAIAO server 脱离 gateway 进程**: 当前 CAIAO server 作为子进程由 gateway 管理。如需分布式部署，考虑将 CAIAO server 独立部署并通过 HTTP/SSE transport 连接。
 
 2. **移除 demo 模拟代码**: 当前 `/verify` 端点已清理假数据生成逻辑，在 OpenSees 不可用时干净返回 "unavailable"。
 
@@ -318,7 +318,7 @@ curl -X POST http://localhost:8000/tools/call \
 
 16. **Unity TCP 无认证**: `localhost:5005` 的 JSON 协议无安全机制。如果 Unity 和 Gateway 不在同一机器，需要添加 TLS + 认证。
 
-17. **输入校验**: REST API 的 tool arguments 未做深度校验，依赖 MCP server 内部处理。建议在 gateway 层添加 schema 验证。
+17. **输入校验**: REST API 的 tool arguments 未做深度校验，依赖 CAIAO server 内部处理。建议在 gateway 层添加 schema 验证。
 
 ---
 
@@ -326,7 +326,7 @@ curl -X POST http://localhost:8000/tools/call \
 
 1. **Git 仓库已初始化**: 4 个 commits，含 `.gitignore` 和 GitHub Actions CI。如需推送到远程仓库（如 GitHub），添加 remote 后 push 即可。
 
-2. **venv 路径**: gateway 的虚拟环境在 `gateway/venv/`，MCP server 也使用同一 venv 的 Python（`VENV_PYTHON` 常量引用）。不要删除此 venv。
+2. **venv 路径**: gateway 的虚拟环境在 `gateway/venv/`，CAIAO server 也使用同一 venv 的 Python（`VENV_PYTHON` 常量引用）。不要删除此 venv。
 
 3. **litellm → openai 迁移**: 原始计划使用 litellm，但因安装问题切换为 openai SDK。如果后续需要支持多种 LLM 提供商（Anthropic, Azure 等），可以考虑重新引入 litellm（在非 Windows 环境）。
 

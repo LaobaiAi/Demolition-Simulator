@@ -1,4 +1,4 @@
-"""Unity Simulator MCP Server — sends demolition commands to Unity via TCP."""
+"""Unity Simulator CAIAO Server — sends demolition commands to Unity via TCP."""
 
 import asyncio
 import json
@@ -16,7 +16,7 @@ logger = logging.getLogger("unity_simulator")
 UNITY_HOST = "127.0.0.1"
 UNITY_PORT = 5005
 
-app = Server("unity-simulator")
+server = Server("unity-simulator")
 
 TOOLS = [
     Tool(
@@ -171,12 +171,12 @@ def _handle_reset(arguments: dict) -> dict:
     return result
 
 
-@app.list_tools()
+@server.list_tools()
 async def list_tools() -> list[Tool]:
     return TOOLS
 
 
-@app.call_tool()
+@server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     try:
         if name == "apply_demolition_action":
@@ -207,7 +207,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 async def main():
     async with stdio_server() as (read, write):
-        await app.run(read, write, app.create_initialization_options())
+        await server.run(read, write, server.create_initialization_options())
 
 
 if __name__ == "__main__":
