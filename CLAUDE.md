@@ -57,9 +57,13 @@ gateway/          ← FastAPI 后端，LLM 引擎 + Agent Loop
   memory.py       ← mem0 + local JSON fallback
   caiao_hub.py      ← CAIAO 多服务器管理
 caiao_servers/
-  anastruct_server/  ← 快速线性分析 (anaStruct)
-  opensees_server/   ← 高精度分析 (OpenSeesPy)
-  unity_simulator/   ← 拆除动作 + 结构修改 + Unity TCP 通信
+  anastruct_server/       ← 快速线性分析 (anaStruct)
+  opensees_server/        ← 高精度分析 (OpenSeesPy)
+  pynite_server/          ← 3D FEM (PyNite)
+  fapp_server/            ← 3D FEM (FAPP)
+  unity_simulator/        ← 拆除动作 + 结构修改 + Unity TCP 通信
+  frame_generator/        ← 参数化框架生成 (2D + 3D)
+  quick_analysis_server/  ← ⚡ Pipeline A: 第一个 CAIAOServerizer token merge
 unity_project/
   Assets/Scripts/
     SimulationController.cs  ← TCP 监听 :5005, 物理拆除
@@ -114,6 +118,32 @@ frontend/
 - **Full principle doc**: see `ARCHITECTURE.md`
 - **Dev docs**: see `dev-notes/architecture.md`
 
+### CAIAOServerizer 范式（CAIAO Server = 原子单元）
+
+CAIAO Server 是系统最小原子单元，类比 LLM 的 token。核心演化方向：
+
+**1. Server 可组合（✅ first merge done）**
+多个 Server 可声明式组合成新 Server，无需写代码：
+```
+# 已实现: quick_analysis_server = generate_frame + analyze_frame + select_critical
+frame_generator + anastruct + postprocess = full_analysis  （新复合 Server）
+```
+复合 Server 本身可被索引和复用（类似 BPE 合并规则）。参见 `ARCHITECTURE.md` CAIAOServerizer 章节。
+
+**2. 并行资源自适应**
+多 Server 并行执行前必须评估机器负载，超限则自动回退串行：
+```
+请求 → 资源评估（CPU>80%? 内存<2GB?）→ 并行 or 串行
+```
+这是 P0 机制，现在就要实现。
+
+**3. 向量路由（远期）**
+用 embedding 语义匹配请求到 Server/组合，替代硬编码路由。
+
+**4. 自进化**
+记录高频组合模式 → 自动固化 → 优化编排顺序。
+详见 `dev-notes/architecture/2026-05-24-caiaoserverizer-paradigm.md`
+
 ## Feature Status
 - [x] 框架生成 + 快速分析
 - [x] 关键柱识别
@@ -127,6 +157,8 @@ frontend/
 - [x] 本地记忆 fallback (local_memory.json)
 - [x] Unity 3D 物理引擎集成（WebRTC 视频流 + 一键启动 + 自动搭建场景 + 自动 Play 模式）
 - [x] 前端一键 Launch Unity（无需手动打开 Editor / Setup Scene / Play）
+- [x] ⚡ 第一个 CAIAOServerizer token merge: quick_analysis_server
+  （generate + analyze + select_critical 合并为单次调用）
 
 ### 6. 对话记录到 dev-notes
 - **每次有重要技术决策、架构变更、Bug 根因分析、或用户明确要求时**，将关键对话内容输出到 `dev-notes/` 目录
