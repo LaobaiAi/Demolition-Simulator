@@ -2,7 +2,7 @@
 ╔══════════════════════════════════════════════════════════════════════╗
 ║  CAIAO Server: Pipeline A — Quick 2D Structural Analysis           ║
 ║                                                                     ║
-║  ⚡ FIRST CAIAOSERVERIZER TOKEN MERGE (2026-05-25)                  ║
+║  ⚡ FIRST CAIAOSERVERIZER SERVER MERGE (2026-05-25)                  ║
 ║                                                                     ║
 ║  What was 3 separate subprocess calls:                              ║
 ║    generate_frame → analyze_frame → select_critical_element        ║

@@ -121,7 +121,7 @@ if __name__ == "__main__":
 3. Register in `gateway/main.py` → `SERVER_CONFIGS` list with `"lazy": True` for heavyweight solvers
 4. Restart Gateway — tool appears in `/tools` automatically
 
-## CAIAOServerizer Paradigm: Token Merge
+## CAIAOServerizer Paradigm: Server Merge
 
 ### Concept
 
@@ -141,7 +141,7 @@ quick_analysis  ←  Pipeline A（三步合并为一个原子 Server）
 
 ### ⚡ First Merge: Pipeline A (2026-05-25)
 
-`quick_analysis_server` 是 CAIAOServerizer 的第一个手动 token merge。
+`quick_analysis_server` 是 CAIAOServerizer 的第一个手动 server merge。
 它将 `generate_frame` + `analyze_frame` + `select_critical_element` 三个
 此前独立的原子 Server 合并为一个独立 Server：
 
@@ -159,12 +159,35 @@ caiao_servers/quick_analysis_server/
 
 **详细记录：** `dev-notes/architecture/2026-05-25-caiaoserverizer-first-merge.md`
 
+### ⚡ Second Merge: Pipeline B (2026-05-25)
+
+`full_analysis_3d_server` 是 CAIAOServerizer 的第二个 server merge。
+它将 `generate_frame_3d` + `convert_to_unified_frame` + `pynite_analysis` + `select_critical_3d`
+合并为一个独立 Server：
+
+```
+caiao_servers/full_analysis_3d_server/
+  └── server.py  ← imports: frame_generator.core + pynite_server.server
+                   └── _convert_3d_to_unified()  ← built-in converter
+```
+
+**核心价值：** 打通了 3D 可视化几何到 3D 结构分析的桥梁。
+`generate_3d()` 的输出原本只用于可视化（无截面属性、无拓扑、无荷载），现在通过
+UnifiedFrame 转换器自动生成拓扑格式，进入 PyNite 3D 求解器。
+
+| 对比 | 合并前 | 合并后 |
+|------|--------|--------|
+| 子进程通信 | 4 次 | 1 次 |
+| 数据格式转换 | 手动编写 | 自动 UnifiedFrame |
+| 3D 分析能力 | 无（3D 只有可视化） | 完整 3D FEM 分析 |
+| 坐标约定 | 多种不统一 | 统一为 {x, y, z} |
+
 ### Merge Roadmap
 
 | # | Merge | 涉及 Server | 状态 |
 |---|-------|-------------|------|
 | 1 | **Quick Analysis** (Pipeline A) | generate_frame + anastruct.analyze + anastruct.select_critical | ✅ Done |
-| 2 | **3D Full Analysis** | generate_frame_3d + pynite_analysis + select_critical | 📋 Planned |
+| 2 | **3D Full Analysis** (Pipeline B) | generate_frame_3d → convert → pynite_analysis → select_critical_3d | ✅ Done |
 | 3 | **Verify Suite** | anastruct + opensees + pynite + fapp → consensus | 📋 Planned |
 | 4 | **Demolition Cycle** | apply_demolition + analyze + select_critical | 📋 Planned |
 
@@ -183,6 +206,16 @@ def my_merged_tool(args):
 ```
 
 See `caiao_servers/quick_analysis_server/server.py` for the full example.
+
+## Full Reference
+
+See **[`CAIAO_PROTOCOL.md`](CAIAO_PROTOCOL.md)** for the complete CAIAO reference:
+- Server independence principle
+- Server registry (all servers, tools, status)
+- Merge roadmap
+- Naming conventions
+- Contract rules
+- Change log
 
 ## Verification
 

@@ -134,7 +134,7 @@ The CAIAO protocol is the project's **unified server abstraction** — every sol
 
 > **CAIAO Server 是系统的最小原子单元，类比 LLM 的 token。**
 
-### The Token Merge
+### The Server Merge
 
 就像 BPE 把高频 token 对合并为新 token一样，我们把高频的 Server 调用序列合并为新的原子 Server。
 
@@ -184,8 +184,8 @@ The CAIAO protocol is the project's **unified server abstraction** — every sol
 > **Roadmap:** Pipeline A 只是第一步。接下来将合并 3D 全分析管线（`generate_frame_3d → pynite_analysis`）、
 > 多求解器验证套件（4 求解器共识）、以及拆除循环（`apply_demolition → re-analyze → select_critical`）。
 >
-> 详见 [`ARCHITECTURE.md`](ARCHITECTURE.md#caiaoserverizer-paradigm-token-merge) 和
-> `dev-notes/architecture/2026-05-25-caiaoserverizer-first-merge.md`
+> 详见 [`CAIAO_PROTOCOL.md`](CAIAO_PROTOCOL.md)（完整参考）、[`ARCHITECTURE.md`](ARCHITECTURE.md#caiaoserverizer-paradigm-token-merge)
+> 和 `dev-notes/architecture/2026-05-25-caiaoserverizer-first-merge.md`
 
 ---
 
@@ -375,7 +375,8 @@ cd frontend && npx vitest run                # 16 tests
 | Persistent LLM config | Done |
 | Local memory fallback | Done |
 | Multi-solver deep verify (4 solvers) | Done |
-| ⚡ CAIAOServerizer token merge #1 (Pipeline A) | Done — `quick_analysis` replaces 3 calls with 1 |
+| ⚡ CAIAOServerizer server merge #1 (Pipeline A) | Done — `quick_analysis` replaces 3 calls with 1 |
+| ⚡ CAIAOServerizer server merge #2 (Pipeline B) | Done — `full_analysis_3d`: 3D geometry → UnifiedFrame → PyNite analysis → critical |
 | Mobile responsive layout | Planned |
 | Multi-user session isolation | Planned |
 
@@ -385,6 +386,8 @@ cd frontend && npx vitest run                # 16 tests
 
 | Document | Description |
 |----------|-------------|
+| [CAIAO_PROTOCOL.md](CAIAO_PROTOCOL.md) | **Complete CAIAO reference** — server registry, merge roadmap, independence principle, naming, contract |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | CAIAO bus technical detail, protocol specification |
 | [CLAUDE.md](CLAUDE.md) | Project record, architecture, key files, user directives |
 | [PROJECT_STATUS.md](PROJECT_STATUS.md) | 10-day MVP progress, known issues, test coverage, future plans |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Commit conventions, code style, PR process, branch strategy |

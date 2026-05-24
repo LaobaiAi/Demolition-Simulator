@@ -63,7 +63,8 @@ caiao_servers/
   fapp_server/            ← 3D FEM (FAPP)
   unity_simulator/        ← 拆除动作 + 结构修改 + Unity TCP 通信
   frame_generator/        ← 参数化框架生成 (2D + 3D)
-  quick_analysis_server/  ← ⚡ Pipeline A: 第一个 CAIAOServerizer token merge
+  quick_analysis_server/  ← ⚡ Pipeline A: 第一个 CAIAOServerizer server merge
+  full_analysis_3d_server/  ← ⚡ Pipeline B: 第二个 server merge (3D 全分析)
 unity_project/
   Assets/Scripts/
     SimulationController.cs  ← TCP 监听 :5005, 物理拆除
@@ -105,6 +106,13 @@ frontend/
 - **Registration**: add to `gateway/main.py` → `SERVER_CONFIGS`
 - **Lazy loading**: use `"lazy": True` for heavyweight solvers (OpenSees, PyNite, FAPP, Unity)
 
+### Server Independence Principle
+- **Every server is fully independent.** No server requires another server's process to be running.
+- **Merge by importing logic, never by depending on another server's runtime.** A merged server imports pure functions/classes from source servers — it doesn't need them running.
+- **Never modify an existing server to serve a merge.** Merges create new Servers; atomic servers stay unchanged.
+- **Extract shared logic only when ROI justifies it** (3+ consumers, non-trivial logic). Don't abstract prematurely.
+- **Detailed rationale**: `CAIAO_PROTOCOL.md §7`
+
 ### Naming Convention
 | Context | Convention | Example |
 |---------|-----------|---------|
@@ -115,8 +123,18 @@ frontend/
 | SDK imports | keep `from mcp.server import Server` | external package, not our naming |
 
 ### Docs
+- **CAIAO protocol (complete reference)**: see `CAIAO_PROTOCOL.md`
 - **Full principle doc**: see `ARCHITECTURE.md`
 - **Dev docs**: see `dev-notes/architecture.md`
+
+### Auto-Update Rule
+**Every CAIAO-related change MUST update `CAIAO_PROTOCOL.md`.** This includes:
+- New server creation → add to Server Registry (§8)
+- New merge → add to Merge Roadmap (§9) + Server Registry (§8)
+- Naming convention change → update (§10)
+- Contract rule change → update (§11)
+- Any other CAIAO architectural decision → append to Change Log (§12)
+- `CAIAO_PROTOCOL.md` is the single source of truth for all CAIAO matters.
 
 ### CAIAOServerizer 范式（CAIAO Server = 原子单元）
 
@@ -157,8 +175,10 @@ frame_generator + anastruct + postprocess = full_analysis  （新复合 Server�
 - [x] 本地记忆 fallback (local_memory.json)
 - [x] Unity 3D 物理引擎集成（WebRTC 视频流 + 一键启动 + 自动搭建场景 + 自动 Play 模式）
 - [x] 前端一键 Launch Unity（无需手动打开 Editor / Setup Scene / Play）
-- [x] ⚡ 第一个 CAIAOServerizer token merge: quick_analysis_server
+- [x] ⚡ 第一个 CAIAOServerizer server merge: quick_analysis_server
   （generate + analyze + select_critical 合并为单次调用）
+- [x] ⚡ 第二个 CAIAOServerizer server merge: full_analysis_3d_server
+  （3D 生成 → UnifiedFrame 转换 → PyNite 3D 分析 → 选关键柱）
 
 ### 6. 对话记录到 dev-notes
 - **每次有重要技术决策、架构变更、Bug 根因分析、或用户明确要求时**，将关键对话内容输出到 `dev-notes/` 目录
