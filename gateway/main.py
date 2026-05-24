@@ -561,6 +561,39 @@ def _find_unity_exe() -> str | None:
     return candidates[0] if candidates else None
 
 
+def _detect_running_unity() -> bool:
+    """Check if Unity is already running on TCP port 5005 (from a previous gateway session)."""
+    import socket
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1.0)
+        result = sock.connect_ex(("127.0.0.1", 5005))
+        sock.close()
+        if result == 0:
+            logger.info("Detected running Unity instance on port 5005 (from previous session).")
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _send_tcp_command(command: dict) -> dict:
+    """Send a JSON command to Unity via TCP port 5005 and return the response."""
+    import json as _json
+    import socket
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5.0)
+        sock.connect(("127.0.0.1", 5005))
+        payload = _json.dumps(command) + "\n"
+        sock.sendall(payload.encode())
+        response = sock.recv(4096).decode().strip()
+        sock.close()
+        return {"status": "ok", "response": response}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
 @app.post("/unity/launch")
 async def launch_unity():
     global _unity_process
@@ -600,24 +633,49 @@ async def launch_unity():
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
 
+@app.post("/unity/reconnect")
+async def reconnect_unity():
+    """Send a restart_webrtc command to Unity via TCP to re-establish WebRTC signaling.
+    Use this after a gateway restart where the SDP offer was lost."""
+    # First try TCP command to restart WebRTC
+    tcp_result = _send_tcp_command({"action": "restart_webrtc"})
+    if tcp_result["status"] == "ok":
+        global _webrtc_offer, _webrtc_answer
+        _webrtc_offer = None
+        _webrtc_answer = None
+        return {
+            "status": "ok",
+            "message": "WebRTC restart command sent to Unity. A fresh SDP offer should arrive shortly.",
+        }
+    # If TCP failed, check if we can launch Unity
+    unity_exe = _find_unity_exe()
+    if unity_exe:
+        return {"status": "launch_required", "message": "Unity not responding on TCP. Click Launch Unity to start fresh."}
+    return {"status": "error", "message": "Unity not found and not running."}
+
+
 @app.get("/unity/status")
 async def unity_status():
     global _unity_process, _webrtc_offer
     running = _unity_process is not None and _unity_process.poll() is None
 
+    # Always check TCP — Unity may be running from a previous gateway session
     tcp_ok = False
-    if running:
-        try:
-            import socket
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(1.0)
-            tcp_ok = sock.connect_ex(("127.0.0.1", 5005)) == 0
-            sock.close()
-        except Exception:
-            pass
+    try:
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1.0)
+        tcp_ok = sock.connect_ex(("127.0.0.1", 5005)) == 0
+        sock.close()
+    except Exception:
+        pass
+
+    # Unity is considered alive if either tracked process OR TCP port responds
+    unity_alive = running or tcp_ok
 
     return {
         "process_running": running,
+        "unity_alive": unity_alive,
         "pid": _unity_process.pid if running else None,
         "tcp_ready": tcp_ok,
         "webrtc_offer_available": _webrtc_offer is not None,

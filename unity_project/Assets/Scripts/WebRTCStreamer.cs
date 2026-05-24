@@ -155,6 +155,16 @@ public class WebRTCStreamer : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Restart WebRTC streaming — stops current session and creates a new SDP offer.
+    /// Call this when the gateway has lost the offer (e.g., after server restart).
+    /// </summary>
+    public void RestartStreaming()
+    {
+        StopStreaming();
+        StartCoroutine(StartStreaming());
+    }
+
     void OnDestroy()
     {
         StopStreaming();

@@ -175,6 +175,9 @@ public class SimulationController : MonoBehaviour
             case "reset":
                 ResetSimulation();
                 break;
+            case "restart_webrtc":
+                RestartWebRTC();
+                break;
             default:
                 Debug.LogWarning($"[XuanwuAI] Unknown action: {command.action}");
                 break;
@@ -280,6 +283,20 @@ public class SimulationController : MonoBehaviour
         }
 
         Debug.Log("[XuanwuAI] Simulation reset complete.");
+    }
+
+    private void RestartWebRTC()
+    {
+        var streamer = FindObjectOfType<WebRTCStreamer>();
+        if (streamer != null)
+        {
+            Debug.Log("[XuanwuAI] Restarting WebRTC streaming...");
+            streamer.RestartStreaming();
+        }
+        else
+        {
+            Debug.LogWarning("[XuanwuAI] WebRTCStreamer not found — cannot restart.");
+        }
     }
 
     private Vector3 GetStructureCenter()
