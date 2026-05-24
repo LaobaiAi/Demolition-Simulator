@@ -31,7 +31,6 @@ from anastruct_server.server import _analyze_structure, _select_critical_element
 
 from mcp.server import Server
 import mcp.types as types
-from mcp.server.models import InitializationOptions
 
 server = Server("quick_analysis_server")
 
@@ -123,8 +122,10 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 
 if __name__ == "__main__":
     from mcp.server.stdio import stdio_server
-    import anyio
-    anyio.run(stdio_server, server, InitializationOptions(
-        server_name="quick_analysis_server",
-        server_version="0.1.0",
-    ))
+    import asyncio
+
+    async def main():
+        async with stdio_server() as (read, write):
+            await server.run(read, write, server.create_initialization_options())
+
+    asyncio.run(main())

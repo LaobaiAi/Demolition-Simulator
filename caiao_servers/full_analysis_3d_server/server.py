@@ -29,7 +29,6 @@ from pynite_server.server import _run_pynite
 
 from mcp.server import Server
 import mcp.types as types
-from mcp.server.models import InitializationOptions
 
 server = Server("full_analysis_3d_server")
 
@@ -340,8 +339,10 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 
 if __name__ == "__main__":
     from mcp.server.stdio import stdio_server
-    import anyio
-    anyio.run(stdio_server, server, InitializationOptions(
-        server_name="full_analysis_3d_server",
-        server_version="0.1.0",
-    ))
+    import asyncio
+
+    async def main():
+        async with stdio_server() as (read, write):
+            await server.run(read, write, server.create_initialization_options())
+
+    asyncio.run(main())
