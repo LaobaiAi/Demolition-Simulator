@@ -159,6 +159,13 @@ SERVER_CONFIGS = [
         "cwd": os.path.join(CAIAO_SERVERS_DIR, "quick_analysis_server"),
         "tools": ["quick_analysis"],
     },
+    {
+        "name": "full_analysis_3d_server",
+        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
+        "args": ["server.py"],
+        "cwd": os.path.join(CAIAO_SERVERS_DIR, "full_analysis_3d_server"),
+        "tools": ["full_analysis_3d"],
+    },
     # P1: Declarative composite pipeline — auto-registered by _build_composite_handlers
     {
         "name": "run_full_analysis",
