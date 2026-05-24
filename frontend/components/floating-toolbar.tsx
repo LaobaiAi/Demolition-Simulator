@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 
 interface FloatingToolbarProps {
-  wsConnected: boolean;
+  wsConnected: "connected" | "reconnecting" | "disconnected";
   toolsCount: number;
   onOpenSettings: () => void;
   onClearChat: () => void;
@@ -192,10 +192,15 @@ export function FloatingToolbar({
             <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-white/[0.03]">
               <span className="text-[11px] text-muted-foreground">Gateway</span>
               <span className="flex items-center gap-1.5">
-                {wsConnected ? (
+                {wsConnected === "connected" ? (
                   <>
                     <Wifi className="h-3 w-3 text-emerald-400" />
                     <span className="text-[11px] font-medium text-emerald-400">Connected</span>
+                  </>
+                ) : wsConnected === "reconnecting" ? (
+                  <>
+                    <WifiOff className="h-3 w-3 text-amber-400 animate-pulse" />
+                    <span className="text-[11px] font-medium text-amber-400">Reconnecting</span>
                   </>
                 ) : (
                   <>

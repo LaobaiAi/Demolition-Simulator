@@ -172,6 +172,10 @@ const translations: Record<Lang, Record<string, string>> = {
     "demo.completed": "Demo completed! Check the Unity 3D view for collapse animation.",
     "demo.launch_failed": "Unity launch failed. Check that Unity 2021.3 LTS+ is installed.",
     "demo.ws_failed": "WebSocket not connected. Check that the Gateway is running.",
+    "demo.frame_generator": "Frame Generator Pipeline",
+    "demo.frame_generator_desc": "Generate a parametric 3-bay 4-story steel frame (Q355) using the Frame Generator tool, run static analysis, identify critical columns, and trigger progressive demolition — SVG 2D visualization.",
+    "demo.3d_full_flow": "3D Frame Full Flow",
+    "demo.3d_full_flow_desc": "Build a 3D steel frame with spans in both X and Y directions (3x4 grid, 4 stories, Q355), run static analysis, identify critical columns, and perform progressive demolition — complete end-to-end 3D pipeline.",
   },
   zh: {
     "sidebar.new_chat": "新建对话",
@@ -328,6 +332,10 @@ const translations: Record<Lang, Record<string, string>> = {
     "demo.completed": "Demo 完成！请在 Unity 3D 视图中查看倒塌动画。",
     "demo.launch_failed": "Unity 启动失败。请确认已安装 Unity 2021.3 LTS+。",
     "demo.ws_failed": "WebSocket 未连接。请检查 Gateway 是否运行。",
+    "demo.frame_generator": "框架生成器流水线",
+    "demo.frame_generator_desc": "使用参数化框架生成器创建 3跨4层钢框架 (Q355)，运行静力分析，识别关键柱，触发渐进式拆除 — SVG 2D 可视化。",
+    "demo.3d_full_flow": "3D 框架全流程",
+    "demo.3d_full_flow_desc": "创建三维钢框架（3×4 柱网、4 层、Q355 钢），X 向和 Y 向均有跨度，运行静力分析，识别关键柱，自动触发渐进式拆除 — 全流程演示。",
   },
 };
 

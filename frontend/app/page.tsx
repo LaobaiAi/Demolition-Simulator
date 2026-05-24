@@ -19,6 +19,7 @@ import {
   ListOrdered,
   Square,
   Library,
+  LayoutGrid,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,9 +59,9 @@ async function fetchWithTimeout(
   }
 }
 
-interface FrameNode { id: number; x: number; y: number; }
-interface FrameElement { id: number; node_i: number; node_j: number; E?: number; A?: number; I?: number; }
-interface FrameLoad { node_id: number; Fx: number; Fy: number; }
+interface FrameNode { id: number; x: number; y: number; z?: number; }
+interface FrameElement { id: number; node_i: number; node_j: number; E?: number; A?: number; I?: number; Iy?: number; Iz?: number; J?: number; }
+interface FrameLoad { node_id: number; Fx: number; Fy: number; Fz?: number; }
 interface FrameSupport { node_id: number; type: string; }
 interface FrameStructure { nodes: FrameNode[]; elements: FrameElement[]; loads: FrameLoad[]; supports: FrameSupport[]; }
 interface NodeDisp { node_id: number; ux: number; uy: number; }
@@ -118,7 +119,7 @@ function extractRoundAnalysisResults(messages: ChatMessage[]): Record<number, Re
         if (fe && Array.isArray(fe) && fe.length > 0) {
           currentRound++;
         }
-      } else if (ANALYSIS_TOOLS.has(step.name)) {
+      } else if (step.name === "analyze_frame") {
         if (parsed.max_displacement !== undefined && !("error" in parsed)) {
           results[currentRound] = parsed;
         }
@@ -185,7 +186,7 @@ function restoreStateFromMessages(msgs: ChatMessage[]): RestoredState {
       } catch { continue; }
       if (!parsed) continue;
 
-      if (step.name === "generate_simple_frame") {
+      if (step.name === "generate_simple_frame" || step.name === "generate_frame" || step.name === "generate_from_text") {
         if (parsed.nodes && parsed.elements) {
           frameStructure = parsed as FrameStructure;
         }
@@ -302,7 +303,7 @@ export default function Home() {
   const [status, setStatus] = useState<"idle" | "loading">("idle");
   const [logEntries, setLogEntries] = useState<StepEvent[]>([]);
   const [logPaused, setLogPaused] = useState(false);
-  const [wsConnected, setWsConnected] = useState(false);
+  const [wsConnected, setWsConnected] = useState<"connected" | "reconnecting" | "disconnected">("disconnected");
   const [memorySnippets, setMemorySnippets] = useState<string[]>([]);
   const [analysisResult, setAnalysisResult] = useState<Record<string, unknown> | null>(null);
   const [structuralMetrics, setStructuralMetrics] = useState<StructuralMetrics | null>(null);
@@ -320,6 +321,12 @@ export default function Home() {
   const [demolitionRounds, setDemolitionRounds] = useState<DemolitionRound[]>([]);
   const [activeRoundIdx, setActiveRoundIdx] = useState(-1);       // -1 = show all rounds
   const [autoPlaying, setAutoPlaying] = useState(false);
+  // Animation replay state
+  // null = no pending animation; {key, targets} = animate these elements
+  const [animRequest, setAnimRequest] = useState<{key: number; targets: number[]} | null>(null);
+  const [animPlaying, setAnimPlaying] = useState(false);
+  const [animatingRound, setAnimatingRound] = useState(-1);
+  const autoPlayQueueRef = useRef<number[]>([]);
   const [roundAnalysisResults, setRoundAnalysisResults] = useState<Record<number, Record<string, unknown>>>({});
   const { theme, setTheme } = useTheme();
   const [settingsTab, setSettingsTab] = useState("llm");
@@ -419,6 +426,11 @@ export default function Home() {
     setDemolishReady(false);
     setFrameStructure(null);
     setNodeDisplacements(null);
+    setAnimRequest(null);
+    setAnimPlaying(false);
+    setAnimatingRound(-1);
+    setAutoPlaying(false);
+    autoPlayQueueRef.current = [];
     pendingStepsRef.current = [];
     saveConvs(updated, [], id);
   }, [conversations, saveConvs]);
@@ -666,22 +678,50 @@ export default function Home() {
       .catch(() => setTools([]));
   }, []);
 
-  // Connect WebSocket
+  // Connect WebSocket with reconnection
   useEffect(() => {
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_DELAY = 30000;
+
     function connect() {
       const ws = new WebSocket("ws://localhost:8000/ws/chat");
       wsRef.current = ws;
 
-      ws.onopen = () => setWsConnected(true);
-      ws.onclose = () => {
-        setWsConnected(false);
-        // Reconnect after 2s
-        setTimeout(connect, 2000);
+      // Client-side keepalive — send ping every 25s to detect stale connections early
+      let keepaliveTimer: ReturnType<typeof setInterval>;
+      const startKeepalive = () => {
+        keepaliveTimer = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "ping" }));
+          }
+        }, 25000);
       };
-      ws.onerror = () => ws.close();
+      const stopKeepalive = () => clearInterval(keepaliveTimer);
+
+      ws.onopen = () => {
+        setWsConnected("connected");
+        reconnectAttempts = 0;
+        startKeepalive();
+      };
+      ws.onclose = () => {
+        setWsConnected("reconnecting");
+        stopKeepalive();
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
+        reconnectAttempts++;
+        reconnectTimer = setTimeout(connect, delay);
+      };
+      ws.onerror = () => {
+        stopKeepalive();
+        setWsConnected("reconnecting");
+        ws.close();
+      };
 
       ws.onmessage = (event) => {
         const data: StepEvent = JSON.parse(event.data);
+
+        // Server heartbeat — just ignore
+        if (data.type === "ping") return;
 
         if (data.type === "user_echo") {
           // Reset for new message
@@ -738,7 +778,9 @@ export default function Home() {
             const L = langRef.current;
             const stepLabels: Record<string, string> = {
               generate_simple_frame: t("step.generating", L),
+              generate_frame: t("step.generating", L),
               analyze_frame: t("step.analyzing", L),
+              quick_analysis: t("step.generating", L),
               pynite_analysis: t("step.analyzing", L),
               fapp_analysis: t("step.analyzing", L),
               select_critical_element: t("step.critical", L),
@@ -756,7 +798,7 @@ export default function Home() {
           // Capture generated frame structure for visualization
           if (
             data.type === "tool_result" &&
-            data.name === "generate_simple_frame" &&
+            data.name === "generate_simple_frame" || data.name === "generate_frame" || data.name === "generate_from_text" &&
             data.result
           ) {
             try {
@@ -765,6 +807,63 @@ export default function Home() {
                 : data.result;
               if (parsed.nodes && parsed.elements) {
                 setFrameStructure(parsed as FrameStructure);
+              }
+            } catch { /* ignore */ }
+          }
+
+          // Pipeline A: quick_analysis returns structure + analysis + critical in one call
+          if (
+            data.type === "tool_result" &&
+            data.name === "quick_analysis" &&
+            data.result
+          ) {
+            try {
+              const parsed = typeof data.result === "string"
+                ? JSON.parse(data.result)
+                : data.result;
+              if (parsed.status === "complete") {
+                const r = parsed;
+                // 1. Set frame structure
+                if (r.structure?.nodes && r.structure?.elements) {
+                  setFrameStructure(r.structure as FrameStructure);
+                }
+                // 2. Set analysis result
+                if (r.analysis?.max_displacement !== undefined && !("error" in r.analysis)) {
+                  setAnalysisResult(r.analysis);
+                  if (r.analysis.solver) setAnalysisSolver(r.analysis.solver);
+                  if (r.analysis.node_displacements) {
+                    setNodeDisplacements(r.analysis.node_displacements);
+                  }
+                  setRoundAnalysisResults((prev) => ({
+                    ...prev,
+                    [-1]: r.analysis,
+                  }));
+                  // Auto-detect critical element from element forces
+                  const elemForces = r.analysis.element_forces as Record<string, unknown>[] | undefined;
+                  const extracted = extractMaxAxialForce(elemForces);
+                  const autoCritId = extracted?.elementId ?? null;
+                  const autoCritAxial = extracted?.absMaxAxial ?? null;
+                  setStructuralMetrics((prev) => ({
+                    maxDisplacement: r.analysis.max_displacement ?? 0,
+                    maxAxialForce: r.analysis.max_axial_force ?? 0,
+                    criticalElementId: autoCritId ?? prev?.criticalElementId ?? null,
+                    criticalAxialForce: autoCritAxial ?? prev?.criticalAxialForce ?? null,
+                    columnCount: prev?.columnCount ?? 0,
+                    failedElements: prev?.failedElements ?? [],
+                  }));
+                }
+                // 3. Set critical element from dedicated field (overrides auto-detect)
+                if (r.critical_element?.critical_element_id != null) {
+                  setStructuralMetrics((prev) => ({
+                    maxDisplacement: prev?.maxDisplacement ?? 0,
+                    maxAxialForce: prev?.maxAxialForce ?? 0,
+                    criticalElementId: r.critical_element.critical_element_id,
+                    criticalAxialForce: r.critical_element.critical_axial_force_N ?? null,
+                    columnCount: r.critical_element.column_count ?? prev?.columnCount ?? 0,
+                    failedElements: prev?.failedElements ?? [],
+                  }));
+                  setDemolishReady(true);
+                }
               }
             } catch { /* ignore */ }
           }
@@ -788,11 +887,13 @@ export default function Home() {
                   setNodeDisplacements(parsed.node_displacements);
                 }
 
-                // Store analysis result keyed by current demolition round index
-                setRoundAnalysisResults((prev) => ({
-                  ...prev,
-                  [demolitionIdxRef.current]: parsed,
-                }));
+                // Only store fast analysis (analyze_frame) per round
+                if (data.name === "analyze_frame") {
+                  setRoundAnalysisResults((prev) => ({
+                    ...prev,
+                    [demolitionIdxRef.current]: parsed,
+                  }));
+                }
 
                 // Auto-detect critical element from element forces (if available)
                 const elemForces = parsed.element_forces as Record<string, unknown>[] | undefined;
@@ -872,6 +973,10 @@ export default function Home() {
                         failedElements: allFailed,
                       };
                 });
+                // Trigger collapse animation for the newly failed elements
+                setAnimRequest(prev => ({key: (prev?.key ?? 0) + 1, targets: feList}));
+                setAnimPlaying(true);
+                setAnimatingRound(demolitionIdxRef.current);
               }
             } catch {
               // Not JSON, ignore
@@ -883,6 +988,7 @@ export default function Home() {
 
     connect();
     return () => {
+      clearTimeout(reconnectTimer);
       wsRef.current?.close();
     };
   }, []);
@@ -1018,29 +1124,58 @@ export default function Home() {
     setAutoPlaying(false);
   }, []);
 
-  const handleAutoPlay = useCallback(() => {
-    setAutoPlaying((prev) => !prev);
-    if (autoPlaying) setActiveRoundIdx(-1);
-  }, [autoPlaying]);
+  // Trigger collapse animation replay for a specific demolition round
+  const handleRoundAnimate = useCallback((roundIdx: number) => {
+    const round = demolitionRounds[roundIdx];
+    if (!round) return;
+    setActiveRoundIdx(roundIdx);
+    setAnimRequest(prev => ({key: (prev?.key ?? 0) + 1, targets: round.elementIds}));
+    setAnimPlaying(true);
+    setAnimatingRound(roundIdx);
+  }, [demolitionRounds]);
 
-  // Auto-play: iterate through demolition rounds
-  const autoPlayRef = useRef({ running: false, rounds: demolitionRounds });
-  autoPlayRef.current = { running: autoPlaying, rounds: demolitionRounds };
-  useEffect(() => {
-    if (!autoPlaying || demolitionRounds.length === 0) return;
-    let currentIdx = -1;
-    const timer = setInterval(() => {
-      currentIdx++;
-      if (currentIdx >= autoPlayRef.current.rounds.length) {
-        clearInterval(timer);
-        setAutoPlaying(false);
-        return;
-      }
-      setActiveRoundIdx(currentIdx);
-    }, 2000);
-    return () => { clearInterval(timer); setAutoPlaying(false); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoPlaying]);
+  // Called when collapse animation finishes
+  const handleAnimComplete = useCallback(() => {
+    setAnimPlaying(false);
+    setAnimatingRound(-1);
+    // Clear animRequest → CollapseAnimation shows static state, no replay on tab switch.
+    // The targets from the last animation persist in the child's animActiveSet memo
+    // so previously collapsed elements stay hidden.
+    setAnimRequest(null);
+
+    // Check if auto-play queue has more rounds
+    const queue = autoPlayQueueRef.current;
+    if (queue.length > 0) {
+      // Cinematic pause between rounds for visual breathing room
+      setTimeout(() => {
+        const q = autoPlayQueueRef.current;
+        if (q.length > 0) {
+          const nextRound = q.shift()!;
+          handleRoundAnimate(nextRound);
+        }
+      }, 600);
+    } else {
+      setAutoPlaying(false);
+    }
+  }, [handleRoundAnimate]);
+
+  const handleAutoPlay = useCallback(() => {
+    if (autoPlaying) {
+      // Stop
+      setAutoPlaying(false);
+      autoPlayQueueRef.current = [];
+      setAnimPlaying(false);
+      setAnimatingRound(-1);
+      setActiveRoundIdx(-1);
+      return;
+    }
+    // Start: queue all rounds and play first one
+    if (demolitionRounds.length === 0) return;
+    const queue = demolitionRounds.map(r => r.round);
+    autoPlayQueueRef.current = queue.slice(1); // remaining after first
+    setAutoPlaying(true);
+    handleRoundAnimate(queue[0]); // start first round
+  }, [autoPlaying, demolitionRounds, handleRoundAnimate]);
 
   const runUnityFullFlowDemo = useCallback(async () => {
     setDemoLibraryOpen(false);
@@ -1067,6 +1202,42 @@ export default function Home() {
 
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       const msg = t("quick.2x2", langRef.current);
+      setMessages((prev) => [...prev, { role: "user", content: msg }]);
+      setStatus("loading");
+      pendingStepsRef.current = [];
+      wsRef.current.send(JSON.stringify({ type: "message", content: msg }));
+    } else {
+      setDemoStatus(t("demo.ws_failed", langRef.current));
+      setTimeout(() => { setDemoRunning(false); demoRef.current.running = false; }, 3000);
+    }
+  }, []);
+
+  const runFrameGeneratorDemo = useCallback(async () => {
+    setDemoLibraryOpen(false);
+    setDemoRunning(true);
+    demoRef.current = { running: true, phase: "analyzing" };
+    setDemoStatus(t("demo.sending", langRef.current));
+
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      const msg = "Generate a 3-bay 4-story steel frame using Q355 steel, 6m span, 3m story height. Use the frame generator to create the model, run static analysis with anaStruct, identify the critical column, and then demolish it.";
+      setMessages((prev) => [...prev, { role: "user", content: msg }]);
+      setStatus("loading");
+      pendingStepsRef.current = [];
+      wsRef.current.send(JSON.stringify({ type: "message", content: msg }));
+    } else {
+      setDemoStatus(t("demo.ws_failed", langRef.current));
+      setTimeout(() => { setDemoRunning(false); demoRef.current.running = false; }, 3000);
+    }
+  }, []);
+
+  const run3dFullFlowDemo = useCallback(async () => {
+    setDemoLibraryOpen(false);
+    setDemoRunning(true);
+    demoRef.current = { running: true, phase: "analyzing" };
+    setDemoStatus(t("demo.sending", langRef.current));
+
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      const msg = "Build a 3D steel frame with a 3x4 column grid (3 spans in X, 4 spans in Y), 4 stories, 6m span in both directions, 3m story height, Q355 steel. Use the frame generator tool to create the model, run static analysis, identify critical columns, and demolish them progressively.";
       setMessages((prev) => [...prev, { role: "user", content: msg }]);
       setStatus("loading");
       pendingStepsRef.current = [];
@@ -1140,6 +1311,11 @@ export default function Home() {
     setDemolishReady(false);
     setFrameStructure(null);
     setNodeDisplacements(null);
+    setAnimRequest(null);
+    setAnimPlaying(false);
+    setAnimatingRound(-1);
+    setAutoPlaying(false);
+    autoPlayQueueRef.current = [];
     pendingStepsRef.current = [];
   }, []);
 
@@ -1166,6 +1342,8 @@ export default function Home() {
         let detail = "";
         if (entry.name === "generate_simple_frame") {
           detail = `${args.stories || "?"} stories x ${args.bays || "?"} bays`;
+        } else if (entry.name === "generate_frame" || entry.name === "generate_from_text") {
+          detail = `${args.num_stories || "?"} stories x ${args.num_bays_x || "?"} bays, ${args.span_x_m || "?"}m span`;
         } else if (entry.name === "analyze_frame") {
           detail = "Running anaStruct linear analysis...";
         } else if (entry.name === "select_critical_element") {
@@ -1187,7 +1365,7 @@ export default function Home() {
         } catch { /* not JSON */ }
         if (!parsed) return { label: "Result", detail: String(entry.result).slice(0, 80) };
 
-        if (entry.name === "generate_simple_frame") {
+        if (entry.name === "generate_simple_frame" || entry.name === "generate_frame" || entry.name === "generate_from_text") {
           const n = (parsed.nodes as unknown[] | undefined)?.length ?? 0;
           const e = (parsed.elements as unknown[] | undefined)?.length ?? 0;
           return { label: "Frame ready", detail: `${n} nodes, ${e} elements` };
@@ -1235,7 +1413,7 @@ export default function Home() {
         return { type: step.type, name: step.name };
       }
       const keep: Record<string, unknown> = {};
-      if (step.name === "generate_simple_frame") {
+      if (step.name === "generate_simple_frame" || step.name === "generate_frame" || step.name === "generate_from_text") {
         if (parsed.nodes) keep.nodes = parsed.nodes;
         if (parsed.elements) keep.elements = parsed.elements;
         if (parsed.loads) keep.loads = parsed.loads;
@@ -1539,38 +1717,51 @@ export default function Home() {
           </div>
         </div>
 
-        {vizMode === "svg" ? (
-          <>
-        {/* Structure visualization */}
-        <FrameVisualization
-          structure={frameStructure}
-          displacements={nodeDisplacements}
-          criticalElementId={structuralMetrics?.criticalElementId ?? null}
-          failedElements={displayFailedElements}
-          maxDisplacement={analysisResult?.max_displacement as number | undefined}
-          elementForces={analysisResult?.element_forces as Array<{element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number}> | undefined}
-        />
+        {/* Viewport wrapper — relative container for absolute-positioned views */}
+        <div className="relative flex-1 min-h-0 overflow-hidden">
+          {vizMode === "svg" && (
+            <div className="absolute inset-0 flex flex-col">
+              <FrameVisualization
+                structure={frameStructure}
+                displacements={nodeDisplacements}
+                criticalElementId={structuralMetrics?.criticalElementId ?? null}
+                failedElements={displayFailedElements}
+                maxDisplacement={analysisResult?.max_displacement as number | undefined}
+                elementForces={analysisResult?.element_forces as Array<{element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number}> | undefined}
+                animationTrigger={animRequest?.key}
+                animatingElements={animRequest?.targets}
+                onAnimationComplete={handleAnimComplete}
+              />
 
-        {/* Verification panel — centered below visualization */}
-        {analysisResult && (
-          <div className="flex items-center justify-center px-4 pb-2">
-            <VerificationPanel fastResult={selectedAnalysisResult} structure={roundStructure as Record<string, unknown> | null} lang={lang} analysisSolver={analysisSolver ?? undefined} verifyContext={verifyContext} demolitionRounds={demolitionRounds} activeRoundIdx={activeRoundIdx} onRoundClick={handleRoundClick} />
+              {analysisResult && (
+                <div className="flex items-center justify-center px-4 pb-2">
+                  <VerificationPanel fastResult={selectedAnalysisResult} structure={roundStructure as Record<string, unknown> | null} lang={lang} analysisSolver={analysisSolver ?? undefined} verifyContext={verifyContext} demolitionRounds={demolitionRounds} activeRoundIdx={activeRoundIdx} onRoundClick={handleRoundClick} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* WebGL 3D — always mounted, invisible preserves layout + dimensions */}
+          <div className={`absolute inset-0 flex flex-col ${vizMode === "webgl" ? "" : "invisible pointer-events-none"}`}>
+            <FrameVisualization3D
+              structure={frameStructure}
+              displacements={nodeDisplacements}
+              criticalElementId={structuralMetrics?.criticalElementId ?? null}
+              failedElements={failedElements}
+              displayFailedElements={displayFailedElements}
+              maxDisplacement={analysisResult?.max_displacement as number | undefined}
+              elementForces={analysisResult?.element_forces as Array<{element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number}> | undefined}
+              animationTrigger={animRequest?.key}
+              animatingElements={animRequest?.targets}
+              onAnimationComplete={handleAnimComplete}
+            />
           </div>
-        )}
-          </>
-        ) : vizMode === "webgl" ? (
-          <FrameVisualization3D
-            structure={frameStructure}
-            displacements={nodeDisplacements}
-            criticalElementId={structuralMetrics?.criticalElementId ?? null}
-            failedElements={failedElements}
-            displayFailedElements={displayFailedElements}
-            maxDisplacement={analysisResult?.max_displacement as number | undefined}
-            elementForces={analysisResult?.element_forces as Array<{element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number}> | undefined}
-          />
-        ) : (
-          <UnityVideoPanel onStreamConnected={handleUnityConnected} />
-        )}
+
+          {/* Unity — always mounted, invisible preserves layout + dimensions */}
+          <div className={`absolute inset-0 ${vizMode === "unity" ? "" : "invisible pointer-events-none"}`}>
+            <UnityVideoPanel onStreamConnected={handleUnityConnected} />
+          </div>
+        </div>
 
         {/* Log Stream at bottom of center panel */}
         <div className="border-t border-border bg-[#060a12]">
@@ -1650,10 +1841,16 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-2">
               <span
-                className={`h-2 w-2 rounded-full ${wsConnected ? "bg-emerald-500" : "bg-red-500"}`}
+                className={`h-2 w-2 rounded-full ${
+                  wsConnected === "connected" ? "bg-emerald-500" :
+                  wsConnected === "reconnecting" ? "bg-amber-500 animate-pulse" :
+                  "bg-red-500"
+                }`}
               />
               <span className="text-xs text-muted-foreground">
-                {wsConnected ? t("status.ws_connected", lang) : t("status.ws_disconnected", lang)}
+                {wsConnected === "connected" ? t("status.ws_connected", lang) :
+                 wsConnected === "reconnecting" ? "Reconnecting..." :
+                 t("status.ws_disconnected", lang)}
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -1672,8 +1869,10 @@ export default function Home() {
             demolitionRounds={demolitionRounds}
             activeRoundIdx={activeRoundIdx}
             onRoundClick={handleRoundClick}
+            onRoundAnimate={handleRoundAnimate}
             onAutoPlay={handleAutoPlay}
             autoPlaying={autoPlaying}
+            animatingRound={animatingRound}
           />
 
         </div>
@@ -1957,7 +2156,7 @@ export default function Home() {
 
       {/* Demo Library Dialog */}
       <Dialog open={demoLibraryOpen} onOpenChange={setDemoLibraryOpen}>
-        <DialogContent className="border-border max-w-xl h-[480px] flex flex-col overflow-hidden">
+        <DialogContent className="border-border max-w-6xl sm:!max-w-6xl h-[600px] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Library className="h-5 w-5 text-primary" />
@@ -2023,11 +2222,107 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Placeholder for future demos */}
-            <div className="rounded-xl border border-border border-dashed bg-muted/10 p-4 text-center">
-              <p className="text-xs text-muted-foreground/50">
-                More demos coming soon...
-              </p>
+            {/* Frame Generator Demo */}
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 hover:border-primary/40 transition-colors">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <LayoutGrid className="h-4 w-4 text-primary" />
+                    {t("demo.frame_generator", lang)}
+                  </h3>
+                  <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
+                    {t("demo.frame_generator_desc", lang)}
+                  </p>
+                  <div className="mt-3 flex items-center gap-3 text-[10px] text-muted-foreground/70">
+                    <span className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+                      Generate
+                    </span>
+                    <span>→</span>
+                    <span className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+                      Analyze
+                    </span>
+                    <span>→</span>
+                    <span className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+                      Demolish
+                    </span>
+                  </div>
+                </div>
+                <Button
+                  onClick={runFrameGeneratorDemo}
+                  disabled={demoRunning}
+                  className="shrink-0"
+                  size="sm"
+                >
+                  {demoRunning ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                      {t("demo.running", lang)}
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="h-3.5 w-3.5 mr-1.5" />
+                      {t("demo.run", lang)}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* 3D Frame Full Flow Demo */}
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 hover:border-primary/40 transition-colors">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <LayoutGrid className="h-4 w-4 text-indigo-400" />
+                    {t("demo.3d_full_flow", lang)}
+                  </h3>
+                  <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
+                    {t("demo.3d_full_flow_desc", lang)}
+                  </p>
+                  <div className="mt-3 flex items-center gap-3 text-[10px] text-muted-foreground/70">
+                    <span className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
+                      3D Model
+                    </span>
+                    <span>→</span>
+                    <span className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+                      Analyze
+                    </span>
+                    <span>→</span>
+                    <span className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                      ID Critical
+                    </span>
+                    <span>→</span>
+                    <span className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+                      Demolish
+                    </span>
+                  </div>
+                </div>
+                <Button
+                  onClick={run3dFullFlowDemo}
+                  disabled={demoRunning}
+                  className="shrink-0"
+                  size="sm"
+                >
+                  {demoRunning ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                      {t("demo.running", lang)}
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="h-3.5 w-3.5 mr-1.5" />
+                      {t("demo.run", lang)}
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         </DialogContent>

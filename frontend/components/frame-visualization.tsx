@@ -59,6 +59,10 @@ interface Props {
   failedElements?: number[];
   maxDisplacement?: number;
   elementForces?: ElemForce[];
+  // Animation replay
+  animationTrigger?: number;
+  animatingElements?: number[];
+  onAnimationComplete?: () => void;
 }
 
 type ViewMode = "deformation" | "stress";
@@ -70,6 +74,9 @@ export function FrameVisualization({
   failedElements,
   maxDisplacement,
   elementForces,
+  animationTrigger,
+  animatingElements,
+  onAnimationComplete,
 }: Props) {
   const [tab, setTab] = useState<"structure" | "animation">("structure");
   const [viewMode, setViewMode] = useState<ViewMode>("deformation");
@@ -240,6 +247,13 @@ export function FrameVisualization({
   function stressLabel(ratio: number): string {
     return (ratio * 100).toFixed(0) + "%";
   }
+
+  // Auto-switch to Animation tab when a round is triggered
+  useEffect(() => {
+    if (animationTrigger && animatingElements?.length) {
+      setTab("animation");
+    }
+  }, [animationTrigger]);
 
   return (
     <div className="flex-1 flex flex-col">
@@ -645,6 +659,9 @@ export function FrameVisualization({
         <CollapseAnimation
           structure={structure}
           failedElements={failedElements || []}
+          animatingElements={animatingElements}
+          animationTrigger={animationTrigger}
+          onAnimationComplete={onAnimationComplete}
         />
       )}
     </div>
@@ -670,6 +687,11 @@ interface DustCloud {
   cx: number; cy: number;
   maxR: number; delay: number;
 }
+interface ImpactRing {
+  cx: number; cy: number;
+  maxR: number; delay: number;
+  duration: number;
+}
 
 const EFFECT_DEFS: { key: EffectKey; label: string; desc: string; score: number; color: string }[] = [
   { key: 'cascade',  label: 'Cascade',  desc: '由下至上逐层倒塌', score: 25, color: '#22c55e' },
@@ -686,9 +708,15 @@ const EFFECT_DEFS: { key: EffectKey; label: string; desc: string; score: number;
 function CollapseAnimation({
   structure,
   failedElements,
+  animatingElements,
+  animationTrigger,
+  onAnimationComplete,
 }: {
   structure: FrameStructure;
   failedElements: number[];
+  animatingElements?: number[];
+  animationTrigger?: number;
+  onAnimationComplete?: () => void;
 }) {
   const { nodes, elements, loads = [], supports = [] } = structure;
   const [frame, setFrame] = useState(0);
@@ -734,6 +762,14 @@ function CollapseAnimation({
   const nodeMap = new Map(nodes.map(n => [n.id, n]));
   const failedSet = new Set(failedElements);
 
+  // Elements to animate in the current round — subset of failedSet.
+  // When animatingElements is provided, only those are animated;
+  // other failedSet elements are hidden (already collapsed in prior rounds).
+  const animActiveSet = useMemo(() => {
+    if (animatingElements && animatingElements.length > 0) return new Set(animatingElements);
+    return failedSet;
+  }, [animatingElements, failedSet]);
+
   const failedNodeIds = useMemo(() => {
     const ids = new Set<number>();
     for (const elem of elements) if (failedSet.has(elem.id)) { ids.add(elem.node_i); ids.add(elem.node_j); }
@@ -743,7 +779,7 @@ function CollapseAnimation({
   // ── Pre-computed animation data ───────────────────────────────────────
 
   const animData = useMemo(() => {
-    const failedElems = elements.filter(e => failedSet.has(e.id));
+    const failedElems = elements.filter(e => animActiveSet.has(e.id));
     const withInfo = failedElems.map(el => {
       const ni = nodeMap.get(el.node_i)!;
       const nj = nodeMap.get(el.node_j)!;
@@ -804,8 +840,21 @@ function CollapseAnimation({
       }
     }
 
-    return { cascade, debris, dust };
-  }, [elements, failedSet, nodeMap, minX, minY, sc, pad, svgH]);
+    // Impact rings — expand outward when elements hit ground
+    const impactRings: ImpactRing[] = [];
+    for (const item of cascade) {
+      const cx = (item.p1.x + item.p2.x) / 2;
+      impactRings.push({
+        cx,
+        cy: svgH - pad + 5,
+        maxR: 15 + seedRand(item.id * 1500) * 25,
+        delay: item.delay + 700,
+        duration: 600 + seedRand(item.id * 1600) * 300,
+      });
+    }
+
+    return { cascade, debris, dust, impactRings };
+  }, [elements, animActiveSet, nodeMap, minX, minY, sc, pad, svgH]);
 
   // Deterministic pseudo-random (seeded for stable debris between renders)
   function seedRand(seed: number): number {
@@ -816,8 +865,14 @@ function CollapseAnimation({
   // ── Animation loop ────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (failedElements.length === 0) return;
+    // Only animate when animatingElements is explicitly provided.
+    // When undefined → no pending animation (completed or never started).
+    // This avoids replay on tab switch or state restore.
+    const toAnimate = animatingElements;
+    if (!toAnimate || toAnimate.length === 0) return;
+
     startRef.current = performance.now();
+    lastFrameRef.current = 0;
     const animate = (t: number) => {
       const elapsed = t - startRef.current;
       if (elapsed < DURATION) {
@@ -827,11 +882,14 @@ function CollapseAnimation({
           lastFrameRef.current = elapsed;
         }
         rafRef.current = requestAnimationFrame(animate);
-      } else setFrame(DURATION);
+      } else {
+        setFrame(DURATION);
+        onAnimationComplete?.();
+      }
     };
     rafRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [failedElements.length]);
+  }, [animationTrigger]);
 
   // ── Per-frame helpers ─────────────────────────────────────────────────
 
@@ -883,20 +941,33 @@ function CollapseAnimation({
     }
   }
 
-  // ── Ground shake ──────────────────────────────────────────────────────
+  // ── Ground shake with pre-rumble ──────────────────────────────────────
   const shakeOn = e.shake && hasFailed;
   const firstHit = animData.cascade.length > 0 ? animData.cascade[0].delay + 600 : 0;
+  // Pre-rumble: builds tension before first element falls
+  const preRumble = shakeOn && hasFailed && t > 80 && t < firstHit && firstHit > 200
+    ? Math.sin(t * 0.12) * 1.8 * Math.min(t / firstHit, 1)
+    : 0;
+  // Main impact shake
   const shakeElapsed = Math.max(0, t - firstHit);
-  const shakeIntensity = shakeOn && shakeElapsed < 800
-    ? Math.sin(shakeElapsed * 0.08) * 4 * (1 - shakeElapsed / 800)
+  const shakeIntensity = shakeOn && shakeElapsed < 1000
+    ? Math.sin(shakeElapsed * 0.08) * 4 * (1 - shakeElapsed / 1000)
     : 0;
-  const shakeX = shakeIntensity * Math.sin(t * 0.05 + 1);
-  const shakeY = shakeIntensity * Math.sin(t * 0.07 + 2);
+  const totalShake = preRumble + shakeIntensity;
+  const shakeX = totalShake * Math.sin(t * 0.05 + 1);
+  const shakeY = totalShake * Math.sin(t * 0.07 + 2);
 
-  // ── Red flash ─────────────────────────────────────────────────────────
-  const flashOpacity = e.flash && hasFailed && t < 500
-    ? Math.sin((t / 500) * Math.PI) * 0.5
+  // ── Red flash (three-phase: tension + warning + impact) ───────────────
+  const flashWarning = e.flash && hasFailed && t > 0 && t < 800
+    ? Math.sin((t / 800) * Math.PI) * 0.7
     : 0;
+  const tensionPulse = e.flash && hasFailed && t > firstHit - 350 && t < firstHit - 50
+    ? Math.sin(((t - firstHit + 350) / 300) * Math.PI) * 0.3
+    : 0;
+  const flashImpact = e.flash && hasFailed && t > firstHit - 100 && t < firstHit + 250
+    ? Math.sin(((t - firstHit + 100) / 350) * Math.PI) * 0.5
+    : 0;
+  const flashOpacity = Math.max(flashWarning, tensionPulse, flashImpact);
 
   // ── Buckling midpoint helper ──────────────────────────────────────────
   function buckledMidpoint(origP1: {x:number,y:number}, origP2: {x:number,y:number}, prog: number) {
@@ -1231,6 +1302,19 @@ function CollapseAnimation({
               })
             ) : null}
 
+            {/* ── Impact Rings ── */}
+            {e.shake && hasFailed && (animData as any).impactRings?.map((ring: ImpactRing, idx: number) => {
+              const localT = t - ring.delay;
+              if (localT < 0 || localT > ring.duration) return null;
+              const prog = localT / ring.duration;
+              const r = ring.maxR * ease(prog);
+              const op = 0.25 * (1 - prog);
+              return (
+                <circle key={`impact-${idx}`} cx={ring.cx} cy={ring.cy} r={r}
+                  fill="none" stroke="#ef4444" strokeWidth={1.5} opacity={op} />
+              );
+            })}
+
             {/* ── Dust Clouds ── */}
             {e.dust && hasFailed && animData.dust.map((cloud, idx) => {
               const localT = t - cloud.delay;
@@ -1290,14 +1374,35 @@ function CollapseAnimation({
               <rect x={0} y={0} width={svgW} height={svgH} fill="#ef4444" opacity={flashOpacity * 0.15} pointerEvents="none" />
             )}
 
+            {/* ── Structure health bar ── */}
+            {elements.length > 0 && (
+              <g>
+                <rect x={svgW / 2 - 80} y={svgH - 48} width={160} height={6} rx={3}
+                  fill="#1e293b" stroke="#334155" strokeWidth={0.5} />
+                {/* Collapsed portion */}
+                <rect x={svgW / 2 - 80} y={svgH - 48}
+                  width={Math.round(160 * (failedElements.length / elements.length))} height={6} rx={3}
+                  fill="#ef4444" opacity={hasFailed ? 0.8 : 0} />
+                <text x={svgW / 2} y={svgH - 52} textAnchor="middle" fill="#64748b" fontSize={7}>
+                  {elements.length - failedElements.length}/{elements.length} standing
+                  {failedElements.length > 0 && ` · ${failedElements.length} collapsed`}
+                </text>
+              </g>
+            )}
+
             {/* ── Status text ── */}
             <text x={svgW / 2} y={svgH - 20} textAnchor="middle"
-              fill={hasFailed ? '#ef4444' : '#94a3b8'} fontSize={12}
+              fill={hasFailed ? '#ef4444' : '#94a3b8'} fontSize={11}
               className={hasFailed ? 'animate-pulse' : ''}
+              fontWeight="bold"
             >
-              {hasFailed
-                ? `Collapse: ${failedElements.length} element(s) failed — ${(totalProgress * 100).toFixed(0)}%`
-                : 'Trigger demolition to see collapse animation'}
+              {hasFailed && animActiveSet.size > 0 && totalProgress < 1
+                ? `⚡ Demolishing: ${[...animActiveSet].map(id => `#${id}`).join(', ')} — ${(totalProgress * 100).toFixed(0)}%`
+                : hasFailed && totalProgress >= 1
+                ? `✖ Collapsed: ${failedElements.length} element(s) — ${(elements.length - failedElements.length)}/${elements.length} remaining`
+                : hasFailed
+                ? `✖ Collapsed: ${failedElements.length} element(s) — ${(totalProgress * 100).toFixed(0)}%`
+                : 'Click a round in Demolition Targets to play the collapse animation'}
             </text>
 
           </g>

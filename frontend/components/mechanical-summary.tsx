@@ -22,8 +22,10 @@ interface MechanicalSummaryProps {
   demolitionRounds?: DemolitionRound[];
   activeRoundIdx?: number;
   onRoundClick?: (idx: number) => void;
+  onRoundAnimate?: (idx: number) => void;  // play collapse animation for this round
   onAutoPlay?: () => void;
   autoPlaying?: boolean;
+  animatingRound?: number;  // currently animating round (-1 = none)
 }
 
 export function MechanicalSummary({
@@ -31,8 +33,10 @@ export function MechanicalSummary({
   demolitionRounds = [],
   activeRoundIdx = -1,
   onRoundClick,
+  onRoundAnimate,
   onAutoPlay,
   autoPlaying = false,
+  animatingRound = -1,
 }: MechanicalSummaryProps) {
   if (!metrics) {
     return (
@@ -130,22 +134,31 @@ export function MechanicalSummary({
                 {demolitionRounds.map((r) => {
                   const isActive = activeRoundIdx === r.round;
                   const isPast = activeRoundIdx > r.round;
+                  const isAnimating = animatingRound === r.round;
                   return (
                     <button
                       key={r.round}
-                      onClick={() => onRoundClick?.(r.round)}
+                      onClick={() => {
+                        onRoundAnimate?.(r.round);
+                        onRoundClick?.(r.round);
+                      }}
                       className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-[10px] font-mono transition-all cursor-pointer ${
-                        isActive
+                        isAnimating
+                          ? "bg-red-500/30 border border-red-500/60 animate-pulse"
+                          : isActive
                           ? "bg-red-500/20 border border-red-500/40"
                           : isPast
                           ? "bg-red-500/5 border border-transparent opacity-60"
                           : "bg-transparent border border-transparent hover:bg-red-500/10"
                       }`}
                     >
-                      <span className={`shrink-0 w-5 h-5 flex items-center justify-center rounded text-[9px] font-bold ${
+                      <span className={`shrink-0 w-5 h-5 flex items-center justify-center rounded text-[9px] font-bold relative ${
                         isActive ? "bg-red-500 text-white" : "bg-red-500/20 text-red-400"
                       }`}>
-                        {r.round + 1}
+                        <span className={isAnimating ? "opacity-0" : ""}>{r.round + 1}</span>
+                        {isAnimating && (
+                          <Play className="h-3 w-3 absolute text-white animate-pulse" />
+                        )}
                       </span>
                       <span className="truncate text-muted-foreground">
                         {r.elementIds.map((id) => `#${id}`).join(", ")}
