@@ -1,6 +1,6 @@
 "use client";
 
-import { Ruler, Gauge, Crosshair, Zap, Building2 } from "lucide-react";
+import { Ruler, Gauge, Crosshair, Zap, Building2, Play, Square } from "lucide-react";
 
 export interface StructuralMetrics {
   maxDisplacement: number; // meters
@@ -11,11 +11,29 @@ export interface StructuralMetrics {
   failedElements: number[];
 }
 
-interface MechanicalSummaryProps {
-  metrics: StructuralMetrics | null;
+export interface DemolitionRound {
+  round: number;
+  elementIds: number[];
+  cumulativeIds: number[];
 }
 
-export function MechanicalSummary({ metrics }: MechanicalSummaryProps) {
+interface MechanicalSummaryProps {
+  metrics: StructuralMetrics | null;
+  demolitionRounds?: DemolitionRound[];
+  activeRoundIdx?: number;
+  onRoundClick?: (idx: number) => void;
+  onAutoPlay?: () => void;
+  autoPlaying?: boolean;
+}
+
+export function MechanicalSummary({
+  metrics,
+  demolitionRounds = [],
+  activeRoundIdx = -1,
+  onRoundClick,
+  onAutoPlay,
+  autoPlaying = false,
+}: MechanicalSummaryProps) {
   if (!metrics) {
     return (
       <div className="mb-4">
@@ -86,20 +104,69 @@ export function MechanicalSummary({ metrics }: MechanicalSummaryProps) {
 
         {metrics.failedElements.length > 0 && (
           <div className="rounded-lg border border-red-500/40 bg-red-500/5 p-2.5">
-            <div className="flex items-center gap-2 text-[11px] text-red-400 mb-0.5">
-              <Zap className="h-3 w-3" />
-              Demolition Targets
-            </div>
-            <div className="flex flex-wrap gap-1 mt-1">
-              {metrics.failedElements.map((id) => (
-                <span
-                  key={id}
-                  className="text-[11px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded font-mono"
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-[11px] text-red-400 mb-0.5">
+                <Zap className="h-3 w-3" />
+                Demolition Targets
+              </div>
+              {/* Auto-play button */}
+              {demolitionRounds.length > 1 && onAutoPlay && (
+                <button
+                  onClick={onAutoPlay}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium border transition-all cursor-pointer border-red-500/30 text-red-400 hover:bg-red-500/15"
                 >
-                  #{id}
-                </span>
-              ))}
+                  {autoPlaying ? (
+                    <><Square className="h-2.5 w-2.5" /> Stop</>
+                  ) : (
+                    <><Play className="h-2.5 w-2.5" /> Play All</>
+                  )}
+                </button>
+              )}
             </div>
+
+            {/* Round-based view */}
+            {demolitionRounds.length > 0 ? (
+              <div className="mt-1.5 space-y-1 max-h-[260px] overflow-y-auto">
+                {demolitionRounds.map((r) => {
+                  const isActive = activeRoundIdx === r.round;
+                  const isPast = activeRoundIdx > r.round;
+                  return (
+                    <button
+                      key={r.round}
+                      onClick={() => onRoundClick?.(r.round)}
+                      className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-[10px] font-mono transition-all cursor-pointer ${
+                        isActive
+                          ? "bg-red-500/20 border border-red-500/40"
+                          : isPast
+                          ? "bg-red-500/5 border border-transparent opacity-60"
+                          : "bg-transparent border border-transparent hover:bg-red-500/10"
+                      }`}
+                    >
+                      <span className={`shrink-0 w-5 h-5 flex items-center justify-center rounded text-[9px] font-bold ${
+                        isActive ? "bg-red-500 text-white" : "bg-red-500/20 text-red-400"
+                      }`}>
+                        {r.round + 1}
+                      </span>
+                      <span className="truncate text-muted-foreground">
+                        {r.elementIds.map((id) => `#${id}`).join(", ")}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              /* Flat list fallback when no round data */
+              <div className="flex flex-wrap gap-1 mt-1">
+                {metrics.failedElements.map((id) => (
+                  <span
+                    key={id}
+                    className="text-[11px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded font-mono"
+                  >
+                    #{id}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

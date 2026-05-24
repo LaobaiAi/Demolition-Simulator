@@ -166,8 +166,9 @@ export function FloatingToolbar({
       {/* Expanded state */}
       {expanded && (
         <div className="w-[260px]">
-          {/* Drag handle */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 hover:bg-white/5 rounded-t-xl transition-colors">
+          {/* Drag handle -- click anywhere on the title bar to collapse */}
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 hover:bg-white/5 rounded-t-xl transition-colors cursor-pointer"
+               onClick={() => setExpanded(false)}>
             <div className="flex items-center gap-2 pointer-events-none">
               <GripHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -178,7 +179,7 @@ export function FloatingToolbar({
             </div>
             <button
               onMouseDown={(e) => e.stopPropagation()}
-              onClick={() => setExpanded(false)}
+              onClick={(e) => { e.stopPropagation(); setExpanded(false); }}
               className="flex h-5 w-5 items-center justify-center rounded hover:bg-muted transition-colors cursor-pointer"
             >
               <ChevronUp className="h-3 w-3 text-muted-foreground" />

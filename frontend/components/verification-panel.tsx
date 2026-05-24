@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   ShieldCheck,
   AlertTriangle,
@@ -10,6 +10,7 @@ import {
   TrendingUp,
   Layers,
   Zap,
+  ChevronDown,
 } from "lucide-react";
 import {
   Dialog,
@@ -29,12 +30,17 @@ import {
 } from "recharts";
 import { verifyAnalysis, verifyMulti, type VerificationResult, type MultiSolverResult } from "@/lib/api";
 import { t, type Lang } from "@/lib/i18n";
+import { type DemolitionRound } from "@/components/mechanical-summary";
 
 interface VerificationPanelProps {
   fastResult: Record<string, unknown> | null;
   structure: Record<string, unknown> | null;
   lang: Lang;
   analysisSolver?: string;
+  verifyContext?: string;
+  demolitionRounds?: DemolitionRound[];
+  activeRoundIdx?: number;
+  onRoundClick?: (idx: number) => void;
 }
 
 type TabKey = "displacements" | "forces" | "comparison" | "deviation" | "multi";
@@ -51,7 +57,7 @@ function fmtForce(v: number): string {
 interface NodeDisp { node_id: number; ux: number; uy: number; }
 interface ElemForce { element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number; }
 
-export function VerificationPanel({ fastResult, structure, lang, analysisSolver }: VerificationPanelProps) {
+export function VerificationPanel({ fastResult, structure, lang, analysisSolver, verifyContext, demolitionRounds, activeRoundIdx, onRoundClick }: VerificationPanelProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<VerificationResult | null>(null);
@@ -59,6 +65,20 @@ export function VerificationPanel({ fastResult, structure, lang, analysisSolver 
   const [tab, setTab] = useState<TabKey>("displacements");
   const [multiResult, setMultiResult] = useState<MultiSolverResult | null>(null);
   const [multiLoading, setMultiLoading] = useState(false);
+  const [roundDropdownOpen, setRoundDropdownOpen] = useState(false);
+  const roundDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close round dropdown on outside click
+  useEffect(() => {
+    if (!roundDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (roundDropdownRef.current && !roundDropdownRef.current.contains(e.target as Node)) {
+        setRoundDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [roundDropdownOpen]);
 
   const nodeDisps: NodeDisp[] = (fastResult?.node_displacements as NodeDisp[]) || [];
   const elemForces: ElemForce[] = (fastResult?.element_forces as ElemForce[]) || [];
@@ -161,11 +181,6 @@ export function VerificationPanel({ fastResult, structure, lang, analysisSolver 
               </span>
             )}
           </button>
-          {analysisSolver && (
-            <span className="text-[11px] text-muted-foreground font-mono">
-              {t("verify.engine", lang)}: <span className="text-cyan-400/80">{analysisSolver}</span>
-            </span>
-          )}
         </div>
         {fastResult && !loading && (
           <p className="text-[10px] text-muted-foreground">
@@ -181,25 +196,82 @@ export function VerificationPanel({ fastResult, structure, lang, analysisSolver 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="!max-w-[58vw] max-h-[92vh] w-[58vw] overflow-hidden flex flex-col bg-[#0f172a] border-border text-foreground">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-3 text-lg">
-              {result?.status === "verified" ? (
-                <>
-                  <ShieldCheck className="h-6 w-6 text-emerald-400" />
-                  <span className="text-emerald-400">{t("verify.verified", lang)}</span>
-                </>
-              ) : result?.status === "unavailable" ? (
-                <>
-                  <AlertTriangle className="h-6 w-6 text-muted-foreground" />
-                  <span className="text-muted-foreground">{t("verify.unavailable", lang)}</span>
-                </>
-              ) : (
-                <>
-                  <AlertTriangle className="h-6 w-6 text-amber-400" />
-                  <span className="text-amber-400">{t("verify.warning", lang)}</span>
-                </>
-              )}
+            <DialogTitle className="flex items-center gap-3 text-lg w-full">
+              <div className="flex items-center gap-3">
+                {result?.status === "verified" ? (
+                  <>
+                    <ShieldCheck className="h-6 w-6 text-emerald-400" />
+                    <span className="text-emerald-400">{t("verify.verified", lang)}</span>
+                  </>
+                ) : result?.status === "unavailable" ? (
+                  <>
+                    <AlertTriangle className="h-6 w-6 text-muted-foreground" />
+                    <span className="text-muted-foreground">{t("verify.unavailable", lang)}</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="h-6 w-6 text-amber-400" />
+                    <span className="text-amber-400">{t("verify.warning", lang)}</span>
+                  </>
+                )}
+              </div>
             </DialogTitle>
           </DialogHeader>
+
+          {/* Solver comparison description with colored engine names */}
+          <div className="px-5 pb-3 text-[12px] text-muted-foreground leading-relaxed flex items-center gap-2 flex-wrap">
+            {verifyContext && demolitionRounds && demolitionRounds.length > 0 ? (
+              <div ref={roundDropdownRef} className="relative shrink-0">
+                <button
+                  onClick={() => setRoundDropdownOpen(!roundDropdownOpen)}
+                  className="flex items-center gap-1 text-[15px] font-bold px-3 py-1 rounded-full border shrink-0 bg-muted/50 text-muted-foreground border-border/60 hover:bg-muted/80 transition-colors cursor-pointer"
+                >
+                  {verifyContext}
+                  <ChevronDown className="h-3 w-3" />
+                </button>
+                {roundDropdownOpen && (
+                  <div className="absolute top-full left-0 mt-1 z-50 min-w-[180px] bg-[#1a2332] border border-border rounded-lg shadow-xl overflow-hidden">
+                    <button
+                      onClick={() => { onRoundClick?.(-1); setRoundDropdownOpen(false); }}
+                      className={`w-full text-left px-3 py-1.5 text-[11px] transition-colors cursor-pointer ${
+                        (activeRoundIdx ?? -1) === -1 ? "bg-primary/20 text-primary font-semibold" : "text-muted-foreground hover:bg-muted/30"
+                      }`}
+                    >
+                      完整结构
+                    </button>
+                    {demolitionRounds.map((r) => (
+                      <button
+                        key={r.round}
+                        onClick={() => { onRoundClick?.(r.round); setRoundDropdownOpen(false); }}
+                        className={`w-full text-left px-3 py-1.5 text-[11px] transition-colors cursor-pointer ${
+                          activeRoundIdx === r.round ? "bg-primary/20 text-primary font-semibold" : "text-muted-foreground hover:bg-muted/30"
+                        }`}
+                      >
+                        第{r.round+1}轮: {r.elementIds.map(id => `#${id}`).join(", ")}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : verifyContext ? (
+              <span className="text-[15px] font-bold px-3 py-1 rounded-full border shrink-0 bg-muted/50 text-muted-foreground border-border/60">
+                {verifyContext}
+              </span>
+            ) : null}
+            <span>
+              {t("verify.compare_desc_prefix", lang)}
+              {" "}
+              <span className="text-cyan-400 font-semibold">{analysisSolver || "anaStruct"}</span>
+              {" "}
+              {t("verify.compare_desc_vs", lang)}
+              {" "}
+              <span className="text-purple-400 font-semibold">OpenSees</span>
+              {" / "}
+              <span className="text-emerald-400 font-semibold">PyNite</span>
+              {" / "}
+              <span className="text-amber-400 font-semibold">FAPP</span>
+            </span>
+          </div>
 
           <div className="flex-1 overflow-y-auto">
             {/* Tabs */}
@@ -579,6 +651,40 @@ export function VerificationPanel({ fastResult, structure, lang, analysisSolver 
                         </div>
                       </div>
 
+                      {/* Dimension discrepancy warning + per-group consensus */}
+                      {multiResult.dimension_discrepancy?.detected && multiResult.consensus_by_dimension && (
+                        <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 p-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <AlertTriangle className="h-4 w-4 text-orange-400" />
+                            <span className="text-sm font-semibold text-orange-300">
+                              2D/3D 求解器结果分歧
+                            </span>
+                          </div>
+                          <div className="flex gap-6 text-xs">
+                            {Object.entries(multiResult.consensus_by_dimension).map(([dim, gc]) => (
+                              <div key={dim} className="space-y-1">
+                                <span className="font-semibold text-foreground">{dim} 共识 ({gc.solver_count}个求解器)</span>
+                                <div className="text-muted-foreground space-y-0.5">
+                                  <div>位移: <span className="font-mono text-foreground/80">{fmtDisp(gc.max_displacement)}</span></div>
+                                  <div>轴力: <span className="font-mono text-foreground/80">{fmtForce(gc.max_axial_force)}</span></div>
+                                </div>
+                              </div>
+                            ))}
+                            <div className="border-l border-orange-500/20 pl-4 space-y-1">
+                              <span className="font-semibold text-orange-300">偏差</span>
+                              <div className="text-muted-foreground space-y-0.5">
+                                <div>位移: <span className="font-mono text-orange-400">{multiResult.dimension_discrepancy.displacement_diff_pct}%</span></div>
+                                <div>轴力: <span className="font-mono text-foreground/80">{multiResult.dimension_discrepancy.axial_diff_pct}%</span></div>
+                              </div>
+                            </div>
+                          </div>
+                          <p className="mt-2 text-[10px] text-muted-foreground/60">
+                            2D 求解器 (anaStruct, OpenSees) 和 3D 求解器 (PyNite, FAPP) 使用不同的弯曲刚度假设。
+                            偏差分析现将每个求解器与其同类组比较，而非所有求解器的中位数。
+                          </p>
+                        </div>
+                      )}
+
                       {/* Deviation summary */}
                       <div className="rounded-xl border border-border bg-[#0a0f1a] p-5">
                         <h4 className="text-xs text-muted-foreground uppercase tracking-wide mb-3">{t("verify.deviation_analysis", lang)}</h4>
@@ -596,6 +702,13 @@ export function VerificationPanel({ fastResult, structure, lang, analysisSolver 
                               }`}>
                                 <div className="flex items-center gap-2">
                                   <span className="text-sm text-foreground">{nameMap[key] || key}</span>
+                                  {dev.group && (
+                                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                                      dev.group === "2D" ? "bg-blue-500/10 text-blue-400" : "bg-emerald-500/10 text-emerald-400"
+                                    }`}>
+                                      {dev.group}
+                                    </span>
+                                  )}
                                   {dev.is_outlier && (
                                     <span className="text-[10px] font-medium text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">{t("verify.outlier", lang)}</span>
                                   )}

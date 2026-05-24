@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   Send,
   Loader2,
@@ -34,9 +34,10 @@ import {
 } from "@/components/ui/dialog";
 import { fetchTools, type Tool } from "@/lib/api";
 import { VerificationPanel } from "@/components/verification-panel";
-import { MechanicalSummary, type StructuralMetrics } from "@/components/mechanical-summary";
+import { MechanicalSummary, type DemolitionRound, type StructuralMetrics } from "@/components/mechanical-summary";
 import { FloatingToolbar } from "@/components/floating-toolbar";
 import { FrameVisualization } from "@/components/frame-visualization";
+import { FrameVisualization3D } from "@/components/frame-visualization-3d";
 import { UnityVideoPanel } from "@/components/unity-video-panel";
 import { Sidebar, type Conversation } from "@/components/sidebar";
 import { t, getSavedLang, saveLang, type Lang } from "@/lib/i18n";
@@ -93,6 +94,65 @@ function extractMaxAxialForce(elemForces: Record<string, unknown>[] | undefined)
   return { elementId: bestId, absMaxAxial: maxForce };
 }
 
+const ANALYSIS_TOOLS = new Set(["analyze_frame", "pynite_analysis", "fapp_analysis", "high_fidelity_analysis"]);
+
+// Extract analysis results keyed by demolition round index.
+// round -1 = intact (before any demolition)
+// round 0 = after first demolition, etc.
+function extractRoundAnalysisResults(messages: ChatMessage[]): Record<number, Record<string, unknown>> {
+  const results: Record<number, Record<string, unknown>> = {};
+  let currentRound = -1;
+
+  for (const msg of messages) {
+    if (msg.role !== "ai" || !msg.steps) continue;
+    for (const step of msg.steps) {
+      if (step.type !== "tool_result" || !step.name) continue;
+      let parsed: any;
+      try {
+        parsed = typeof step.result === "string" ? JSON.parse(step.result) : step.result;
+      } catch { continue; }
+      if (!parsed) continue;
+
+      if (step.name === "apply_demolition_action") {
+        const fe = parsed.failed_elements;
+        if (fe && Array.isArray(fe) && fe.length > 0) {
+          currentRound++;
+        }
+      } else if (ANALYSIS_TOOLS.has(step.name)) {
+        if (parsed.max_displacement !== undefined && !("error" in parsed)) {
+          results[currentRound] = parsed;
+        }
+      }
+    }
+  }
+  return results;
+}
+
+// Build demolition round timeline from all AI messages.
+// Each apply_demolition_action step creates one round.
+function extractDemolitionRounds(messages: ChatMessage[]): DemolitionRound[] {
+  const rounds: DemolitionRound[] = [];
+  const cumulative = new Set<number>();
+  for (const msg of messages) {
+    if (msg.role !== "ai" || !msg.steps) continue;
+    for (const step of msg.steps) {
+      if (step.type !== "tool_result" || step.name !== "apply_demolition_action") continue;
+      let parsed: any;
+      try {
+        parsed = typeof step.result === "string" ? JSON.parse(step.result) : step.result;
+      } catch { continue; }
+      if (!parsed?.failed_elements?.length) continue;
+      for (const id of (parsed.failed_elements as number[])) cumulative.add(id);
+      rounds.push({
+        round: rounds.length,
+        elementIds: [...parsed.failed_elements as number[]],
+        cumulativeIds: Array.from(cumulative),
+      });
+    }
+  }
+  return rounds;
+}
+
 // Rebuild full application state from stored conversation messages
 interface RestoredState {
   frameStructure: FrameStructure | null;
@@ -114,8 +174,6 @@ function restoreStateFromMessages(msgs: ChatMessage[]): RestoredState {
   let maxAxial = 0;
   const failedSet = new Set<number>();
   let demolishReady = false;
-
-  const ANALYSIS_TOOLS = new Set(["analyze_frame", "pynite_analysis", "fapp_analysis", "high_fidelity_analysis"]);
 
   for (const msg of msgs) {
     if (msg.role !== "ai" || !msg.steps) continue;
@@ -250,13 +308,19 @@ export default function Home() {
   const [structuralMetrics, setStructuralMetrics] = useState<StructuralMetrics | null>(null);
   const [failedElements, setFailedElements] = useState<number[]>([]);
   const [currentStep, setCurrentStep] = useState("");
+  const [toolsDialogOpen, setToolsDialogOpen] = useState(false);
+  const [memoryDialogOpen, setMemoryDialogOpen] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [demolishDialogOpen, setDemolishDialogOpen] = useState(false);
   const [demolishReady, setDemolishReady] = useState(false);
   const [frameStructure, setFrameStructure] = useState<FrameStructure | null>(null);
   const [nodeDisplacements, setNodeDisplacements] = useState<NodeDisp[] | null>(null);
   const [analysisSolver, setAnalysisSolver] = useState<string | null>(null);
-  const [vizMode, setVizMode] = useState<"svg" | "unity">("svg");
+  const [vizMode, setVizMode] = useState<"svg" | "webgl" | "unity">("webgl");
+  const [demolitionRounds, setDemolitionRounds] = useState<DemolitionRound[]>([]);
+  const [activeRoundIdx, setActiveRoundIdx] = useState(-1);       // -1 = show all rounds
+  const [autoPlaying, setAutoPlaying] = useState(false);
+  const [roundAnalysisResults, setRoundAnalysisResults] = useState<Record<number, Record<string, unknown>>>({});
   const { theme, setTheme } = useTheme();
   const [settingsTab, setSettingsTab] = useState("llm");
 
@@ -593,6 +657,7 @@ export default function Home() {
   const pendingStepsRef = useRef<StepEvent[]>([]);
   const langRef = useRef<Lang>("en");
   langRef.current = lang; // keep ref in sync for WebSocket handler closure
+  const demolitionIdxRef = useRef(-1); // tracks current demolition round during live streaming
 
   // Fetch tools on mount
   useEffect(() => {
@@ -631,7 +696,7 @@ export default function Home() {
           setLogEntries((prev) => [
             ...prev,
             { type: "thinking", content: `Memory: ${data.content}` },
-          ]);
+          ].slice(-200));
           return;
         }
 
@@ -650,7 +715,7 @@ export default function Home() {
           setLogEntries((prev) => [
             ...prev,
             { type: "response", content: data.content },
-          ]);
+          ].slice(-200));
           pendingStepsRef.current = [];
           setStatus("idle");
           setStreamingText("");
@@ -659,14 +724,14 @@ export default function Home() {
             ...prev,
             { role: "ai", content: `Error: ${data.content}` },
           ]);
-          setLogEntries((prev) => [...prev, data]);
+          setLogEntries((prev) => [...prev, data].slice(-200));
           pendingStepsRef.current = [];
           setStatus("idle");
           setStreamingText("");
         } else {
           // Tool calls, tool results, thinking steps
           pendingStepsRef.current = [...pendingStepsRef.current, data];
-          setLogEntries((prev) => [...prev, data]);
+          setLogEntries((prev) => [...prev, data].slice(-200));
 
           // Track step progress
           if (data.type === "tool_call" && data.name) {
@@ -705,7 +770,6 @@ export default function Home() {
           }
 
           // Capture structural analysis results for verification (all analysis tools)
-          const ANALYSIS_TOOLS = new Set(["analyze_frame", "pynite_analysis", "fapp_analysis", "high_fidelity_analysis"]);
           if (
             data.type === "tool_result" &&
             data.name &&
@@ -724,17 +788,17 @@ export default function Home() {
                   setNodeDisplacements(parsed.node_displacements);
                 }
 
+                // Store analysis result keyed by current demolition round index
+                setRoundAnalysisResults((prev) => ({
+                  ...prev,
+                  [demolitionIdxRef.current]: parsed,
+                }));
+
                 // Auto-detect critical element from element forces (if available)
                 const elemForces = parsed.element_forces as Record<string, unknown>[] | undefined;
                 const extracted = extractMaxAxialForce(elemForces);
                 const autoCritId = extracted?.elementId ?? null;
                 const autoCritAxial = extracted?.absMaxAxial ?? null;
-                if (autoCritId !== null) {
-                  // Auto-activate demolish button — no need to wait for select_critical_element
-                  setDemolishReady(true);
-                  setCurrentStep("");
-                }
-
                 // Update mechanical summary with analysis values
                 setStructuralMetrics((prev) => ({
                   maxDisplacement: parsed.max_displacement ?? 0,
@@ -770,7 +834,6 @@ export default function Home() {
                 failedElements: prev?.failedElements ?? [],
               }));
               setDemolishReady(true);
-              setCurrentStep("");
             } catch {
               // Not JSON, ignore
             }
@@ -789,6 +852,7 @@ export default function Home() {
                   : data.result;
               if (parsed.failed_elements) {
                 const feList = parsed.failed_elements;
+                demolitionIdxRef.current++;
                 // Accumulate failed elements for progressive demolition
                 setFailedElements((prev) => {
                   const merged = new Set([...prev, ...feList]);
@@ -834,6 +898,69 @@ export default function Home() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Extract demolition rounds and analysis results from messages
+  useEffect(() => {
+    const rounds = extractDemolitionRounds(messages);
+    setDemolitionRounds(rounds);
+    const results = extractRoundAnalysisResults(messages);
+    setRoundAnalysisResults(results);
+    if (rounds.length > 0) {
+      // When new rounds arrive, move to latest
+      setActiveRoundIdx(rounds.length - 1);
+    } else {
+      setActiveRoundIdx(-1);
+    }
+  }, [messages]);
+
+  // Extract per-round failed state for display
+  const displayFailedElements = useMemo(() => {
+    if (activeRoundIdx >= 0 && activeRoundIdx < demolitionRounds.length) {
+      return demolitionRounds[activeRoundIdx].cumulativeIds;
+    }
+    // activeRoundIdx === -1 with existing rounds → "完整结构" (intact, no failures)
+    if (activeRoundIdx === -1 && demolitionRounds.length > 0) {
+      return [];
+    }
+    return failedElements;
+  }, [activeRoundIdx, demolitionRounds, failedElements]);
+
+  // Context label for verification panel
+  const verifyContext = useMemo(() => {
+    if (failedElements.length === 0) return "完整结构";
+    if (demolitionRounds.length === 0) return "已拆除";
+    // activeRoundIdx === -1 means user selected "完整结构"
+    if (activeRoundIdx === -1) return "完整结构";
+    const round = activeRoundIdx >= 0 ? activeRoundIdx + 1 : demolitionRounds.length;
+    return `第${round}/${demolitionRounds.length}轮拆除 (已移除${displayFailedElements.length}个构件)`;
+  }, [demolitionRounds, activeRoundIdx, displayFailedElements, failedElements]);
+
+  // Select the analysis result matching the active round
+  const selectedAnalysisResult = useMemo(() => {
+    // activeRoundIdx === -1 → "完整结构" → use intact result (key -1)
+    if (activeRoundIdx === -1 && roundAnalysisResults[-1]) {
+      return roundAnalysisResults[-1];
+    }
+    // activeRoundIdx >= 0 → specific demolition round
+    if (activeRoundIdx >= 0 && roundAnalysisResults[activeRoundIdx]) {
+      return roundAnalysisResults[activeRoundIdx];
+    }
+    // Fallback: latest analysis result
+    return analysisResult;
+  }, [activeRoundIdx, roundAnalysisResults, analysisResult]);
+
+  // Compute the structure for the active round (filter out demolished elements)
+  const roundStructure = useMemo(() => {
+    if (!frameStructure) return null;
+    if (activeRoundIdx < 0 || demolitionRounds.length === 0) return frameStructure;
+    const round = demolitionRounds[activeRoundIdx];
+    if (!round) return frameStructure;
+    const removedIds = new Set(round.cumulativeIds);
+    return {
+      ...frameStructure,
+      elements: frameStructure.elements.filter((el) => !removedIds.has(el.id)),
+    } as FrameStructure;
+  }, [frameStructure, activeRoundIdx, demolitionRounds]);
 
   const sendMessage = useCallback(() => {
     if (!input.trim() || status === "loading") return;
@@ -885,6 +1012,35 @@ export default function Home() {
 
     wsRef.current.send(JSON.stringify({ type: "message", content: msg }));
   }, [structuralMetrics]);
+
+  const handleRoundClick = useCallback((roundIdx: number) => {
+    setActiveRoundIdx(roundIdx);
+    setAutoPlaying(false);
+  }, []);
+
+  const handleAutoPlay = useCallback(() => {
+    setAutoPlaying((prev) => !prev);
+    if (autoPlaying) setActiveRoundIdx(-1);
+  }, [autoPlaying]);
+
+  // Auto-play: iterate through demolition rounds
+  const autoPlayRef = useRef({ running: false, rounds: demolitionRounds });
+  autoPlayRef.current = { running: autoPlaying, rounds: demolitionRounds };
+  useEffect(() => {
+    if (!autoPlaying || demolitionRounds.length === 0) return;
+    let currentIdx = -1;
+    const timer = setInterval(() => {
+      currentIdx++;
+      if (currentIdx >= autoPlayRef.current.rounds.length) {
+        clearInterval(timer);
+        setAutoPlaying(false);
+        return;
+      }
+      setActiveRoundIdx(currentIdx);
+    }, 2000);
+    return () => { clearInterval(timer); setAutoPlaying(false); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPlaying]);
 
   const runUnityFullFlowDemo = useCallback(async () => {
     setDemoLibraryOpen(false);
@@ -968,6 +1124,8 @@ export default function Home() {
       wsRef.current.send(JSON.stringify({ type: "message", content: action }));
     }
   }, [status]);
+
+  const handleUnityConnected = useCallback(() => setVizMode("unity"), []);
 
   const handleClearChat = useCallback(() => {
     setMessages([]);
@@ -1156,6 +1314,9 @@ export default function Home() {
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenDemoLibrary={() => setDemoLibraryOpen(true)}
+        onOpenTools={() => setToolsDialogOpen(true)}
+        onOpenMemory={() => setMemoryDialogOpen(true)}
+        toolsCount={tools.length}
       />
 
       {/* Panels container */}
@@ -1342,9 +1503,19 @@ export default function Home() {
         {/* Visualization mode toggle */}
         <div className="flex items-center justify-between border-b border-border px-4 py-1.5">
           <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-            {vizMode === "svg" ? "SVG 2D View" : "Unity 3D View"}
+            {vizMode === "svg" ? "SVG 2D View" : vizMode === "webgl" ? "WebGL 3D View" : "Unity 3D View"}
           </span>
           <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-0.5">
+            <button
+              onClick={() => setVizMode("webgl")}
+              className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${
+                vizMode === "webgl"
+                  ? "bg-primary/20 text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              WebGL 3D
+            </button>
             <button
               onClick={() => setVizMode("svg")}
               className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${
@@ -1375,7 +1546,7 @@ export default function Home() {
           structure={frameStructure}
           displacements={nodeDisplacements}
           criticalElementId={structuralMetrics?.criticalElementId ?? null}
-          failedElements={failedElements}
+          failedElements={displayFailedElements}
           maxDisplacement={analysisResult?.max_displacement as number | undefined}
           elementForces={analysisResult?.element_forces as Array<{element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number}> | undefined}
         />
@@ -1383,12 +1554,22 @@ export default function Home() {
         {/* Verification panel — centered below visualization */}
         {analysisResult && (
           <div className="flex items-center justify-center px-4 pb-2">
-            <VerificationPanel fastResult={analysisResult} structure={frameStructure as Record<string, unknown> | null} lang={lang} analysisSolver={analysisSolver ?? undefined} />
+            <VerificationPanel fastResult={selectedAnalysisResult} structure={roundStructure as Record<string, unknown> | null} lang={lang} analysisSolver={analysisSolver ?? undefined} verifyContext={verifyContext} demolitionRounds={demolitionRounds} activeRoundIdx={activeRoundIdx} onRoundClick={handleRoundClick} />
           </div>
         )}
           </>
+        ) : vizMode === "webgl" ? (
+          <FrameVisualization3D
+            structure={frameStructure}
+            displacements={nodeDisplacements}
+            criticalElementId={structuralMetrics?.criticalElementId ?? null}
+            failedElements={failedElements}
+            displayFailedElements={displayFailedElements}
+            maxDisplacement={analysisResult?.max_displacement as number | undefined}
+            elementForces={analysisResult?.element_forces as Array<{element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number}> | undefined}
+          />
         ) : (
-          <UnityVideoPanel onStreamConnected={() => setVizMode("unity")} />
+          <UnityVideoPanel onStreamConnected={handleUnityConnected} />
         )}
 
         {/* Log Stream at bottom of center panel */}
@@ -1486,58 +1667,15 @@ export default function Home() {
 
         <div className="flex-1 overflow-y-auto p-4">
           {/* Mechanical Summary */}
-          <MechanicalSummary metrics={structuralMetrics} />
+          <MechanicalSummary
+            metrics={structuralMetrics}
+            demolitionRounds={demolitionRounds}
+            activeRoundIdx={activeRoundIdx}
+            onRoundClick={handleRoundClick}
+            onAutoPlay={handleAutoPlay}
+            autoPlaying={autoPlaying}
+          />
 
-          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3 mt-4">
-            <Wrench className="h-3.5 w-3.5" />
-            Available Tools
-          </div>
-          {tools.length === 0 ? (
-            <p className="text-xs text-muted-foreground">Loading tools...</p>
-          ) : (
-            <div className="space-y-2">
-              {tools.map((tool) => (
-                <div
-                  key={tool.name}
-                  className="rounded-lg border border-border bg-card p-3 transition-colors hover:border-primary/30"
-                >
-                  <div className="flex items-center gap-2">
-                    <Calculator className="h-3.5 w-3.5 text-primary" />
-                    <span className="text-sm font-medium">{tool.name}</span>
-                  </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
-                    {tool.description}
-                  </p>
-                  <Badge variant="outline" className="mt-2 text-[10px]">
-                    {tool.server}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Memory snippets */}
-        <div className="border-t border-border p-4">
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-            Context Memory
-          </div>
-          {memorySnippets.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground/60">
-              No memories yet. Start a conversation...
-            </p>
-          ) : (
-            <div className="space-y-1.5">
-              {memorySnippets.map((snippet, i) => (
-                <div
-                  key={i}
-                  className="text-[10px] text-muted-foreground bg-secondary/50 rounded px-2 py-1 leading-relaxed"
-                >
-                  {snippet.replace("## Relevant Context (from past conversations):\n", "")}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 
@@ -1902,6 +2040,67 @@ export default function Home() {
           <span className="text-sm text-foreground font-medium">{demoStatus}</span>
         </div>
       )}
+
+      {/* Tools Dialog */}
+      <Dialog open={toolsDialogOpen} onOpenChange={setToolsDialogOpen}>
+        <DialogContent className="border-border max-w-lg max-h-[60vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wrench className="h-4 w-4 text-primary" />
+              {t("tools.title", lang)} ({tools.length})
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto space-y-2 px-1">
+            {tools.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">{t("tools.loading", lang)}</p>
+            ) : (
+              tools.map((tool) => (
+                <div
+                  key={tool.name}
+                  className="rounded-lg border border-border bg-card p-3 transition-colors hover:border-primary/30"
+                >
+                  <div className="flex items-center gap-2">
+                    <Calculator className="h-3.5 w-3.5 text-primary" />
+                    <span className="text-sm font-medium">{tool.name}</span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
+                    {tool.description}
+                  </p>
+                  <Badge variant="outline" className="mt-2 text-[10px]">
+                    {tool.server}
+                  </Badge>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Memory Dialog */}
+      <Dialog open={memoryDialogOpen} onOpenChange={setMemoryDialogOpen}>
+        <DialogContent className="border-border max-w-lg max-h-[60vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Brain className="h-4 w-4 text-primary" />
+              {t("memory.title", lang)}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto space-y-2 px-1">
+            {memorySnippets.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">{t("memory.empty", lang)}</p>
+            ) : (
+              memorySnippets.map((snippet, i) => (
+                <div
+                  key={i}
+                  className="rounded-lg border border-border bg-card p-3 text-[12px] text-muted-foreground leading-relaxed"
+                >
+                  {snippet.replace("## Relevant Context (from past conversations):\n", "")}
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Floating Toolbar */}
       <FloatingToolbar

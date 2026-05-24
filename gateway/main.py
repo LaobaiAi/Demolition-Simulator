@@ -324,21 +324,31 @@ def _median(vals: list[float]) -> float:
     return (s[n // 2 - 1] + s[n // 2]) / 2
 
 
+# Dimension groups for consensus comparison
+DIMENSION_GROUPS: dict[str, set[str]] = {
+    "2D": {"anastruct", "opensees"},
+    "3D": {"pynite", "fapp"},
+}
+
+SOLVER_DIMENSION: dict[str, str] = {}
+for dim, solvers in DIMENSION_GROUPS.items():
+    for s in solvers:
+        SOLVER_DIMENSION[s] = dim
+
+
 @app.post("/verify/multi")
 async def verify_multi(req: MultiVerifyRequest):
     """Run all available solvers on the same structure and compute consensus.
 
     Returns per-solver results plus consensus (median) and outlier flags.
+    Deviations are computed per dimension group (2D vs 3D) so that e.g.
+    anaStruct is compared against other 2D solvers, not against 3D solvers
+    whose Iy/Iz stiffness properties may differ.
     """
-    fast = req.fast_result
-    results: dict[str, dict[str, Any]] = {
-        "anastruct": {
-            "max_displacement": fast.get("max_displacement", 0),
-            "max_axial_force": fast.get("max_axial_force", 0),
-        }
-    }
+    results: dict[str, dict[str, Any]] = {}
 
     solver_map = [
+        ("analyze_frame", "anastruct"),
         ("high_fidelity_analysis", "opensees"),
         ("pynite_analysis", "pynite"),
         ("fapp_analysis", "fapp"),
@@ -365,20 +375,59 @@ async def verify_multi(req: MultiVerifyRequest):
     available_disp = [r["max_displacement"] for r in results.values() if "max_displacement" in r]
     available_axial = [r["max_axial_force"] for r in results.values() if "max_axial_force" in r]
 
+    # Overall consensus (median of all solvers, kept for backward compat)
     consensus_disp = _median(available_disp)
     consensus_axial = _median(available_axial)
 
+    # Per-dimension-group consensus
+    consensus_by_dimension: dict[str, dict[str, Any]] = {}
+    for dim, members in DIMENSION_GROUPS.items():
+        group_disp = [results[m]["max_displacement"] for m in members if m in results and "max_displacement" in results[m]]
+        group_axial = [results[m]["max_axial_force"] for m in members if m in results and "max_axial_force" in results[m]]
+        if group_disp:
+            consensus_by_dimension[dim] = {
+                "solver_count": len(group_disp),
+                "solvers": [m for m in members if m in results and "max_displacement" in results[m]],
+                "max_displacement": round(_median(group_disp), 10),
+                "max_axial_force": round(_median(group_axial), 2),
+            }
+
+    # Cross-dimension discrepancy detection
+    dimension_discrepancy: dict[str, Any] = {"detected": False}
+    if "2D" in consensus_by_dimension and "3D" in consensus_by_dimension:
+        disp_2d = consensus_by_dimension["2D"]["max_displacement"]
+        disp_3d = consensus_by_dimension["3D"]["max_displacement"]
+        axial_2d = consensus_by_dimension["2D"]["max_axial_force"]
+        axial_3d = consensus_by_dimension["3D"]["max_axial_force"]
+        d_disp = _safe_pct_diff(disp_2d, disp_3d)
+        d_axial = _safe_pct_diff(axial_2d, axial_3d)
+        dimension_discrepancy = {
+            "detected": d_disp > 5.0 or d_axial > 5.0,
+            "displacement_diff_pct": round(d_disp, 2),
+            "axial_diff_pct": round(d_axial, 2),
+        }
+
+    # Deviation analysis: compare each solver against its own dimension group
     solver_count = len(available_disp)
     deviations = {}
     for name, r in results.items():
         if "max_displacement" not in r:
             continue
-        d_disp = _safe_pct_diff(r["max_displacement"], consensus_disp)
-        d_axial = _safe_pct_diff(r["max_axial_force"], consensus_axial)
+        group = SOLVER_DIMENSION.get(name)
+        if group and group in consensus_by_dimension:
+            ref_disp = consensus_by_dimension[group]["max_displacement"]
+            ref_axial = consensus_by_dimension[group]["max_axial_force"]
+        else:
+            ref_disp = consensus_disp
+            ref_axial = consensus_axial
+
+        d_disp = _safe_pct_diff(r["max_displacement"], ref_disp)
+        d_axial = _safe_pct_diff(r["max_axial_force"], ref_axial)
         deviations[name] = {
             "displacement_diff_pct": round(d_disp, 2),
             "axial_diff_pct": round(d_axial, 2),
             "is_outlier": d_disp > 5.0 or d_axial > 5.0,
+            "group": group or "all",
         }
 
     return {
@@ -387,6 +436,8 @@ async def verify_multi(req: MultiVerifyRequest):
             "max_displacement": round(consensus_disp, 10),
             "max_axial_force": round(consensus_axial, 2),
         },
+        "consensus_by_dimension": consensus_by_dimension,
+        "dimension_discrepancy": dimension_discrepancy,
         "solver_count": solver_count,
         "deviations": deviations,
     }

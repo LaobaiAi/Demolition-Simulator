@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Radio, Wifi, WifiOff, Monitor, Play, Loader2, ArrowRight } from "lucide-react";
+import { Radio, Wifi, WifiOff, Monitor, Play, Loader2, ArrowRight, RotateCw } from "lucide-react";
 
 const GATEWAY = "http://localhost:8000";
 const STUN_SERVERS = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
@@ -105,6 +105,28 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
     }
   }, [onStreamConnected]);
 
+  const reconnectUnity = useCallback(async () => {
+    setPhase("connecting");
+    setStatusText("Reconnecting to Unity...");
+    try {
+      const res = await fetch(`${GATEWAY}/unity/reconnect`, { method: "POST" });
+      const data = await res.json();
+      if (data.status === "ok") {
+        setStatusText("Waiting for new WebRTC offer...");
+        // Polling will pick up the new offer
+      } else if (data.status === "launch_required") {
+        setPhase("idle");
+        setStatusText("Unity not responding — click Launch Unity");
+      } else {
+        setPhase("error");
+        setStatusText(data.message || "Reconnect failed");
+      }
+    } catch {
+      setPhase("error");
+      setStatusText("Reconnect failed — gateway unreachable");
+    }
+  }, []);
+
   const checkAndConnect = useCallback(async () => {
     try {
       const statusRes = await fetch(`${GATEWAY}/unity/status`);
@@ -123,13 +145,14 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
         return;
       }
 
-      if (status.process_running && status.tcp_ready) {
+      if (status.unity_alive && status.tcp_ready) {
+        // Unity is running but no WebRTC offer — offer was likely lost
         setPhase("starting");
-        setStatusText("Waiting for WebRTC stream...");
+        setStatusText("Unity running — reconnecting WebRTC...");
         return;
       }
 
-      if (status.process_running) {
+      if (status.unity_alive) {
         setPhase("starting");
         setStatusText("Unity starting — waiting for TCP...");
         return;
@@ -149,9 +172,12 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
   }, [checkAndConnect]);
 
   // Poll while in transitional states
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (phase === "launching" || phase === "starting") {
+      let attemptCount = 0;
       pollRef.current = setInterval(async () => {
+        attemptCount++;
         try {
           const res = await fetch(`${GATEWAY}/unity/status`);
           const status = await res.json();
@@ -162,21 +188,24 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
             return;
           }
 
-          if (phase === "launching" && status.process_running) {
+          if (phase === "launching" && status.unity_alive) {
             setPhase("starting");
-            setStatusText(status.tcp_ready
-              ? "TCP ready — waiting for WebRTC..."
-              : "Unity loading — waiting for TCP...");
+            setStatusText("Unity alive — reconnecting WebRTC...");
           }
 
-          if (phase === "launching" && !status.process_running) {
-            // Still waiting for process to appear
-            setStatusText("Launching Unity Editor...");
+          // Auto-trigger reconnect if stuck in starting with TCP ready but no offer
+          if (phase === "starting" && status.tcp_ready && attemptCount >= 3) {
+            attemptCount = 0;
+            fetch(`${GATEWAY}/unity/reconnect`, { method: "POST" }).catch(() => {});
+            setStatusText("Requesting WebRTC restart...");
           }
         } catch {}
       }, 2000);
     }
-    return clearPoll;
+    return () => {
+      clearPoll();
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+    };
   }, [phase, establishWebRTC]);
 
   // If disconnected/error and offer appears, auto-reconnect
@@ -349,16 +378,16 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
                   <ArrowRight className="h-3 w-3" />
                 </button>
               )}
-              {phase === "disconnected" || phase === "error" ? (
+              {(phase === "starting" && !hasConnected.current) || phase === "disconnected" || phase === "error" ? (
                 <button
                   onClick={() => {
                     hasConnected.current = false;
-                    checkAndConnect();
+                    reconnectUnity();
                   }}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 transition-all cursor-pointer text-xs"
                 >
-                  <Radio className="h-3.5 w-3.5" />
-                  Reconnect
+                  <RotateCw className="h-3.5 w-3.5" />
+                  {phase === "starting" ? "Force Reconnect" : "Reconnect"}
                 </button>
               ) : null}
             </div>

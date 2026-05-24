@@ -79,11 +79,23 @@ export interface MultiSolverResult {
     max_displacement: number;
     max_axial_force: number;
   };
+  consensus_by_dimension?: Record<string, {
+    solver_count: number;
+    solvers: string[];
+    max_displacement: number;
+    max_axial_force: number;
+  }>;
+  dimension_discrepancy?: {
+    detected: boolean;
+    displacement_diff_pct: number;
+    axial_diff_pct: number;
+  };
   solver_count: number;
   deviations: Record<string, {
     displacement_diff_pct: number;
     axial_diff_pct: number;
     is_outlier: boolean;
+    group?: string;
   }>;
 }
 

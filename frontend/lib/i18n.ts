@@ -38,6 +38,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "log.resume": "Resume",
     // Verification
     "verify.engine": "Engine",
+    "verify.compare_desc_prefix": "Compare",
+    "verify.compare_desc_vs": "with hi-fi solvers",
     "verify.button": "Verify (Hi-Fi Cross-Validate)",
     "verify.hint": "Compare anaStruct with hi-fi solvers (OpenSees / PyNite / FAPP)",
     "verify.verifying": "Cross-validating...",
@@ -201,6 +203,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "log.pause": "暂停",
     "log.resume": "继续",
     "verify.engine": "引擎",
+    "verify.compare_desc_prefix": "对比",
+    "verify.compare_desc_vs": "与高精度求解器",
     "verify.button": "验证结果（高精度交叉）",
     "verify.hint": "对比 anaStruct 与高精度求解器（OpenSees / PyNite / FAPP）",
     "verify.verifying": "交叉验证中...",
