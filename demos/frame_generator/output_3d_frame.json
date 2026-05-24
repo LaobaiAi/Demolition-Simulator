@@ -1,0 +1,6323 @@
+{
+  "metadata": {
+    "type": "frame",
+    "dimension": "3d",
+    "grid": {
+      "xFrames": 3,
+      "ySpans": 2,
+      "stories": 3,
+      "storyHeight": 3.0,
+      "spanLength": 6.0,
+      "spanWidth": 5.0
+    },
+    "material": "C30",
+    "material_type": "concrete",
+    "origin": [
+      0,
+      0,
+      0
+    ]
+  },
+  "columns": [
+    {
+      "id": "C0",
+      "type": "column",
+      "start": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "end": [
+        0.0,
+        3.0,
+        0.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": true,
+      "isEdge": true,
+      "story": 1,
+      "gridIndex": [
+        0,
+        0,
+        1
+      ],
+      "fixedBase": true,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "id": "C1",
+      "type": "column",
+      "start": [
+        0.0,
+        0.0,
+        5.0
+      ],
+      "end": [
+        0.0,
+        3.0,
+        5.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": true,
+      "story": 1,
+      "gridIndex": [
+        0,
+        1,
+        1
+      ],
+      "fixedBase": true,
+      "userData": {
+        "demolition": {
+          "fragile": false,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "id": "C2",
+      "type": "column",
+      "start": [
+        0.0,
+        0.0,
+        10.0
+      ],
+      "end": [
+        0.0,
+        3.0,
+        10.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": true,
+      "isEdge": true,
+      "story": 1,
+      "gridIndex": [
+        0,
+        2,
+        1
+      ],
+      "fixedBase": true,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "id": "C3",
+      "type": "column",
+      "start": [
+        6.0,
+        0.0,
+        0.0
+      ],
+      "end": [
+        6.0,
+        3.0,
+        0.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": true,
+      "story": 1,
+      "gridIndex": [
+        1,
+        0,
+        1
+      ],
+      "fixedBase": true,
+      "userData": {
+        "demolition": {
+          "fragile": false,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "id": "C4",
+      "type": "column",
+      "start": [
+        6.0,
+        0.0,
+        5.0
+      ],
+      "end": [
+        6.0,
+        3.0,
+        5.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": false,
+      "story": 1,
+      "gridIndex": [
+        1,
+        1,
+        1
+      ],
+      "fixedBase": true,
+      "userData": {
+        "demolition": {
+          "fragile": false,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "id": "C5",
+      "type": "column",
+      "start": [
+        6.0,
+        0.0,
+        10.0
+      ],
+      "end": [
+        6.0,
+        3.0,
+        10.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": true,
+      "story": 1,
+      "gridIndex": [
+        1,
+        2,
+        1
+      ],
+      "fixedBase": true,
+      "userData": {
+        "demolition": {
+          "fragile": false,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "id": "C6",
+      "type": "column",
+      "start": [
+        12.0,
+        0.0,
+        0.0
+      ],
+      "end": [
+        12.0,
+        3.0,
+        0.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": true,
+      "story": 1,
+      "gridIndex": [
+        2,
+        0,
+        1
+      ],
+      "fixedBase": true,
+      "userData": {
+        "demolition": {
+          "fragile": false,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "id": "C7",
+      "type": "column",
+      "start": [
+        12.0,
+        0.0,
+        5.0
+      ],
+      "end": [
+        12.0,
+        3.0,
+        5.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": false,
+      "story": 1,
+      "gridIndex": [
+        2,
+        1,
+        1
+      ],
+      "fixedBase": true,
+      "userData": {
+        "demolition": {
+          "fragile": false,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "id": "C8",
+      "type": "column",
+      "start": [
+        12.0,
+        0.0,
+        10.0
+      ],
+      "end": [
+        12.0,
+        3.0,
+        10.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": true,
+      "story": 1,
+      "gridIndex": [
+        2,
+        2,
+        1
+      ],
+      "fixedBase": true,
+      "userData": {
+        "demolition": {
+          "fragile": false,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "id": "C9",
+      "type": "column",
+      "start": [
+        18.0,
+        0.0,
+        0.0
+      ],
+      "end": [
+        18.0,
+        3.0,
+        0.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": true,
+      "isEdge": true,
+      "story": 1,
+      "gridIndex": [
+        3,
+        0,
+        1
+      ],
+      "fixedBase": true,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "id": "C10",
+      "type": "column",
+      "start": [
+        18.0,
+        0.0,
+        5.0
+      ],
+      "end": [
+        18.0,
+        3.0,
+        5.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": true,
+      "story": 1,
+      "gridIndex": [
+        3,
+        1,
+        1
+      ],
+      "fixedBase": true,
+      "userData": {
+        "demolition": {
+          "fragile": false,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "id": "C11",
+      "type": "column",
+      "start": [
+        18.0,
+        0.0,
+        10.0
+      ],
+      "end": [
+        18.0,
+        3.0,
+        10.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": true,
+      "isEdge": true,
+      "story": 1,
+      "gridIndex": [
+        3,
+        2,
+        1
+      ],
+      "fixedBase": true,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "id": "C12",
+      "type": "column",
+      "start": [
+        0.0,
+        3.0,
+        0.0
+      ],
+      "end": [
+        0.0,
+        6.0,
+        0.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": true,
+      "isEdge": true,
+      "story": 2,
+      "gridIndex": [
+        0,
+        0,
+        2
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C13",
+      "type": "column",
+      "start": [
+        0.0,
+        3.0,
+        5.0
+      ],
+      "end": [
+        0.0,
+        6.0,
+        5.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": true,
+      "story": 2,
+      "gridIndex": [
+        0,
+        1,
+        2
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C14",
+      "type": "column",
+      "start": [
+        0.0,
+        3.0,
+        10.0
+      ],
+      "end": [
+        0.0,
+        6.0,
+        10.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": true,
+      "isEdge": true,
+      "story": 2,
+      "gridIndex": [
+        0,
+        2,
+        2
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C15",
+      "type": "column",
+      "start": [
+        6.0,
+        3.0,
+        0.0
+      ],
+      "end": [
+        6.0,
+        6.0,
+        0.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": true,
+      "story": 2,
+      "gridIndex": [
+        1,
+        0,
+        2
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C16",
+      "type": "column",
+      "start": [
+        6.0,
+        3.0,
+        5.0
+      ],
+      "end": [
+        6.0,
+        6.0,
+        5.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": false,
+      "story": 2,
+      "gridIndex": [
+        1,
+        1,
+        2
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C17",
+      "type": "column",
+      "start": [
+        6.0,
+        3.0,
+        10.0
+      ],
+      "end": [
+        6.0,
+        6.0,
+        10.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": true,
+      "story": 2,
+      "gridIndex": [
+        1,
+        2,
+        2
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C18",
+      "type": "column",
+      "start": [
+        12.0,
+        3.0,
+        0.0
+      ],
+      "end": [
+        12.0,
+        6.0,
+        0.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": true,
+      "story": 2,
+      "gridIndex": [
+        2,
+        0,
+        2
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C19",
+      "type": "column",
+      "start": [
+        12.0,
+        3.0,
+        5.0
+      ],
+      "end": [
+        12.0,
+        6.0,
+        5.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": false,
+      "story": 2,
+      "gridIndex": [
+        2,
+        1,
+        2
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C20",
+      "type": "column",
+      "start": [
+        12.0,
+        3.0,
+        10.0
+      ],
+      "end": [
+        12.0,
+        6.0,
+        10.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": true,
+      "story": 2,
+      "gridIndex": [
+        2,
+        2,
+        2
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C21",
+      "type": "column",
+      "start": [
+        18.0,
+        3.0,
+        0.0
+      ],
+      "end": [
+        18.0,
+        6.0,
+        0.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": true,
+      "isEdge": true,
+      "story": 2,
+      "gridIndex": [
+        3,
+        0,
+        2
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C22",
+      "type": "column",
+      "start": [
+        18.0,
+        3.0,
+        5.0
+      ],
+      "end": [
+        18.0,
+        6.0,
+        5.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": true,
+      "story": 2,
+      "gridIndex": [
+        3,
+        1,
+        2
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C23",
+      "type": "column",
+      "start": [
+        18.0,
+        3.0,
+        10.0
+      ],
+      "end": [
+        18.0,
+        6.0,
+        10.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": true,
+      "isEdge": true,
+      "story": 2,
+      "gridIndex": [
+        3,
+        2,
+        2
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C24",
+      "type": "column",
+      "start": [
+        0.0,
+        6.0,
+        0.0
+      ],
+      "end": [
+        0.0,
+        9.0,
+        0.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": true,
+      "isEdge": true,
+      "story": 3,
+      "gridIndex": [
+        0,
+        0,
+        3
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C25",
+      "type": "column",
+      "start": [
+        0.0,
+        6.0,
+        5.0
+      ],
+      "end": [
+        0.0,
+        9.0,
+        5.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": true,
+      "story": 3,
+      "gridIndex": [
+        0,
+        1,
+        3
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C26",
+      "type": "column",
+      "start": [
+        0.0,
+        6.0,
+        10.0
+      ],
+      "end": [
+        0.0,
+        9.0,
+        10.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": true,
+      "isEdge": true,
+      "story": 3,
+      "gridIndex": [
+        0,
+        2,
+        3
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C27",
+      "type": "column",
+      "start": [
+        6.0,
+        6.0,
+        0.0
+      ],
+      "end": [
+        6.0,
+        9.0,
+        0.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": true,
+      "story": 3,
+      "gridIndex": [
+        1,
+        0,
+        3
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C28",
+      "type": "column",
+      "start": [
+        6.0,
+        6.0,
+        5.0
+      ],
+      "end": [
+        6.0,
+        9.0,
+        5.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": false,
+      "story": 3,
+      "gridIndex": [
+        1,
+        1,
+        3
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C29",
+      "type": "column",
+      "start": [
+        6.0,
+        6.0,
+        10.0
+      ],
+      "end": [
+        6.0,
+        9.0,
+        10.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": true,
+      "story": 3,
+      "gridIndex": [
+        1,
+        2,
+        3
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C30",
+      "type": "column",
+      "start": [
+        12.0,
+        6.0,
+        0.0
+      ],
+      "end": [
+        12.0,
+        9.0,
+        0.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": true,
+      "story": 3,
+      "gridIndex": [
+        2,
+        0,
+        3
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C31",
+      "type": "column",
+      "start": [
+        12.0,
+        6.0,
+        5.0
+      ],
+      "end": [
+        12.0,
+        9.0,
+        5.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": false,
+      "story": 3,
+      "gridIndex": [
+        2,
+        1,
+        3
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C32",
+      "type": "column",
+      "start": [
+        12.0,
+        6.0,
+        10.0
+      ],
+      "end": [
+        12.0,
+        9.0,
+        10.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": true,
+      "story": 3,
+      "gridIndex": [
+        2,
+        2,
+        3
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C33",
+      "type": "column",
+      "start": [
+        18.0,
+        6.0,
+        0.0
+      ],
+      "end": [
+        18.0,
+        9.0,
+        0.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": true,
+      "isEdge": true,
+      "story": 3,
+      "gridIndex": [
+        3,
+        0,
+        3
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C34",
+      "type": "column",
+      "start": [
+        18.0,
+        6.0,
+        5.0
+      ],
+      "end": [
+        18.0,
+        9.0,
+        5.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": false,
+      "isEdge": true,
+      "story": 3,
+      "gridIndex": [
+        3,
+        1,
+        3
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "id": "C35",
+      "type": "column",
+      "start": [
+        18.0,
+        6.0,
+        10.0
+      ],
+      "end": [
+        18.0,
+        9.0,
+        10.0
+      ],
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 3.0,
+      "material": {
+        "concrete": "C30",
+        "color": "#8B8B8B"
+      },
+      "isCorner": true,
+      "isEdge": true,
+      "story": 3,
+      "gridIndex": [
+        3,
+        2,
+        3
+      ],
+      "fixedBase": false,
+      "userData": {
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    }
+  ],
+  "beams": [
+    {
+      "id": "BX0",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        0.0,
+        3.0,
+        0.0
+      ],
+      "end": [
+        6.0,
+        3.0,
+        0.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 1,
+      "gridIndex": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "BX1",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        0.0,
+        3.0,
+        5.0
+      ],
+      "end": [
+        6.0,
+        3.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 1,
+      "gridIndex": [
+        0,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "BX2",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        0.0,
+        3.0,
+        10.0
+      ],
+      "end": [
+        6.0,
+        3.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 1,
+      "gridIndex": [
+        0,
+        2,
+        1
+      ]
+    },
+    {
+      "id": "BX3",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        6.0,
+        3.0,
+        0.0
+      ],
+      "end": [
+        12.0,
+        3.0,
+        0.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 1,
+      "gridIndex": [
+        1,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "BX4",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        6.0,
+        3.0,
+        5.0
+      ],
+      "end": [
+        12.0,
+        3.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 1,
+      "gridIndex": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "BX5",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        6.0,
+        3.0,
+        10.0
+      ],
+      "end": [
+        12.0,
+        3.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 1,
+      "gridIndex": [
+        1,
+        2,
+        1
+      ]
+    },
+    {
+      "id": "BX6",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        12.0,
+        3.0,
+        0.0
+      ],
+      "end": [
+        18.0,
+        3.0,
+        0.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 1,
+      "gridIndex": [
+        2,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "BX7",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        12.0,
+        3.0,
+        5.0
+      ],
+      "end": [
+        18.0,
+        3.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 1,
+      "gridIndex": [
+        2,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "BX8",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        12.0,
+        3.0,
+        10.0
+      ],
+      "end": [
+        18.0,
+        3.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 1,
+      "gridIndex": [
+        2,
+        2,
+        1
+      ]
+    },
+    {
+      "id": "BY9",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        0.0,
+        3.0,
+        0.0
+      ],
+      "end": [
+        0.0,
+        3.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 1,
+      "gridIndex": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "BY10",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        6.0,
+        3.0,
+        0.0
+      ],
+      "end": [
+        6.0,
+        3.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 1,
+      "gridIndex": [
+        1,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "BY11",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        12.0,
+        3.0,
+        0.0
+      ],
+      "end": [
+        12.0,
+        3.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 1,
+      "gridIndex": [
+        2,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "BY12",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        18.0,
+        3.0,
+        0.0
+      ],
+      "end": [
+        18.0,
+        3.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 1,
+      "gridIndex": [
+        3,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "BY13",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        0.0,
+        3.0,
+        5.0
+      ],
+      "end": [
+        0.0,
+        3.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 1,
+      "gridIndex": [
+        0,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "BY14",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        6.0,
+        3.0,
+        5.0
+      ],
+      "end": [
+        6.0,
+        3.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 1,
+      "gridIndex": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "BY15",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        12.0,
+        3.0,
+        5.0
+      ],
+      "end": [
+        12.0,
+        3.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 1,
+      "gridIndex": [
+        2,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "BY16",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        18.0,
+        3.0,
+        5.0
+      ],
+      "end": [
+        18.0,
+        3.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 1,
+      "gridIndex": [
+        3,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "BX17",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        0.0,
+        6.0,
+        0.0
+      ],
+      "end": [
+        6.0,
+        6.0,
+        0.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 2,
+      "gridIndex": [
+        0,
+        0,
+        2
+      ]
+    },
+    {
+      "id": "BX18",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        0.0,
+        6.0,
+        5.0
+      ],
+      "end": [
+        6.0,
+        6.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 2,
+      "gridIndex": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "id": "BX19",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        0.0,
+        6.0,
+        10.0
+      ],
+      "end": [
+        6.0,
+        6.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 2,
+      "gridIndex": [
+        0,
+        2,
+        2
+      ]
+    },
+    {
+      "id": "BX20",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        6.0,
+        6.0,
+        0.0
+      ],
+      "end": [
+        12.0,
+        6.0,
+        0.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 2,
+      "gridIndex": [
+        1,
+        0,
+        2
+      ]
+    },
+    {
+      "id": "BX21",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        6.0,
+        6.0,
+        5.0
+      ],
+      "end": [
+        12.0,
+        6.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 2,
+      "gridIndex": [
+        1,
+        1,
+        2
+      ]
+    },
+    {
+      "id": "BX22",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        6.0,
+        6.0,
+        10.0
+      ],
+      "end": [
+        12.0,
+        6.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 2,
+      "gridIndex": [
+        1,
+        2,
+        2
+      ]
+    },
+    {
+      "id": "BX23",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        12.0,
+        6.0,
+        0.0
+      ],
+      "end": [
+        18.0,
+        6.0,
+        0.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 2,
+      "gridIndex": [
+        2,
+        0,
+        2
+      ]
+    },
+    {
+      "id": "BX24",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        12.0,
+        6.0,
+        5.0
+      ],
+      "end": [
+        18.0,
+        6.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 2,
+      "gridIndex": [
+        2,
+        1,
+        2
+      ]
+    },
+    {
+      "id": "BX25",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        12.0,
+        6.0,
+        10.0
+      ],
+      "end": [
+        18.0,
+        6.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 2,
+      "gridIndex": [
+        2,
+        2,
+        2
+      ]
+    },
+    {
+      "id": "BY26",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        0.0,
+        6.0,
+        0.0
+      ],
+      "end": [
+        0.0,
+        6.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 2,
+      "gridIndex": [
+        0,
+        0,
+        2
+      ]
+    },
+    {
+      "id": "BY27",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        6.0,
+        6.0,
+        0.0
+      ],
+      "end": [
+        6.0,
+        6.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 2,
+      "gridIndex": [
+        1,
+        0,
+        2
+      ]
+    },
+    {
+      "id": "BY28",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        12.0,
+        6.0,
+        0.0
+      ],
+      "end": [
+        12.0,
+        6.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 2,
+      "gridIndex": [
+        2,
+        0,
+        2
+      ]
+    },
+    {
+      "id": "BY29",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        18.0,
+        6.0,
+        0.0
+      ],
+      "end": [
+        18.0,
+        6.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 2,
+      "gridIndex": [
+        3,
+        0,
+        2
+      ]
+    },
+    {
+      "id": "BY30",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        0.0,
+        6.0,
+        5.0
+      ],
+      "end": [
+        0.0,
+        6.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 2,
+      "gridIndex": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "id": "BY31",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        6.0,
+        6.0,
+        5.0
+      ],
+      "end": [
+        6.0,
+        6.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 2,
+      "gridIndex": [
+        1,
+        1,
+        2
+      ]
+    },
+    {
+      "id": "BY32",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        12.0,
+        6.0,
+        5.0
+      ],
+      "end": [
+        12.0,
+        6.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 2,
+      "gridIndex": [
+        2,
+        1,
+        2
+      ]
+    },
+    {
+      "id": "BY33",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        18.0,
+        6.0,
+        5.0
+      ],
+      "end": [
+        18.0,
+        6.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 2,
+      "gridIndex": [
+        3,
+        1,
+        2
+      ]
+    },
+    {
+      "id": "BX34",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        0.0,
+        9.0,
+        0.0
+      ],
+      "end": [
+        6.0,
+        9.0,
+        0.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 3,
+      "gridIndex": [
+        0,
+        0,
+        3
+      ]
+    },
+    {
+      "id": "BX35",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        0.0,
+        9.0,
+        5.0
+      ],
+      "end": [
+        6.0,
+        9.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 3,
+      "gridIndex": [
+        0,
+        1,
+        3
+      ]
+    },
+    {
+      "id": "BX36",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        0.0,
+        9.0,
+        10.0
+      ],
+      "end": [
+        6.0,
+        9.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 3,
+      "gridIndex": [
+        0,
+        2,
+        3
+      ]
+    },
+    {
+      "id": "BX37",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        6.0,
+        9.0,
+        0.0
+      ],
+      "end": [
+        12.0,
+        9.0,
+        0.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 3,
+      "gridIndex": [
+        1,
+        0,
+        3
+      ]
+    },
+    {
+      "id": "BX38",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        6.0,
+        9.0,
+        5.0
+      ],
+      "end": [
+        12.0,
+        9.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 3,
+      "gridIndex": [
+        1,
+        1,
+        3
+      ]
+    },
+    {
+      "id": "BX39",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        6.0,
+        9.0,
+        10.0
+      ],
+      "end": [
+        12.0,
+        9.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 3,
+      "gridIndex": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "id": "BX40",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        12.0,
+        9.0,
+        0.0
+      ],
+      "end": [
+        18.0,
+        9.0,
+        0.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 3,
+      "gridIndex": [
+        2,
+        0,
+        3
+      ]
+    },
+    {
+      "id": "BX41",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        12.0,
+        9.0,
+        5.0
+      ],
+      "end": [
+        18.0,
+        9.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 3,
+      "gridIndex": [
+        2,
+        1,
+        3
+      ]
+    },
+    {
+      "id": "BX42",
+      "type": "beam",
+      "direction": "x",
+      "start": [
+        12.0,
+        9.0,
+        10.0
+      ],
+      "end": [
+        18.0,
+        9.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 3,
+      "gridIndex": [
+        2,
+        2,
+        3
+      ]
+    },
+    {
+      "id": "BY43",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        0.0,
+        9.0,
+        0.0
+      ],
+      "end": [
+        0.0,
+        9.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 3,
+      "gridIndex": [
+        0,
+        0,
+        3
+      ]
+    },
+    {
+      "id": "BY44",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        6.0,
+        9.0,
+        0.0
+      ],
+      "end": [
+        6.0,
+        9.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 3,
+      "gridIndex": [
+        1,
+        0,
+        3
+      ]
+    },
+    {
+      "id": "BY45",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        12.0,
+        9.0,
+        0.0
+      ],
+      "end": [
+        12.0,
+        9.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 3,
+      "gridIndex": [
+        2,
+        0,
+        3
+      ]
+    },
+    {
+      "id": "BY46",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        18.0,
+        9.0,
+        0.0
+      ],
+      "end": [
+        18.0,
+        9.0,
+        5.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 3,
+      "gridIndex": [
+        3,
+        0,
+        3
+      ]
+    },
+    {
+      "id": "BY47",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        0.0,
+        9.0,
+        5.0
+      ],
+      "end": [
+        0.0,
+        9.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 3,
+      "gridIndex": [
+        0,
+        1,
+        3
+      ]
+    },
+    {
+      "id": "BY48",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        6.0,
+        9.0,
+        5.0
+      ],
+      "end": [
+        6.0,
+        9.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 3,
+      "gridIndex": [
+        1,
+        1,
+        3
+      ]
+    },
+    {
+      "id": "BY49",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        12.0,
+        9.0,
+        5.0
+      ],
+      "end": [
+        12.0,
+        9.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 3,
+      "gridIndex": [
+        2,
+        1,
+        3
+      ]
+    },
+    {
+      "id": "BY50",
+      "type": "beam",
+      "direction": "y",
+      "start": [
+        18.0,
+        9.0,
+        5.0
+      ],
+      "end": [
+        18.0,
+        9.0,
+        10.0
+      ],
+      "width": 0.2,
+      "height": 0.4,
+      "material": {
+        "concrete": "C30",
+        "color": "#A0A0A0"
+      },
+      "story": 3,
+      "gridIndex": [
+        3,
+        1,
+        3
+      ]
+    }
+  ],
+  "slabs": [
+    {
+      "id": "S0",
+      "type": "slab",
+      "corners": [
+        [
+          0.0,
+          3.0,
+          0.0
+        ],
+        [
+          6.0,
+          3.0,
+          0.0
+        ],
+        [
+          6.0,
+          3.0,
+          5.0
+        ],
+        [
+          0.0,
+          3.0,
+          5.0
+        ]
+      ],
+      "thickness": 0.15,
+      "material": {
+        "concrete": "C30",
+        "color": "#D3D3D3"
+      },
+      "story": 1
+    },
+    {
+      "id": "S1",
+      "type": "slab",
+      "corners": [
+        [
+          0.0,
+          3.0,
+          5.0
+        ],
+        [
+          6.0,
+          3.0,
+          5.0
+        ],
+        [
+          6.0,
+          3.0,
+          10.0
+        ],
+        [
+          0.0,
+          3.0,
+          10.0
+        ]
+      ],
+      "thickness": 0.15,
+      "material": {
+        "concrete": "C30",
+        "color": "#D3D3D3"
+      },
+      "story": 1
+    },
+    {
+      "id": "S2",
+      "type": "slab",
+      "corners": [
+        [
+          6.0,
+          3.0,
+          0.0
+        ],
+        [
+          12.0,
+          3.0,
+          0.0
+        ],
+        [
+          12.0,
+          3.0,
+          5.0
+        ],
+        [
+          6.0,
+          3.0,
+          5.0
+        ]
+      ],
+      "thickness": 0.15,
+      "material": {
+        "concrete": "C30",
+        "color": "#D3D3D3"
+      },
+      "story": 1
+    },
+    {
+      "id": "S3",
+      "type": "slab",
+      "corners": [
+        [
+          6.0,
+          3.0,
+          5.0
+        ],
+        [
+          12.0,
+          3.0,
+          5.0
+        ],
+        [
+          12.0,
+          3.0,
+          10.0
+        ],
+        [
+          6.0,
+          3.0,
+          10.0
+        ]
+      ],
+      "thickness": 0.15,
+      "material": {
+        "concrete": "C30",
+        "color": "#D3D3D3"
+      },
+      "story": 1
+    },
+    {
+      "id": "S4",
+      "type": "slab",
+      "corners": [
+        [
+          12.0,
+          3.0,
+          0.0
+        ],
+        [
+          18.0,
+          3.0,
+          0.0
+        ],
+        [
+          18.0,
+          3.0,
+          5.0
+        ],
+        [
+          12.0,
+          3.0,
+          5.0
+        ]
+      ],
+      "thickness": 0.15,
+      "material": {
+        "concrete": "C30",
+        "color": "#D3D3D3"
+      },
+      "story": 1
+    },
+    {
+      "id": "S5",
+      "type": "slab",
+      "corners": [
+        [
+          12.0,
+          3.0,
+          5.0
+        ],
+        [
+          18.0,
+          3.0,
+          5.0
+        ],
+        [
+          18.0,
+          3.0,
+          10.0
+        ],
+        [
+          12.0,
+          3.0,
+          10.0
+        ]
+      ],
+      "thickness": 0.15,
+      "material": {
+        "concrete": "C30",
+        "color": "#D3D3D3"
+      },
+      "story": 1
+    },
+    {
+      "id": "S6",
+      "type": "slab",
+      "corners": [
+        [
+          0.0,
+          6.0,
+          0.0
+        ],
+        [
+          6.0,
+          6.0,
+          0.0
+        ],
+        [
+          6.0,
+          6.0,
+          5.0
+        ],
+        [
+          0.0,
+          6.0,
+          5.0
+        ]
+      ],
+      "thickness": 0.15,
+      "material": {
+        "concrete": "C30",
+        "color": "#D3D3D3"
+      },
+      "story": 2
+    },
+    {
+      "id": "S7",
+      "type": "slab",
+      "corners": [
+        [
+          0.0,
+          6.0,
+          5.0
+        ],
+        [
+          6.0,
+          6.0,
+          5.0
+        ],
+        [
+          6.0,
+          6.0,
+          10.0
+        ],
+        [
+          0.0,
+          6.0,
+          10.0
+        ]
+      ],
+      "thickness": 0.15,
+      "material": {
+        "concrete": "C30",
+        "color": "#D3D3D3"
+      },
+      "story": 2
+    },
+    {
+      "id": "S8",
+      "type": "slab",
+      "corners": [
+        [
+          6.0,
+          6.0,
+          0.0
+        ],
+        [
+          12.0,
+          6.0,
+          0.0
+        ],
+        [
+          12.0,
+          6.0,
+          5.0
+        ],
+        [
+          6.0,
+          6.0,
+          5.0
+        ]
+      ],
+      "thickness": 0.15,
+      "material": {
+        "concrete": "C30",
+        "color": "#D3D3D3"
+      },
+      "story": 2
+    },
+    {
+      "id": "S9",
+      "type": "slab",
+      "corners": [
+        [
+          6.0,
+          6.0,
+          5.0
+        ],
+        [
+          12.0,
+          6.0,
+          5.0
+        ],
+        [
+          12.0,
+          6.0,
+          10.0
+        ],
+        [
+          6.0,
+          6.0,
+          10.0
+        ]
+      ],
+      "thickness": 0.15,
+      "material": {
+        "concrete": "C30",
+        "color": "#D3D3D3"
+      },
+      "story": 2
+    },
+    {
+      "id": "S10",
+      "type": "slab",
+      "corners": [
+        [
+          12.0,
+          6.0,
+          0.0
+        ],
+        [
+          18.0,
+          6.0,
+          0.0
+        ],
+        [
+          18.0,
+          6.0,
+          5.0
+        ],
+        [
+          12.0,
+          6.0,
+          5.0
+        ]
+      ],
+      "thickness": 0.15,
+      "material": {
+        "concrete": "C30",
+        "color": "#D3D3D3"
+      },
+      "story": 2
+    },
+    {
+      "id": "S11",
+      "type": "slab",
+      "corners": [
+        [
+          12.0,
+          6.0,
+          5.0
+        ],
+        [
+          18.0,
+          6.0,
+          5.0
+        ],
+        [
+          18.0,
+          6.0,
+          10.0
+        ],
+        [
+          12.0,
+          6.0,
+          10.0
+        ]
+      ],
+      "thickness": 0.15,
+      "material": {
+        "concrete": "C30",
+        "color": "#D3D3D3"
+      },
+      "story": 2
+    },
+    {
+      "id": "S12",
+      "type": "slab",
+      "corners": [
+        [
+          0.0,
+          9.0,
+          0.0
+        ],
+        [
+          6.0,
+          9.0,
+          0.0
+        ],
+        [
+          6.0,
+          9.0,
+          5.0
+        ],
+        [
+          0.0,
+          9.0,
+          5.0
+        ]
+      ],
+      "thickness": 0.15,
+      "material": {
+        "concrete": "C30",
+        "color": "#D3D3D3"
+      },
+      "story": 3
+    },
+    {
+      "id": "S13",
+      "type": "slab",
+      "corners": [
+        [
+          0.0,
+          9.0,
+          5.0
+        ],
+        [
+          6.0,
+          9.0,
+          5.0
+        ],
+        [
+          6.0,
+          9.0,
+          10.0
+        ],
+        [
+          0.0,
+          9.0,
+          10.0
+        ]
+      ],
+      "thickness": 0.15,
+      "material": {
+        "concrete": "C30",
+        "color": "#D3D3D3"
+      },
+      "story": 3
+    },
+    {
+      "id": "S14",
+      "type": "slab",
+      "corners": [
+        [
+          6.0,
+          9.0,
+          0.0
+        ],
+        [
+          12.0,
+          9.0,
+          0.0
+        ],
+        [
+          12.0,
+          9.0,
+          5.0
+        ],
+        [
+          6.0,
+          9.0,
+          5.0
+        ]
+      ],
+      "thickness": 0.15,
+      "material": {
+        "concrete": "C30",
+        "color": "#D3D3D3"
+      },
+      "story": 3
+    },
+    {
+      "id": "S15",
+      "type": "slab",
+      "corners": [
+        [
+          6.0,
+          9.0,
+          5.0
+        ],
+        [
+          12.0,
+          9.0,
+          5.0
+        ],
+        [
+          12.0,
+          9.0,
+          10.0
+        ],
+        [
+          6.0,
+          9.0,
+          10.0
+        ]
+      ],
+      "thickness": 0.15,
+      "material": {
+        "concrete": "C30",
+        "color": "#D3D3D3"
+      },
+      "story": 3
+    },
+    {
+      "id": "S16",
+      "type": "slab",
+      "corners": [
+        [
+          12.0,
+          9.0,
+          0.0
+        ],
+        [
+          18.0,
+          9.0,
+          0.0
+        ],
+        [
+          18.0,
+          9.0,
+          5.0
+        ],
+        [
+          12.0,
+          9.0,
+          5.0
+        ]
+      ],
+      "thickness": 0.15,
+      "material": {
+        "concrete": "C30",
+        "color": "#D3D3D3"
+      },
+      "story": 3
+    },
+    {
+      "id": "S17",
+      "type": "slab",
+      "corners": [
+        [
+          12.0,
+          9.0,
+          5.0
+        ],
+        [
+          18.0,
+          9.0,
+          5.0
+        ],
+        [
+          18.0,
+          9.0,
+          10.0
+        ],
+        [
+          12.0,
+          9.0,
+          10.0
+        ]
+      ],
+      "thickness": 0.15,
+      "material": {
+        "concrete": "C30",
+        "color": "#D3D3D3"
+      },
+      "story": 3
+    }
+  ],
+  "threejsObjects": [
+    {
+      "uuid": "col_0",
+      "type": "box",
+      "position": [
+        0.0,
+        1.5,
+        0.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C0",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "uuid": "col_1",
+      "type": "box",
+      "position": [
+        0.0,
+        1.5,
+        5.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C1",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": false,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "uuid": "col_2",
+      "type": "box",
+      "position": [
+        0.0,
+        1.5,
+        10.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C2",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "uuid": "col_3",
+      "type": "box",
+      "position": [
+        6.0,
+        1.5,
+        0.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C3",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": false,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "uuid": "col_4",
+      "type": "box",
+      "position": [
+        6.0,
+        1.5,
+        5.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C4",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": false,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "uuid": "col_5",
+      "type": "box",
+      "position": [
+        6.0,
+        1.5,
+        10.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C5",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": false,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "uuid": "col_6",
+      "type": "box",
+      "position": [
+        12.0,
+        1.5,
+        0.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C6",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": false,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "uuid": "col_7",
+      "type": "box",
+      "position": [
+        12.0,
+        1.5,
+        5.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C7",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": false,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "uuid": "col_8",
+      "type": "box",
+      "position": [
+        12.0,
+        1.5,
+        10.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C8",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": false,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "uuid": "col_9",
+      "type": "box",
+      "position": [
+        18.0,
+        1.5,
+        0.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C9",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "uuid": "col_10",
+      "type": "box",
+      "position": [
+        18.0,
+        1.5,
+        5.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C10",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": false,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "uuid": "col_11",
+      "type": "box",
+      "position": [
+        18.0,
+        1.5,
+        10.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C11",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 1.0
+        }
+      }
+    },
+    {
+      "uuid": "col_12",
+      "type": "box",
+      "position": [
+        0.0,
+        4.5,
+        0.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C12",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_13",
+      "type": "box",
+      "position": [
+        0.0,
+        4.5,
+        5.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C13",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_14",
+      "type": "box",
+      "position": [
+        0.0,
+        4.5,
+        10.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C14",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_15",
+      "type": "box",
+      "position": [
+        6.0,
+        4.5,
+        0.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C15",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_16",
+      "type": "box",
+      "position": [
+        6.0,
+        4.5,
+        5.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C16",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_17",
+      "type": "box",
+      "position": [
+        6.0,
+        4.5,
+        10.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C17",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_18",
+      "type": "box",
+      "position": [
+        12.0,
+        4.5,
+        0.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C18",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_19",
+      "type": "box",
+      "position": [
+        12.0,
+        4.5,
+        5.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C19",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_20",
+      "type": "box",
+      "position": [
+        12.0,
+        4.5,
+        10.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C20",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_21",
+      "type": "box",
+      "position": [
+        18.0,
+        4.5,
+        0.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C21",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_22",
+      "type": "box",
+      "position": [
+        18.0,
+        4.5,
+        5.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C22",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_23",
+      "type": "box",
+      "position": [
+        18.0,
+        4.5,
+        10.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C23",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_24",
+      "type": "box",
+      "position": [
+        0.0,
+        7.5,
+        0.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C24",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_25",
+      "type": "box",
+      "position": [
+        0.0,
+        7.5,
+        5.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C25",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_26",
+      "type": "box",
+      "position": [
+        0.0,
+        7.5,
+        10.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C26",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_27",
+      "type": "box",
+      "position": [
+        6.0,
+        7.5,
+        0.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C27",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_28",
+      "type": "box",
+      "position": [
+        6.0,
+        7.5,
+        5.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C28",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_29",
+      "type": "box",
+      "position": [
+        6.0,
+        7.5,
+        10.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C29",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_30",
+      "type": "box",
+      "position": [
+        12.0,
+        7.5,
+        0.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C30",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_31",
+      "type": "box",
+      "position": [
+        12.0,
+        7.5,
+        5.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C31",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_32",
+      "type": "box",
+      "position": [
+        12.0,
+        7.5,
+        10.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C32",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_33",
+      "type": "box",
+      "position": [
+        18.0,
+        7.5,
+        0.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C33",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_34",
+      "type": "box",
+      "position": [
+        18.0,
+        7.5,
+        5.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C34",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "col_35",
+      "type": "box",
+      "position": [
+        18.0,
+        7.5,
+        10.0
+      ],
+      "size": [
+        0.4,
+        3.0,
+        0.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8B8B8B",
+      "userData": {
+        "structuralId": "C35",
+        "structuralRole": "column",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.6
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_0",
+      "type": "box",
+      "position": [
+        3.0,
+        3.0,
+        0.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX0",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_1",
+      "type": "box",
+      "position": [
+        3.0,
+        3.0,
+        5.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX1",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_2",
+      "type": "box",
+      "position": [
+        3.0,
+        3.0,
+        10.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX2",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_3",
+      "type": "box",
+      "position": [
+        9.0,
+        3.0,
+        0.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX3",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_4",
+      "type": "box",
+      "position": [
+        9.0,
+        3.0,
+        5.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX4",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_5",
+      "type": "box",
+      "position": [
+        9.0,
+        3.0,
+        10.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX5",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_6",
+      "type": "box",
+      "position": [
+        15.0,
+        3.0,
+        0.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX6",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_7",
+      "type": "box",
+      "position": [
+        15.0,
+        3.0,
+        5.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX7",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_8",
+      "type": "box",
+      "position": [
+        15.0,
+        3.0,
+        10.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX8",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_9",
+      "type": "box",
+      "position": [
+        0.0,
+        3.0,
+        2.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY9",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_10",
+      "type": "box",
+      "position": [
+        6.0,
+        3.0,
+        2.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY10",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_11",
+      "type": "box",
+      "position": [
+        12.0,
+        3.0,
+        2.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY11",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_12",
+      "type": "box",
+      "position": [
+        18.0,
+        3.0,
+        2.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY12",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_13",
+      "type": "box",
+      "position": [
+        0.0,
+        3.0,
+        7.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY13",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_14",
+      "type": "box",
+      "position": [
+        6.0,
+        3.0,
+        7.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY14",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_15",
+      "type": "box",
+      "position": [
+        12.0,
+        3.0,
+        7.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY15",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_16",
+      "type": "box",
+      "position": [
+        18.0,
+        3.0,
+        7.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY16",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_17",
+      "type": "box",
+      "position": [
+        3.0,
+        6.0,
+        0.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX17",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_18",
+      "type": "box",
+      "position": [
+        3.0,
+        6.0,
+        5.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX18",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_19",
+      "type": "box",
+      "position": [
+        3.0,
+        6.0,
+        10.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX19",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_20",
+      "type": "box",
+      "position": [
+        9.0,
+        6.0,
+        0.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX20",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_21",
+      "type": "box",
+      "position": [
+        9.0,
+        6.0,
+        5.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX21",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_22",
+      "type": "box",
+      "position": [
+        9.0,
+        6.0,
+        10.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX22",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_23",
+      "type": "box",
+      "position": [
+        15.0,
+        6.0,
+        0.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX23",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_24",
+      "type": "box",
+      "position": [
+        15.0,
+        6.0,
+        5.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX24",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_25",
+      "type": "box",
+      "position": [
+        15.0,
+        6.0,
+        10.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX25",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_26",
+      "type": "box",
+      "position": [
+        0.0,
+        6.0,
+        2.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY26",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_27",
+      "type": "box",
+      "position": [
+        6.0,
+        6.0,
+        2.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY27",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_28",
+      "type": "box",
+      "position": [
+        12.0,
+        6.0,
+        2.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY28",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_29",
+      "type": "box",
+      "position": [
+        18.0,
+        6.0,
+        2.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY29",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_30",
+      "type": "box",
+      "position": [
+        0.0,
+        6.0,
+        7.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY30",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_31",
+      "type": "box",
+      "position": [
+        6.0,
+        6.0,
+        7.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY31",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_32",
+      "type": "box",
+      "position": [
+        12.0,
+        6.0,
+        7.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY32",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_33",
+      "type": "box",
+      "position": [
+        18.0,
+        6.0,
+        7.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY33",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_34",
+      "type": "box",
+      "position": [
+        3.0,
+        9.0,
+        0.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX34",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_35",
+      "type": "box",
+      "position": [
+        3.0,
+        9.0,
+        5.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX35",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_36",
+      "type": "box",
+      "position": [
+        3.0,
+        9.0,
+        10.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX36",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_37",
+      "type": "box",
+      "position": [
+        9.0,
+        9.0,
+        0.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX37",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_38",
+      "type": "box",
+      "position": [
+        9.0,
+        9.0,
+        5.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX38",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_39",
+      "type": "box",
+      "position": [
+        9.0,
+        9.0,
+        10.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX39",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_40",
+      "type": "box",
+      "position": [
+        15.0,
+        9.0,
+        0.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX40",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_41",
+      "type": "box",
+      "position": [
+        15.0,
+        9.0,
+        5.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX41",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_x_42",
+      "type": "box",
+      "position": [
+        15.0,
+        9.0,
+        10.0
+      ],
+      "size": [
+        6.0,
+        0.4,
+        0.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BX42",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_43",
+      "type": "box",
+      "position": [
+        0.0,
+        9.0,
+        2.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY43",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_44",
+      "type": "box",
+      "position": [
+        6.0,
+        9.0,
+        2.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY44",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_45",
+      "type": "box",
+      "position": [
+        12.0,
+        9.0,
+        2.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY45",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_46",
+      "type": "box",
+      "position": [
+        18.0,
+        9.0,
+        2.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY46",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_47",
+      "type": "box",
+      "position": [
+        0.0,
+        9.0,
+        7.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY47",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_48",
+      "type": "box",
+      "position": [
+        6.0,
+        9.0,
+        7.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY48",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_49",
+      "type": "box",
+      "position": [
+        12.0,
+        9.0,
+        7.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY49",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "beam_y_50",
+      "type": "box",
+      "position": [
+        18.0,
+        9.0,
+        7.5
+      ],
+      "size": [
+        0.2,
+        0.4,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#A0A0A0",
+      "userData": {
+        "structuralId": "BY50",
+        "structuralRole": "beam",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.5
+        }
+      }
+    },
+    {
+      "uuid": "slab_0",
+      "type": "box",
+      "position": [
+        3.0,
+        2.925,
+        2.5
+      ],
+      "size": [
+        6.0,
+        0.15,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#D3D3D3",
+      "userData": {
+        "structuralId": "S0",
+        "structuralRole": "slab",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.3
+        }
+      }
+    },
+    {
+      "uuid": "slab_1",
+      "type": "box",
+      "position": [
+        3.0,
+        2.925,
+        7.5
+      ],
+      "size": [
+        6.0,
+        0.15,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#D3D3D3",
+      "userData": {
+        "structuralId": "S1",
+        "structuralRole": "slab",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.3
+        }
+      }
+    },
+    {
+      "uuid": "slab_2",
+      "type": "box",
+      "position": [
+        9.0,
+        2.925,
+        2.5
+      ],
+      "size": [
+        6.0,
+        0.15,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#D3D3D3",
+      "userData": {
+        "structuralId": "S2",
+        "structuralRole": "slab",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.3
+        }
+      }
+    },
+    {
+      "uuid": "slab_3",
+      "type": "box",
+      "position": [
+        9.0,
+        2.925,
+        7.5
+      ],
+      "size": [
+        6.0,
+        0.15,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#D3D3D3",
+      "userData": {
+        "structuralId": "S3",
+        "structuralRole": "slab",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.3
+        }
+      }
+    },
+    {
+      "uuid": "slab_4",
+      "type": "box",
+      "position": [
+        15.0,
+        2.925,
+        2.5
+      ],
+      "size": [
+        6.0,
+        0.15,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#D3D3D3",
+      "userData": {
+        "structuralId": "S4",
+        "structuralRole": "slab",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.3
+        }
+      }
+    },
+    {
+      "uuid": "slab_5",
+      "type": "box",
+      "position": [
+        15.0,
+        2.925,
+        7.5
+      ],
+      "size": [
+        6.0,
+        0.15,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#D3D3D3",
+      "userData": {
+        "structuralId": "S5",
+        "structuralRole": "slab",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.3
+        }
+      }
+    },
+    {
+      "uuid": "slab_6",
+      "type": "box",
+      "position": [
+        3.0,
+        5.925,
+        2.5
+      ],
+      "size": [
+        6.0,
+        0.15,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#D3D3D3",
+      "userData": {
+        "structuralId": "S6",
+        "structuralRole": "slab",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.3
+        }
+      }
+    },
+    {
+      "uuid": "slab_7",
+      "type": "box",
+      "position": [
+        3.0,
+        5.925,
+        7.5
+      ],
+      "size": [
+        6.0,
+        0.15,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#D3D3D3",
+      "userData": {
+        "structuralId": "S7",
+        "structuralRole": "slab",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.3
+        }
+      }
+    },
+    {
+      "uuid": "slab_8",
+      "type": "box",
+      "position": [
+        9.0,
+        5.925,
+        2.5
+      ],
+      "size": [
+        6.0,
+        0.15,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#D3D3D3",
+      "userData": {
+        "structuralId": "S8",
+        "structuralRole": "slab",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.3
+        }
+      }
+    },
+    {
+      "uuid": "slab_9",
+      "type": "box",
+      "position": [
+        9.0,
+        5.925,
+        7.5
+      ],
+      "size": [
+        6.0,
+        0.15,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#D3D3D3",
+      "userData": {
+        "structuralId": "S9",
+        "structuralRole": "slab",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.3
+        }
+      }
+    },
+    {
+      "uuid": "slab_10",
+      "type": "box",
+      "position": [
+        15.0,
+        5.925,
+        2.5
+      ],
+      "size": [
+        6.0,
+        0.15,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#D3D3D3",
+      "userData": {
+        "structuralId": "S10",
+        "structuralRole": "slab",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.3
+        }
+      }
+    },
+    {
+      "uuid": "slab_11",
+      "type": "box",
+      "position": [
+        15.0,
+        5.925,
+        7.5
+      ],
+      "size": [
+        6.0,
+        0.15,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#D3D3D3",
+      "userData": {
+        "structuralId": "S11",
+        "structuralRole": "slab",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.3
+        }
+      }
+    },
+    {
+      "uuid": "slab_12",
+      "type": "box",
+      "position": [
+        3.0,
+        8.925,
+        2.5
+      ],
+      "size": [
+        6.0,
+        0.15,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#D3D3D3",
+      "userData": {
+        "structuralId": "S12",
+        "structuralRole": "slab",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.3
+        }
+      }
+    },
+    {
+      "uuid": "slab_13",
+      "type": "box",
+      "position": [
+        3.0,
+        8.925,
+        7.5
+      ],
+      "size": [
+        6.0,
+        0.15,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#D3D3D3",
+      "userData": {
+        "structuralId": "S13",
+        "structuralRole": "slab",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.3
+        }
+      }
+    },
+    {
+      "uuid": "slab_14",
+      "type": "box",
+      "position": [
+        9.0,
+        8.925,
+        2.5
+      ],
+      "size": [
+        6.0,
+        0.15,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#D3D3D3",
+      "userData": {
+        "structuralId": "S14",
+        "structuralRole": "slab",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.3
+        }
+      }
+    },
+    {
+      "uuid": "slab_15",
+      "type": "box",
+      "position": [
+        9.0,
+        8.925,
+        7.5
+      ],
+      "size": [
+        6.0,
+        0.15,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#D3D3D3",
+      "userData": {
+        "structuralId": "S15",
+        "structuralRole": "slab",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.3
+        }
+      }
+    },
+    {
+      "uuid": "slab_16",
+      "type": "box",
+      "position": [
+        15.0,
+        8.925,
+        2.5
+      ],
+      "size": [
+        6.0,
+        0.15,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#D3D3D3",
+      "userData": {
+        "structuralId": "S16",
+        "structuralRole": "slab",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.3
+        }
+      }
+    },
+    {
+      "uuid": "slab_17",
+      "type": "box",
+      "position": [
+        15.0,
+        8.925,
+        7.5
+      ],
+      "size": [
+        6.0,
+        0.15,
+        5.0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#D3D3D3",
+      "userData": {
+        "structuralId": "S17",
+        "structuralRole": "slab",
+        "isLoadBearing": true,
+        "demolition": {
+          "fragile": true,
+          "blastResistance": 0.3
+        }
+      }
+    }
+  ]
+}
