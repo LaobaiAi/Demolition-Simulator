@@ -64,3 +64,9 @@ gateway/local_memory.json
 
 # Logs
 *.log
+
+# Personal dev notes (不会被上传到 git)
+dev-notes/
+NOTES*.md
+*.notes.md
+TODO.local.md
