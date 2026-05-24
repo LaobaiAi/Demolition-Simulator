@@ -347,7 +347,7 @@ export function FrameVisualization3D({
     elementForces?.forEach(ef => {
       const el = structure.elements.find(e => e.id === ef.element_id);
       if (el?.A && el.A > 0) {
-        stressMap.set(ef.element_id, Math.min(Math.max(Math.abs(ef.Nmax), Math.abs(ef.Nmin)) / (el.A * FY), 1));
+        stressMap.set(ef.element_id, Math.min(Math.max(Math.abs(ef.Nmax ?? 0), Math.abs(ef.Nmin ?? 0), Math.abs((ef as any).N ?? 0)) / (el.A * FY), 1));
       }
     });
     const hasStress = stressMap.size > 0;

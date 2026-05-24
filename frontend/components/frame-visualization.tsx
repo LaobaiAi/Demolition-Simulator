@@ -229,7 +229,7 @@ export function FrameVisualization({
     for (const ef of elementForces) {
       const elem = elements.find((e) => e.id === ef.element_id);
       if (elem && elem.A && elem.A > 0) {
-        const N = Math.max(Math.abs(ef.Nmax), Math.abs(ef.Nmin));
+        const N = Math.max(Math.abs(ef.Nmax ?? 0), Math.abs(ef.Nmin ?? 0), Math.abs((ef as any).N ?? 0));
         const ratio = N / (elem.A * FY);
         stressMap.set(ef.element_id, Math.min(ratio, 1.0));
       }
