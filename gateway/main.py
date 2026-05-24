@@ -41,7 +41,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from caiao_hub import CAIAOClientHub
+from caiao_hub import CAIAOClientHub, _get_parallel_limit
 from llm_engine import LLMEngine
 from agent_loop import AgentLoop
 from memory import SessionMemory
@@ -106,6 +106,7 @@ SERVER_CONFIGS = [
         "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
         "args": [os.path.join(CAIAO_SERVERS_DIR, "anastruct_server", "server.py")],
         "cwd": os.path.join(CAIAO_SERVERS_DIR, "anastruct_server"),
+        "tools": ["generate_simple_frame", "analyze_frame", "select_critical_element"],
     },
     {
         "name": "opensees_server",
@@ -113,6 +114,7 @@ SERVER_CONFIGS = [
         "args": ["server.py"],
         "cwd": os.path.join(CAIAO_SERVERS_DIR, "opensees_server"),
         "lazy": True,
+        "tools": ["high_fidelity_analysis"],
     },
     {
         "name": "pynite_server",
@@ -120,6 +122,7 @@ SERVER_CONFIGS = [
         "args": ["server.py"],
         "cwd": os.path.join(CAIAO_SERVERS_DIR, "pynite_server"),
         "lazy": True,
+        "tools": ["pynite_analysis"],
     },
     {
         "name": "fapp_server",
@@ -127,6 +130,7 @@ SERVER_CONFIGS = [
         "args": ["server.py"],
         "cwd": os.path.join(CAIAO_SERVERS_DIR, "fapp_server"),
         "lazy": True,
+        "tools": ["fapp_analysis"],
     },
     {
         "name": "unity_simulator",
@@ -134,6 +138,57 @@ SERVER_CONFIGS = [
         "args": ["server.py"],
         "cwd": os.path.join(CAIAO_SERVERS_DIR, "unity_simulator"),
         "lazy": True,
+        "tools": [
+            "apply_demolition_action",
+            "modify_structure",
+            "get_structure_status",
+            "get_removed_elements",
+        ],
+    },
+    {
+        "name": "frame_generator",
+        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
+        "args": ["server.py"],
+        "cwd": os.path.join(CAIAO_SERVERS_DIR, "frame_generator"),
+        "tools": ["generate_frame", "generate_frame_3d", "generate_from_text", "list_materials"],
+    },
+    # P1: Declarative composite pipeline — auto-registered by _build_composite_handlers
+    {
+        "name": "run_full_analysis",
+        "composite": True,
+        "description": "Pipeline: generate frame → analyze → find critical element in ONE call. Accepts the same parameters as generate_frame. Returns the complete structure, analysis results, and critical element.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "num_bays_x": {"type": "integer", "description": "Number of bays in X direction (default 3)"},
+                "num_bays_y": {"type": "integer", "description": "Number of bays in Y direction (default 3)"},
+                "num_stories": {"type": "integer", "description": "Number of stories (default 4)"},
+                "span_x_m": {"type": "number", "description": "Span length in X direction in meters (default 6.0)"},
+                "span_y_m": {"type": "number", "description": "Span length in Y direction in meters (default 6.0)"},
+                "story_height_m": {"type": "number", "description": "Story height in meters (default 3.5)"},
+                "steel_grade": {"type": "string", "description": "Steel grade, e.g. Q235, Q345, Q355, Q420 (default Q355)"},
+                "base_support": {"type": "string", "description": "Support type: fixed or hinged (default fixed)"},
+            },
+        },
+        "pipeline": [
+            {
+                "server": "frame_generator",
+                "tool": "generate_frame",
+                "map_result": "structure",
+            },
+            {
+                "server": "anastruct_server",
+                "tool": "analyze_frame",
+                "input_map": {"structure": "structure"},
+                "map_result": "analysis",
+            },
+            {
+                "server": "anastruct_server",
+                "tool": "select_critical_element",
+                "input_map": {"structure": "structure", "analysis_result": "analysis"},
+                "map_result": "critical_element",
+            },
+        ],
     },
 ]
 
@@ -141,6 +196,10 @@ hub: CAIAOClientHub | None = None
 agent: AgentLoop | None = None
 memory: SessionMemory | None = None
 llm_engine: LLMEngine | None = None
+
+
+# --- No local tool handlers needed — composite pipelines are auto-registered
+# via SERVER_CONFIGS composite entries. See caiao_hub._build_composite_handlers.
 
 
 @asynccontextmanager
@@ -162,6 +221,7 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Gateway ready — no saved LLM config, configure via /settings/llm")
 
+    # Composite pipelines are auto-registered from SERVER_CONFIGS in hub.__init__
     # Auto-detect: if TCP port 5005 is open, Unity is running from a previous session
     _detect_running_unity()
     yield
@@ -238,6 +298,46 @@ async def _try_solver(tool_name: str, structure: dict) -> dict | None:
         return None
 
 
+async def _run_solvers(
+    structure: dict,
+    solver_order: list[tuple[str, str]],
+) -> tuple[dict | None, str | None]:
+    """Run solvers with resource-aware parallelization.
+
+    When CPU/memory allows, runs all solvers in parallel and picks the first
+    successful result. When resources are tight, runs serially.
+    Returns (result_data, solver_label) or (None, None) if all fail.
+    """
+    if not hub or not structure:
+        return None, None
+
+    total = len(solver_order)
+    limit = _get_parallel_limit(total)
+
+    if limit >= 2:
+        # Parallel: run all at once, pick first success
+        logger.info(f"Running {total} solvers in parallel (limit={limit})")
+        tasks = []
+        for tool_name, solver_label in solver_order:
+            tasks.append(_try_solver(tool_name, structure))
+        all_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for i, (tool_name, solver_label) in enumerate(solver_order):
+            result = all_results[i]
+            if isinstance(result, dict) and result is not None:
+                logger.info(f"{solver_label} returned valid result in parallel mode")
+                return result, solver_label
+        return None, None
+    else:
+        # Serial: try each in order
+        logger.info(f"Running {total} solvers serially (limited resources)")
+        for tool_name, solver_label in solver_order:
+            result = await _try_solver(tool_name, structure)
+            if result:
+                return result, solver_label
+        return None, None
+
+
 def _safe_pct_diff(a: float, b: float) -> float:
     """Safe percentage difference between two values.
 
@@ -252,10 +352,11 @@ def _safe_pct_diff(a: float, b: float) -> float:
 
 @app.post("/verify")
 async def verify_analysis(req: VerifyRequest):
-    """Compare fast analysis with high-fidelity solvers (OpenSees > PyNite > FAPP).
+    """Compare fast analysis with high-fidelity solvers in parallel.
 
-    Tries solvers in order. Falls back to the next if one is unavailable.
-    Only returns 'unavailable' if ALL solvers fail.
+    Uses resource-aware parallelization — runs all solvers concurrently
+    when CPU/memory allows, falls back to serial when loaded.
+    Returns first successful result, or 'unavailable' if ALL solvers fail.
     """
     fast = req.fast_result
     max_disp_fast = fast.get("max_displacement", 0)
@@ -267,17 +368,14 @@ async def verify_analysis(req: VerifyRequest):
             ("pynite_analysis", "PyNite"),
             ("fapp_analysis", "FAPP"),
         ]
-        for tool_name, solver_label in solver_order:
-            hf_data = await _try_solver(tool_name, req.structure)
-            if hf_data is None:
-                continue
+        hf_data, solver_label = await _run_solvers(req.structure, solver_order)
+        if hf_data and solver_label:
             max_disp_hf = hf_data.get("max_displacement", 0)
             max_axial_hf = hf_data.get("max_axial_force", 0)
             disp_diff = _safe_pct_diff(max_disp_fast, max_disp_hf)
             axial_diff = _safe_pct_diff(max_axial_fast, max_axial_hf)
             status = "verified" if max(disp_diff, axial_diff) < 5.0 else "warning"
 
-            # Detect when fast analysis likely failed (returned near-zero while hi-fi has real values)
             message = None
             if abs(max_disp_fast) < 1e-9 and abs(max_disp_hf) > 1e-9:
                 message = (
@@ -336,9 +434,29 @@ for dim, solvers in DIMENSION_GROUPS.items():
         SOLVER_DIMENSION[s] = dim
 
 
+def _extract_solver_result(raw: dict | Any, results: dict, key: str) -> None:
+    """Parse a solver raw result into the results dict."""
+    if isinstance(raw, dict) and "result" in raw:
+        data = json.loads(raw["result"]) if isinstance(raw["result"], str) else raw["result"]
+        if "error" in data:
+            results[key] = {"error": str(data["error"])}
+        else:
+            results[key] = {
+                "max_displacement": data.get("max_displacement", 0),
+                "max_axial_force": data.get("max_axial_force", 0),
+            }
+    elif isinstance(raw, dict) and "error" in raw:
+        results[key] = {"error": str(raw["error"])}
+    else:
+        results[key] = {"error": "Solver returned no result"}
+
+
 @app.post("/verify/multi")
 async def verify_multi(req: MultiVerifyRequest):
-    """Run all available solvers on the same structure and compute consensus.
+    """Run all available solvers on the same structure in parallel and compute consensus.
+
+    Uses resource-aware parallelization — runs solvers concurrently
+    when CPU/memory allows, falls back to serial when loaded.
 
     Returns per-solver results plus consensus (median) and outlier flags.
     Deviations are computed per dimension group (2D vs 3D) so that e.g.
@@ -354,23 +472,26 @@ async def verify_multi(req: MultiVerifyRequest):
         ("fapp_analysis", "fapp"),
     ]
 
-    for tool_name, key in solver_map:
-        try:
-            raw = await hub.call_tool(tool_name, {"structure": req.structure})
-            if raw and "result" in raw:
-                data = json.loads(raw["result"]) if isinstance(raw["result"], str) else raw["result"]
-                if "error" in data:
-                    results[key] = {"error": str(data["error"])}
-                else:
-                    results[key] = {
-                        "max_displacement": data.get("max_displacement", 0),
-                        "max_axial_force": data.get("max_axial_force", 0),
-                    }
-            else:
-                results[key] = {"error": "Solver returned no result"}
-        except Exception as e:
-            logger.warning(f"Multi-verify: {key} failed: {e}")
-            results[key] = {"error": str(e)}
+    total = len(solver_map)
+    limit = _get_parallel_limit(total)
+    logger.info(f"Multi-verify: {total} solvers, parallel_limit={limit}")
+
+    if limit >= 2:
+        # Parallel execution via hub
+        tool_calls = [(tn, {"structure": req.structure}) for tn, _ in solver_map]
+        parallel_results = await hub.call_tools_parallel(tool_calls)
+        for i, (tool_name, key) in enumerate(solver_map):
+            raw = parallel_results[i] if i < len(parallel_results) else {"error": "No result"}
+            _extract_solver_result(raw, results, key)
+    else:
+        # Serial fallback
+        for tool_name, key in solver_map:
+            try:
+                raw = await hub.call_tool(tool_name, {"structure": req.structure})
+                _extract_solver_result(raw, results, key)
+            except Exception as e:
+                logger.warning(f"Multi-verify: {key} failed: {e}")
+                results[key] = {"error": str(e)}
 
     available_disp = [r["max_displacement"] for r in results.values() if "max_displacement" in r]
     available_axial = [r["max_axial_force"] for r in results.values() if "max_axial_force" in r]
@@ -741,7 +862,24 @@ async def ws_chat(websocket: WebSocket):
     await websocket.accept()
 
     async def _safe_send(data: dict[str, Any]) -> None:
-        await websocket.send_json(_sanitize_for_json(data))
+        try:
+            await websocket.send_json(_sanitize_for_json(data))
+        except Exception:
+            pass  # connection likely lost
+
+    # Heartbeat task — keeps connection alive during long LLM silences
+    async def _heartbeat():
+        try:
+            while True:
+                await asyncio.sleep(15)
+                try:
+                    await websocket.send_json({"type": "ping"})
+                except Exception:
+                    break
+        except asyncio.CancelledError:
+            pass
+
+    heartbeat_task = asyncio.create_task(_heartbeat())
 
     history: list[dict[str, Any]] = []
     try:
@@ -831,8 +969,11 @@ async def ws_chat(websocket: WebSocket):
         logger.info("WebSocket client disconnected")
     except Exception as e:
         logger.exception("WebSocket error")
+    finally:
+        heartbeat_task.cancel()
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False,
+                ws_ping_interval=25, ws_ping_timeout=10)

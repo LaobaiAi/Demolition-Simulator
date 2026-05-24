@@ -53,8 +53,8 @@ pause
 exit /b
 
 :gateway_frontend
-echo Starting Gateway Backend (minimized)...
-start "Gateway" /MIN cmd /k "cd /d "%~dp0gateway" && "venv\Scripts\python.exe" main.py"
+echo Starting Gateway Backend (with watchdog, minimized)...
+start "Gateway-Watchdog" /MIN cmd /k "cd /d "%~dp0gateway" && "venv\Scripts\python.exe" watchdog.py"
 
 echo Waiting for Gateway to initialize...
 timeout /t 8 /nobreak >nul

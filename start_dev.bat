@@ -21,8 +21,8 @@ if %errorlevel% == 1 (
 echo [OK] Proceeding with launch.
 echo.
 
-echo Starting Gateway...
-start "Gateway" cmd /c "cd /d "%~dp0gateway" && "venv\Scripts\python.exe" main.py"
+echo Starting Gateway (with watchdog)...
+start "Gateway-Watchdog" cmd /c "cd /d "%~dp0gateway" && "venv\Scripts\python.exe" watchdog.py"
 
 echo Waiting for Gateway (port 8000)...
 :wait_gateway
