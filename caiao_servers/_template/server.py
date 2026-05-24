@@ -1,9 +1,13 @@
-"""MCP Server Template — copy this to create a new solver.
+"""CAIAO Server Template — copy this to create a new solver.
+
+CAIAO is our project's server abstraction on top of the MCP SDK.
+Every solver runs as an independent stdio subprocess managed by CAIAOClientHub.
 
 Usage:
-  cp -r mcp_servers/_template mcp_servers/my_solver
-  # Edit server.py, add your tools
+  cp -r caiao_servers/_template caiao_servers/my_solver
+  # Edit server.py, add your tools (list_tools + call_tool)
   # Register in gateway/main.py → SERVER_CONFIGS
+  # See ARCHITECTURE.md for the full CAIAO protocol contract
 """
 
 import asyncio
