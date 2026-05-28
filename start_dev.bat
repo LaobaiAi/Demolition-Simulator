@@ -32,6 +32,15 @@ if errorlevel 1 goto wait_gateway
 echo Gateway ready.
 
 echo Starting Frontend...
+if not exist "%~dp0frontend\node_modules\next" (
+    echo [INSTALL] Installing frontend dependencies...
+    call npm install --prefix "%~dp0frontend"
+    if %errorlevel% neq 0 (
+        echo [ERROR] Frontend npm install failed.
+        pause
+        exit /b
+    )
+)
 start "Frontend" cmd /c "cd /d "%~dp0frontend" && npm run dev"
 
 REM Background Resource Monitor
