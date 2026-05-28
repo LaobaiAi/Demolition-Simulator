@@ -219,20 +219,25 @@ def build_and_analyze(nx=2, ny=2, nz=3) -> dict:
 #  第 2 部分: MuJoCo 物理仿真
 # ============================================================================
 
-def gen_mujoco_xml(fem: dict, crit_pos: tuple) -> str:
-    """从 FEM 结果生成 MJCF 模型 XML (通用多跨多层)。"""
-    nc = fem['node_coords']
+def gen_mujoco_xml(fem: dict, crit_pos: tuple, use_anchors: bool = False) -> str:
+    """从 FEM 结果生成 MJCF 模型 XML。
+    use_anchors=False: 直接焊接, body 数最少 (柱→世界/柱, 梁→柱)
+    use_anchors=True:  anchor 中间体模式, body 多但连接关系更清晰
+    """
     nx, ny, nz = fem['nx'], fem['ny'], fem['nz']
     L, H = fem['span'], fem['height']
 
-    def nid(i, j, k):
-        return k * (nx + 1) * (ny + 1) + j * (nx + 1) + i + 1
-
-    # 判断某柱是否为关键柱
     def is_crit_col(i, j, k):
         return (i, j, k) == crit_pos
 
-    ci, cj, ck = crit_pos
+    def cx(i):
+        return (i - nx / 2) * L
+
+    def cy(j):
+        return (j - ny / 2) * L
+
+    def cz(k):
+        return k * H
 
     xml_parts = []
     xml_parts.append('<?xml version="1.0"?>')
@@ -251,109 +256,170 @@ def gen_mujoco_xml(fem: dict, crit_pos: tuple) -> str:
     xml_parts.append('  <worldbody>')
     xml_parts.append(f'    <geom name="ground" type="plane" size="{grid_size} {grid_size} 0.1" material="grid"/>')
 
-    # ── 锚点: 每个节点位置一个 anchor ──
-    for k in range(nz + 1):
+    if not use_anchors:
+        # 固定地锚 (无 joint → 固定在世界上)
         for j in range(ny + 1):
             for i in range(nx + 1):
-                x = (i - nx / 2) * L
-                y = (j - ny / 2) * L
-                z = k * H
-                xml_parts.append(f'    <body name="A_{i}_{j}_{k}" pos="{x} {y} {z}">')
-                xml_parts.append(f'      <freejoint/>')
-                xml_parts.append(f'      <geom type="sphere" size="0.02" rgba="0 0 0 0"/>')
+                x, y = cx(i), cy(j)
+                xml_parts.append(f'    <body name="G_{i}_{j}" pos="{x} {y} 0">')
+                xml_parts.append(f'      <geom type="sphere" size="0.01" rgba="0 0 0 0"/>')
                 xml_parts.append(f'    </body>')
 
-    # ── 柱 ──
     col_half_h = H / 2
-    for k in range(nz):
-        for j in range(ny + 1):
-            for i in range(nx + 1):
-                x = (i - nx / 2) * L
-                y = (j - ny / 2) * L
-                z = (k + 0.5) * H
-                is_crit = is_crit_col(i, j, k)
-                r, g, b = (1, 0.2, 0.2) if is_crit else (0.7, 0.7, 0.7)
-                xml_parts.append(f'    <body name="C_{i}_{j}_{k}" pos="{x} {y} {z}">')
-                xml_parts.append(f'      <freejoint/>')
-                xml_parts.append(f'      <geom type="box" size="0.075 0.075 {col_half_h}"'
-                                 f' rgba="{r} {g} {b} 1" contype="0" conaffinity="1"/>')
-                xml_parts.append(f'    </body>')
 
-    # ── X 向梁 ──
-    for k in range(nz + 1):
-        for j in range(ny + 1):
-            for i in range(nx):
-                x = (i - nx / 2 + 0.5) * L
-                y = (j - ny / 2) * L
-                z = k * H
-                xml_parts.append(f'    <body name="BX_{i}_{j}_{k}" pos="{x} {y} {z}">')
-                xml_parts.append(f'      <freejoint/>')
-                xml_parts.append(f'      <geom type="box" size="{L/2} 0.0375 0.075"'
-                                 f' rgba="0.3 0.3 0.3 1" contype="0" conaffinity="1"/>')
-                xml_parts.append(f'    </body>')
-
-    # ── Y 向梁 ──
-    for k in range(nz + 1):
-        for j in range(ny):
-            for i in range(nx + 1):
-                x = (i - nx / 2) * L
-                y = (j - ny / 2 + 0.5) * L
-                z = k * H
-                xml_parts.append(f'    <body name="BY_{i}_{j}_{k}" pos="{x} {y} {z}">')
-                xml_parts.append(f'      <freejoint/>')
-                xml_parts.append(f'      <geom type="box" size="0.0375 {L/2} 0.075"'
-                                 f' rgba="0.3 0.3 0.3 1" contype="0" conaffinity="1"/>')
-                xml_parts.append(f'    </body>')
+    if use_anchors:
+        # ── Anchor 模式: 每个节点一个 anchor 中间体 ──
+        for k in range(nz + 1):
+            for j in range(ny + 1):
+                for i in range(nx + 1):
+                    x, y, z = cx(i), cy(j), cz(k)
+                    xml_parts.append(f'    <body name="A_{i}_{j}_{k}" pos="{x} {y} {z}">')
+                    xml_parts.append(f'      <freejoint/>')
+                    xml_parts.append(f'      <geom type="sphere" size="0.02" rgba="0 0 0 0"/>')
+                    xml_parts.append(f'    </body>')
+        # 柱
+        for k in range(nz):
+            for j in range(ny + 1):
+                for i in range(nx + 1):
+                    x, y, z = cx(i), cy(j), cz(k) + col_half_h
+                    is_crit = is_crit_col(i, j, k)
+                    r, g, b = (1, 0.2, 0.2) if is_crit else (0.7, 0.7, 0.7)
+                    xml_parts.append(f'    <body name="C_{i}_{j}_{k}" pos="{x} {y} {z}">')
+                    xml_parts.append(f'      <freejoint/>')
+                    xml_parts.append(f'      <geom type="box" size="0.075 0.075 {col_half_h}"'
+                                     f' rgba="{r} {g} {b} 1" contype="0" conaffinity="1"/>')
+                    xml_parts.append(f'    </body>')
+        # X 梁
+        for k in range(nz + 1):
+            for j in range(ny + 1):
+                for i in range(nx):
+                    x, y, z = cx(i) + L / 2, cy(j), cz(k)
+                    xml_parts.append(f'    <body name="BX_{i}_{j}_{k}" pos="{x} {y} {z}">')
+                    xml_parts.append(f'      <freejoint/>')
+                    xml_parts.append(f'      <geom type="box" size="{L/2} 0.0375 0.075"'
+                                     f' rgba="0.3 0.3 0.3 1" contype="0" conaffinity="1"/>')
+                    xml_parts.append(f'    </body>')
+        # Y 梁
+        for k in range(nz + 1):
+            for j in range(ny):
+                for i in range(nx + 1):
+                    x, y, z = cx(i), cy(j) + L / 2, cz(k)
+                    xml_parts.append(f'    <body name="BY_{i}_{j}_{k}" pos="{x} {y} {z}">')
+                    xml_parts.append(f'      <freejoint/>')
+                    xml_parts.append(f'      <geom type="box" size="0.0375 {L/2} 0.075"'
+                                     f' rgba="0.3 0.3 0.3 1" contype="0" conaffinity="1"/>')
+                    xml_parts.append(f'    </body>')
+    else:
+        # ── 直接焊接模式: 无 anchor，柱/梁直接带 freejoint ──
+        for k in range(nz):
+            for j in range(ny + 1):
+                for i in range(nx + 1):
+                    x, y, z = cx(i), cy(j), cz(k) + col_half_h
+                    is_crit = is_crit_col(i, j, k)
+                    r, g, b = (1, 0.2, 0.2) if is_crit else (0.7, 0.7, 0.7)
+                    xml_parts.append(f'    <body name="C_{i}_{j}_{k}" pos="{x} {y} {z}">')
+                    xml_parts.append(f'      <freejoint/>')
+                    xml_parts.append(f'      <geom type="box" size="0.075 0.075 {col_half_h}"'
+                                     f' rgba="{r} {g} {b} 1" contype="0" conaffinity="1"/>')
+                    xml_parts.append(f'    </body>')
+        for k in range(nz + 1):
+            for j in range(ny + 1):
+                for i in range(nx):
+                    x, y, z = cx(i) + L / 2, cy(j), cz(k)
+                    xml_parts.append(f'    <body name="BX_{i}_{j}_{k}" pos="{x} {y} {z}">')
+                    xml_parts.append(f'      <freejoint/>')
+                    xml_parts.append(f'      <geom type="box" size="{L/2} 0.0375 0.075"'
+                                     f' rgba="0.3 0.3 0.3 1" contype="0" conaffinity="1"/>')
+                    xml_parts.append(f'    </body>')
+        for k in range(nz + 1):
+            for j in range(ny):
+                for i in range(nx + 1):
+                    x, y, z = cx(i), cy(j) + L / 2, cz(k)
+                    xml_parts.append(f'    <body name="BY_{i}_{j}_{k}" pos="{x} {y} {z}">')
+                    xml_parts.append(f'      <freejoint/>')
+                    xml_parts.append(f'      <geom type="box" size="0.0375 {L/2} 0.075"'
+                                     f' rgba="0.3 0.3 0.3 1" contype="0" conaffinity="1"/>')
+                    xml_parts.append(f'    </body>')
 
     xml_parts.append('  </worldbody>')
 
-    # ── Equality Weld 约束 ──
     xml_parts.append('  <equality>')
 
-    # 柱底: anchor → 柱
-    for k in range(nz):
+    if use_anchors:
+        for k in range(nz):
+            for j in range(ny + 1):
+                for i in range(nx + 1):
+                    xml_parts.append(f'    <weld name="base_{i}_{j}_{k}"'
+                                     f' body1="A_{i}_{j}_{k}" body2="C_{i}_{j}_{k}"'
+                                     f' relpose="0 0 {H/2} 1 0 0 0"/>')
+        for k in range(nz):
+            for j in range(ny + 1):
+                for i in range(nx + 1):
+                    xml_parts.append(f'    <weld name="top_{i}_{j}_{k}"'
+                                     f' body1="C_{i}_{j}_{k}" body2="A_{i}_{j}_{k+1}"'
+                                     f' relpose="0 0 {H/2} 1 0 0 0"/>')
+        for k in range(nz + 1):
+            for j in range(ny + 1):
+                for i in range(nx):
+                    xml_parts.append(f'    <weld name="bx_{i}_{j}_{k}_i"'
+                                     f' body1="BX_{i}_{j}_{k}" body2="A_{i}_{j}_{k}"'
+                                     f' relpose="{-L/2} 0 0 1 0 0 0"/>')
+                    xml_parts.append(f'    <weld name="bx_{i}_{j}_{k}_j"'
+                                     f' body1="BX_{i}_{j}_{k}" body2="A_{i+1}_{j}_{k}"'
+                                     f' relpose="{L/2} 0 0 1 0 0 0"/>')
+        for k in range(nz + 1):
+            for j in range(ny):
+                for i in range(nx + 1):
+                    xml_parts.append(f'    <weld name="by_{i}_{j}_{k}_i"'
+                                     f' body1="BY_{i}_{j}_{k}" body2="A_{i}_{j}_{k}"'
+                                     f' relpose="0 {-L/2} 0 1 0 0 0"/>')
+                    xml_parts.append(f'    <weld name="by_{i}_{j}_{k}_j"'
+                                     f' body1="BY_{i}_{j}_{k}" body2="A_{i}_{j+1}_{k}"'
+                                     f' relpose="0 {L/2} 0 1 0 0 0"/>')
+    else:
         for j in range(ny + 1):
             for i in range(nx + 1):
-                xml_parts.append(f'    <weld name="base_{i}_{j}_{k}"'
-                                 f' body1="A_{i}_{j}_{k}" body2="C_{i}_{j}_{k}"'
-                                 f' relpose="0 0 {H/2} 1 0 0 0"/>')
-
-    # 柱顶: 柱 → anchor
-    for k in range(nz):
-        for j in range(ny + 1):
-            for i in range(nx + 1):
-                xml_parts.append(f'    <weld name="top_{i}_{j}_{k}"'
-                                 f' body1="C_{i}_{j}_{k}" body2="A_{i}_{j}_{k+1}"'
-                                 f' relpose="0 0 {H/2} 1 0 0 0"/>')
-
-    # X 梁端 → anchor
-    for k in range(nz + 1):
-        for j in range(ny + 1):
-            for i in range(nx):
-                xml_parts.append(f'    <weld name="bx_{i}_{j}_{k}_i"'
-                                 f' body1="BX_{i}_{j}_{k}" body2="A_{i}_{j}_{k}"'
-                                 f' relpose="{-L/2} 0 0 1 0 0 0"/>')
-                xml_parts.append(f'    <weld name="bx_{i}_{j}_{k}_j"'
-                                 f' body1="BX_{i}_{j}_{k}" body2="A_{i+1}_{j}_{k}"'
-                                 f' relpose="{L/2} 0 0 1 0 0 0"/>')
-
-    # Y 梁端 → anchor
-    for k in range(nz + 1):
-        for j in range(ny):
-            for i in range(nx + 1):
-                xml_parts.append(f'    <weld name="by_{i}_{j}_{k}_i"'
-                                 f' body1="BY_{i}_{j}_{k}" body2="A_{i}_{j}_{k}"'
-                                 f' relpose="0 {-L/2} 0 1 0 0 0"/>')
-                xml_parts.append(f'    <weld name="by_{i}_{j}_{k}_j"'
-                                 f' body1="BY_{i}_{j}_{k}" body2="A_{i}_{j+1}_{k}"'
-                                 f' relpose="0 {L/2} 0 1 0 0 0"/>')
+                x, y, z = cx(i), cy(j), col_half_h
+                xml_parts.append(f'    <weld name="base_{i}_{j}_0"'
+                                 f' body1="G_{i}_{j}" body2="C_{i}_{j}_0"'
+                                 f' relpose="0 0 {col_half_h} 1 0 0 0"/>')
+        for k in range(1, nz):
+            for j in range(ny + 1):
+                for i in range(nx + 1):
+                    xml_parts.append(f'    <weld name="col_{i}_{j}_{k}"'
+                                     f' body1="C_{i}_{j}_{k-1}" body2="C_{i}_{j}_{k}"'
+                                     f' relpose="0 0 {H} 1 0 0 0"/>')
+        for k in range(nz + 1):
+            col_k = max(0, k - 1) if k > 0 else 0
+            for j in range(ny + 1):
+                for i in range(nx):
+                    dx_i, dz_i = L / 2, cz(k) - (cz(col_k) + col_half_h)
+                    xml_parts.append(f'    <weld name="bx_{i}_{j}_{k}_i"'
+                                     f' body1="C_{i}_{j}_{col_k}" body2="BX_{i}_{j}_{k}"'
+                                     f' relpose="{dx_i} 0 {dz_i} 1 0 0 0"/>')
+                    dx_j, dz_j = -L / 2, cz(k) - (cz(col_k) + col_half_h)
+                    xml_parts.append(f'    <weld name="bx_{i}_{j}_{k}_j"'
+                                     f' body1="C_{i+1}_{j}_{col_k}" body2="BX_{i}_{j}_{k}"'
+                                     f' relpose="{dx_j} 0 {dz_j} 1 0 0 0"/>')
+        for k in range(nz + 1):
+            col_k = max(0, k - 1) if k > 0 else 0
+            for j in range(ny):
+                for i in range(nx + 1):
+                    dy_i, dz_i = L / 2, cz(k) - (cz(col_k) + col_half_h)
+                    xml_parts.append(f'    <weld name="by_{i}_{j}_{k}_i"'
+                                     f' body1="C_{i}_{j}_{col_k}" body2="BY_{i}_{j}_{k}"'
+                                     f' relpose="0 {dy_i} {dz_i} 1 0 0 0"/>')
+                    dy_j, dz_j = -L / 2, cz(k) - (cz(col_k) + col_half_h)
+                    xml_parts.append(f'    <weld name="by_{i}_{j}_{k}_j"'
+                                     f' body1="C_{i}_{j+1}_{col_k}" body2="BY_{i}_{j}_{k}"'
+                                     f' relpose="0 {dy_j} {dz_j} 1 0 0 0"/>')
 
     xml_parts.append('  </equality>')
     xml_parts.append('</mujoco>')
     return '\n'.join(xml_parts)
 
 
-def run_mujoco(fem: dict, enable_fracture: bool = False, show_gui: bool = True):
+def run_mujoco(fem: dict, enable_fracture: bool = False, show_gui: bool = True, use_anchors: bool = False):
     """生成 MuJoCo 模型并执行实时物理仿真。"""
     if not MUJOCO_AVAILABLE:
         print("[SKIP] pip install mujoco 后重试")
@@ -368,7 +434,7 @@ def run_mujoco(fem: dict, enable_fracture: bool = False, show_gui: bool = True):
     crit_pos = (ci, cj, ck)
 
     print(f"\n  生成 MuJoCo 模型 ({nx}x{ny}x{nz} 框架)...")
-    xml = gen_mujoco_xml(fem, crit_pos)
+    xml = gen_mujoco_xml(fem, crit_pos, use_anchors=use_anchors)
 
     # 保存 XML
     xml_path = 'frame_model.xml'
@@ -393,11 +459,15 @@ def run_mujoco(fem: dict, enable_fracture: bool = False, show_gui: bool = True):
     for i in range(model.neq):
         print(f"    {i}")
 
-    crit_base = f'base_{ci}_{cj}_{ck}'
-    crit_top = f'top_{ci}_{cj}_{ck}'
+    if use_anchors:
+        crit_names = [f'base_{ci}_{cj}_{ck}', f'top_{ci}_{cj}_{ck}']
+    elif ck == 0:
+        crit_names = [f'base_{ci}_{cj}_0']
+    else:
+        crit_names = [f'col_{ci}_{cj}_{ck}']
 
     crit_eq_ids = []
-    for name in [crit_base, crit_top]:
+    for name in crit_names:
         idx = eq_id(name)
         if idx >= 0:
             crit_eq_ids.append(idx)
@@ -563,6 +633,8 @@ def main():
                        help='开启自动断裂扩展 (需 --physics, 默认关闭)')
     parser.add_argument('--no-gui', action='store_true',
                        help='无 GUI 模式 (仅命令行输出，不打开 3D 窗口)')
+    parser.add_argument('--mode', type=str, default='weld', choices=['weld', 'anchor'],
+                       help='焊接模式: weld=直接焊接(默认), anchor=anchor中间体')
     parser.add_argument('--nx', type=int, default=2,
                        help='X 方向跨数 (默认 2)')
     parser.add_argument('--ny', type=int, default=2,
@@ -583,7 +655,9 @@ def main():
     if args.physics:
         print(f"\n[Phase 2] MuJoCo 物理仿真")
         print("-" * 30)
-        run_mujoco(fem, enable_fracture=args.fracture, show_gui=not args.no_gui)
+        run_mujoco(fem, enable_fracture=args.fracture,
+                      show_gui=not args.no_gui,
+                      use_anchors=(args.mode == 'anchor'))
     else:
         print(f"\n[Phase 2] 跳过 (加 --physics 运行仿真)")
         print("-" * 30)

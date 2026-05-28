@@ -28,6 +28,10 @@ OpenSeesPy（有限元分析）+ 物理引擎（MuJoCo / PyBullet）的管线验
 | `--physics` | 执行物理引擎仿真（不加则仅做 FEM 分析）| 关闭 |
 | `--fracture` | 开启自动断裂扩展（需配合 `--physics`）| 关闭 |
 | `--no-gui` | 无 GUI 模式（不打开 3D 窗口，仅命令行输出）| GUI 打开 |
+| `--mode weld\|anchor` | 焊接模式: `weld`=直接焊接(柱→世界/柱), `anchor`=每个节点一个中间体 | `weld` |
+| `--nx N` | X 方向跨数 | 2 |
+| `--ny N` | Y 方向跨数 | 2 |
+| `--nz N` | 层数 | 3 |
 
 ### 四种运行模式
 
