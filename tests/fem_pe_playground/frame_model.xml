@@ -1,0 +1,94 @@
+<?xml version="1.0"?>
+<mujoco model="frame_3d">
+  <option gravity="0 0 -9.81" timestep="0.004" iterations="100" tolerance="1e-8"/>
+  <visual><global offwidth="1200" offheight="800"/></visual>
+  <asset>
+    <texture name="grid" type="2d" builtin="checker" width="512" height="512" rgb1=".15 .15 .15" rgb2=".25 .25 .25"/>
+    <material name="grid" texture="grid" texrepeat="1 1" texuniform="true"/>
+  </asset>
+  <worldbody>
+    <geom name="ground" type="plane" size="8 8 0.1" material="grid"/>
+    <body name="anchor_ground_1" pos="-2.0 -2.0 0.0">
+      <freejoint/>
+      <geom type="sphere" size="0.02" rgba="0 0 0 0"/>
+    </body>
+    <body name="anchor_ground_2" pos="2.0 -2.0 0.0">
+      <freejoint/>
+      <geom type="sphere" size="0.02" rgba="0 0 0 0"/>
+    </body>
+    <body name="anchor_ground_3" pos="2.0 2.0 0.0">
+      <freejoint/>
+      <geom type="sphere" size="0.02" rgba="0 0 0 0"/>
+    </body>
+    <body name="anchor_ground_4" pos="-2.0 2.0 0.0">
+      <freejoint/>
+      <geom type="sphere" size="0.02" rgba="0 0 0 0"/>
+    </body>
+    <body name="joint_5" pos="-2.0 -2.0 3.0">
+      <freejoint/>
+      <geom type="sphere" size="0.03" rgba=".5 .5 .5 .3"/>
+    </body>
+    <body name="joint_6" pos="2.0 -2.0 3.0">
+      <freejoint/>
+      <geom type="sphere" size="0.03" rgba=".5 .5 .5 .3"/>
+    </body>
+    <body name="joint_7" pos="2.0 2.0 3.0">
+      <freejoint/>
+      <geom type="sphere" size="0.03" rgba=".5 .5 .5 .3"/>
+    </body>
+    <body name="joint_8" pos="-2.0 2.0 3.0">
+      <freejoint/>
+      <geom type="sphere" size="0.03" rgba=".5 .5 .5 .3"/>
+    </body>
+    <body name="C1" pos="-2.0 -2.0 1.5">
+      <freejoint/>
+      <geom type="box" size="0.075 0.075 1.5" rgba="1 0.2 0.2 1"/>
+    </body>
+    <body name="C2" pos="2.0 -2.0 1.5">
+      <freejoint/>
+      <geom type="box" size="0.075 0.075 1.5" rgba="0.7 0.7 0.7 1"/>
+    </body>
+    <body name="C3" pos="2.0 2.0 1.5">
+      <freejoint/>
+      <geom type="box" size="0.075 0.075 1.5" rgba="0.7 0.7 0.7 1"/>
+    </body>
+    <body name="C4" pos="-2.0 2.0 1.5">
+      <freejoint/>
+      <geom type="box" size="0.075 0.075 1.5" rgba="0.7 0.7 0.7 1"/>
+    </body>
+    <body name="B5" pos="0.0 -2.0 3.0">
+      <freejoint/>
+      <geom type="box" size="2.0 0.0375 0.075" rgba="0.3 0.3 0.3 1"/>
+    </body>
+    <body name="B6" pos="0.0 2.0 3.0">
+      <freejoint/>
+      <geom type="box" size="2.0 0.0375 0.075" rgba="0.3 0.3 0.3 1"/>
+    </body>
+    <body name="B7" pos="-2.0 0.0 3.0">
+      <freejoint/>
+      <geom type="box" size="0.0375 2.0 0.075" rgba="0.3 0.3 0.3 1"/>
+    </body>
+    <body name="B8" pos="2.0 0.0 3.0">
+      <freejoint/>
+      <geom type="box" size="0.0375 2.0 0.075" rgba="0.3 0.3 0.3 1"/>
+    </body>
+  </worldbody>
+  <equality>
+    <weld name="base_1" body1="anchor_ground_1" body2="C1" relpose="0 0 1.5 1 0 0 0"/>
+    <weld name="base_2" body1="anchor_ground_2" body2="C2" relpose="0 0 1.5 1 0 0 0"/>
+    <weld name="base_3" body1="anchor_ground_3" body2="C3" relpose="0 0 1.5 1 0 0 0"/>
+    <weld name="base_4" body1="anchor_ground_4" body2="C4" relpose="0 0 1.5 1 0 0 0"/>
+    <weld name="top_1" body1="C1" body2="joint_5" relpose="0 0 1.5 1 0 0 0"/>
+    <weld name="top_2" body1="C2" body2="joint_6" relpose="0 0 1.5 1 0 0 0"/>
+    <weld name="top_3" body1="C3" body2="joint_7" relpose="0 0 1.5 1 0 0 0"/>
+    <weld name="top_4" body1="C4" body2="joint_8" relpose="0 0 1.5 1 0 0 0"/>
+    <weld name="B5_i" body1="B5" body2="joint_5" relpose="-2.0 0 0 1 0 0 0"/>
+    <weld name="B5_j" body1="B5" body2="joint_6" relpose="2.0 0 0 1 0 0 0"/>
+    <weld name="B6_i" body1="B6" body2="joint_8" relpose="-2.0 0 0 1 0 0 0"/>
+    <weld name="B6_j" body1="B6" body2="joint_7" relpose="2.0 0 0 1 0 0 0"/>
+    <weld name="B7_i" body1="B7" body2="joint_5" relpose="0 -2.0 0 1 0 0 0"/>
+    <weld name="B7_j" body1="B7" body2="joint_8" relpose="0 2.0 0 1 0 0 0"/>
+    <weld name="B8_i" body1="B8" body2="joint_6" relpose="0 -2.0 0 1 0 0 0"/>
+    <weld name="B8_j" body1="B8" body2="joint_7" relpose="0 2.0 0 1 0 0 0"/>
+  </equality>
+</mujoco>
