@@ -1,0 +1,26 @@
+#!/bin/bash
+# XuanwuAI Pre-commit Hook
+# Runs CI checks locally before allowing a commit.
+# Mirrors .github/workflows/ci.yml
+
+set -e
+
+ROOT_DIR=$(git rev-parse --show-toplevel)
+PYTHON="$ROOT_DIR/gateway/venv/Scripts/python.exe"
+# Fallback for Linux/macOS or non-standard venv
+if [ ! -f "$PYTHON" ]; then
+    PYTHON="$ROOT_DIR/gateway/venv/bin/python"
+fi
+if [ ! -f "$PYTHON" ]; then
+    PYTHON="python"
+fi
+
+echo ""
+echo "============================================"
+echo " XuanwuAI Pre-commit Checks"
+echo "============================================"
+echo ""
+
+# Run the smart runner
+"$PYTHON" "$ROOT_DIR/scripts/pre_commit_runner.py" "$@"
+exit $?

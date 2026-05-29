@@ -5,6 +5,15 @@ cd /d "%~dp0"
 echo === XuanwuAI Gateway + Frontend ===
 echo.
 
+REM Auto-setup Git pre-commit hook (runs pytest/tsc/eslint on git commit)
+for /f "usebackq delims=" %%p in (`git config core.hooksPath 2^>nul`) do set "HOOKS_PATH=%%p"
+if not "%HOOKS_PATH%"==".githooks" (
+    echo [SETUP] Activating pre-commit hook...
+    git config core.hooksPath .githooks
+    echo [OK] Pre-commit hook ready.
+    echo.
+)
+
 REM Resource Pre-check
 echo [CHECK] Checking system resources...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "& '%~dp0_resource_guard.ps1' -mode precheck"
