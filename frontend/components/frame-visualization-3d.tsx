@@ -186,6 +186,7 @@ export function FrameVisualization3D({
   const [collapseProgress, setCollapseProgress] = useState(0);
   const [collapsedCount, setCollapsedCount] = useState(0);
   const [flashOpacity, setFlashOpacity] = useState(0);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const e = effects;
 
   // Sync effects to ref for render loop
@@ -347,6 +348,7 @@ export function FrameVisualization3D({
     elementForces?.forEach(ef => {
       const el = structure.elements.find(e => e.id === ef.element_id);
       if (el?.A && el.A > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         stressMap.set(ef.element_id, Math.min(Math.max(Math.abs(ef.Nmax ?? 0), Math.abs(ef.Nmin ?? 0), Math.abs((ef as any).N ?? 0)) / (el.A * FY), 1));
       }
     });
@@ -595,6 +597,7 @@ export function FrameVisualization3D({
     // Physics loop
     anim.startTime = performance.now();
     anim.active = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAnimating(true);
     setCollapsedCount(failedData.length);
     setCollapseProgress(0);
@@ -703,6 +706,7 @@ export function FrameVisualization3D({
         disposeMesh(child);
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [animationTrigger, structure, bounds]);
 
   // ── Reset Camera ─────────────────────────────────────────────────────

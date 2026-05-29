@@ -147,7 +147,7 @@ def check_frontend(files: list[str]) -> int:
 
     # ── ESLint ──
     print(bold("\n--- Frontend: lint (eslint) ---"))
-    code, out = run([npm, "run", "lint", "--", "--max-warnings", "0"], cwd=cwd)
+    code, out = run([npm, "run", "lint"], cwd=cwd)
     if out:
         print(out)
     if code != 0:

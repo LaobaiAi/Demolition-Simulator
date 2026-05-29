@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
 
 export interface Theme {
   key: string;
@@ -68,23 +68,17 @@ export function useTheme() {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState(DEFAULT_THEME);
-
-  useEffect(() => {
+  const [theme, setThemeState] = useState(() => {
     // Read the theme applied by the inline script in layout
     const current = document.documentElement.className;
     const match = THEMES.find((t) => current.includes(t.key));
-    if (match) {
-      setThemeState(match.key);
-    } else {
-      try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved && THEMES.some((t) => t.key === saved)) {
-          setThemeState(saved);
-        }
-      } catch {}
-    }
-  }, []);
+    if (match) return match.key;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved && THEMES.some((t) => t.key === saved)) return saved;
+    } catch {}
+    return DEFAULT_THEME;
+  });
 
   const setTheme = useCallback((key: string) => {
     setThemeState(key);
