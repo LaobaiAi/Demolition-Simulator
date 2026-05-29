@@ -17,7 +17,7 @@ describe("Home page", () => {
     });
 
     render(<Home />);
-    expect(screen.getByText(/XuanwuAI/)).toBeInTheDocument();
+    expect(screen.getByText(/玄武/)).toBeInTheDocument();
   });
 
   it("renders the system status indicator", () => {
