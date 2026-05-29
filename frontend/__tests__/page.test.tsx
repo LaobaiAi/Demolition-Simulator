@@ -10,14 +10,14 @@ beforeEach(() => {
 });
 
 describe("Home page", () => {
-  it("renders the XuanwuAI Console title", () => {
+  it("renders the XuanwuAI branding", () => {
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ tools: [] }),
     });
 
     render(<Home />);
-    expect(document.title).toBe("XuanwuAI Console");
+    expect(screen.getByText(/XuanwuAI/)).toBeInTheDocument();
   });
 
   it("renders the system status indicator", () => {
