@@ -340,6 +340,7 @@ export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof localStorage === "undefined") return false;
     try {
       const saved = localStorage.getItem("xuanwu_sidebar_collapsed");
       return saved === "true";
@@ -542,7 +543,10 @@ export default function Home() {
   const LLM_STORAGE_KEY = "xuanwu_llm_profiles";
   const COMMON_MODELS = ["gpt-4o", "gpt-4o-mini", "deepseek-v4-pro", "deepseek-v4-chat", "claude-sonnet-4-6", "claude-opus-4-7"];
 
-  const [lang, setLang] = useState<Lang>(() => getSavedLang());
+  const [lang, setLang] = useState<Lang>(() => {
+    if (typeof localStorage === "undefined") return "en";
+    return getSavedLang();
+  });
 
   const handleLangChange = (newLang: Lang) => {
     setLang(newLang);

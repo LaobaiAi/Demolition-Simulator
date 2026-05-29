@@ -69,6 +69,7 @@ export function useTheme() {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState(() => {
+    if (typeof document === "undefined") return DEFAULT_THEME;
     // Read the theme applied by the inline script in layout
     const current = document.documentElement.className;
     const match = THEMES.find((t) => current.includes(t.key));
