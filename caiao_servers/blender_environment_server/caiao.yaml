@@ -1,0 +1,18 @@
+name: blender_environment_server
+kind: infrastructure
+description: "Shared Blender environment provider — resolves Blender binary path, validates environment health, provides pipeline directory paths and project configuration"
+start_mode: eager
+
+tools:
+  - name: resolve_blender_path
+    description: "Find and return the Blender executable path with version information"
+    tags: [blender, environment, discovery]
+  - name: validate_environment
+    description: "Comprehensive environment check — Blender binary, pipeline scripts, data files"
+    tags: [blender, diagnostics, validation]
+  - name: provide_pipeline_paths
+    description: "Return standardized pipeline directory paths (scripts, data, output)"
+    tags: [blender, paths, configuration]
+  - name: provide_config
+    description: "Return the loaded project_config.json content"
+    tags: [blender, config, building-parameters]

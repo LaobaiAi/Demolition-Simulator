@@ -8,9 +8,16 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 import subprocess
+import sys
 import time
-from datetime import datetime
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from blender_pipeline.common import (
+    find_blender, run_blender_script, get_pipeline_paths,
+    load_project_config, make_project_dir, find_video_file,
+)
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -19,70 +26,21 @@ from mcp.types import Tool, TextContent
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("blender_pipeline")
 
-SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(os.path.dirname(SERVER_DIR))
-BLENDER_PIPELINE_DIR = os.path.join(PROJECT_ROOT, "blender_pipeline")
-SCRIPTS_DIR = os.path.join(BLENDER_PIPELINE_DIR, "scripts")
-OUTPUT_BASE = os.path.join(BLENDER_PIPELINE_DIR, "output")
-DATA_DIR = os.path.join(BLENDER_PIPELINE_DIR, "data")
+_paths = get_pipeline_paths()
+SCRIPTS_DIR = _paths["scripts_dir"]
+OUTPUT_BASE = _paths["output_dir"]
+DATA_DIR = _paths["data_dir"]
 
 server = Server("blender-pipeline")
 
 
-def _find_blender():
-    exe = os.environ.get("BLENDER_EXE", "")
-    if exe and os.path.exists(exe):
-        return exe
-    portable = os.path.join(BLENDER_PIPELINE_DIR, "blender_portable", "blender-4.2.8-windows-x64", "blender.exe")
-    if os.path.exists(portable):
-        return portable
-    for p in os.environ.get("PATH", "").split(os.pathsep):
-        candidate = os.path.join(p, "blender.exe")
-        if os.path.exists(candidate):
-            return candidate
-    return None
-
-
-def _run_blender(script_name, blend_input=None, env_extra=None, timeout=300, background=True):
-    blender_exe = _find_blender()
-    if not blender_exe:
-        return False, {"error": "Blender not found. Set BLENDER_EXE env var or install Blender."}
-
-    script_path = os.path.join(SCRIPTS_DIR, script_name)
-    if not os.path.exists(script_path):
-        return False, {"error": f"Script not found: {script_path}"}
-
-    cmd = [blender_exe]
-    if background:
-        cmd.append("--background")
-    if blend_input and os.path.exists(blend_input):
-        cmd.append(blend_input)
-    cmd.extend(["--python", script_path])
-
-    env = os.environ.copy()
-    if env_extra:
-        env.update(env_extra)
-
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, encoding='utf-8', errors='replace', env=env)
-        output_lines = [l.strip() for l in r.stdout.split('\n') if l.strip()]
-        if r.returncode != 0:
-            error_lines = [l.strip() for l in r.stderr.split('\n') if l.strip()][:10]
-            return False, {"error": f"Blender exited with code {r.returncode}", "stderr": error_lines, "stdout": output_lines[-20:]}
-        return True, {"status": "ok", "output": output_lines}
-    except subprocess.TimeoutExpired:
-        return False, {"error": f"Blender script timed out ({timeout}s)"}
-    except Exception as e:
-        return False, {"error": str(e)}
-
-
-def _make_project_dir(project_name):
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    name = project_name.replace(" ", "_")
-    proj_dir = os.path.join(OUTPUT_BASE, f"{name}_{ts}")
-    blend_dir = os.path.join(proj_dir, "blend")
-    os.makedirs(blend_dir, exist_ok=True)
-    return proj_dir, blend_dir
+STAGES = [
+    ("build", "generate_building.py", None, 120, True),
+    ("animate", "apply_demolition.py", None, 300, True),
+    ("machinery", "add_machinery.py", None, 120, True),
+    ("render", "render.py", None, 1200, False),
+    ("preview", "preview_render.py", None, 600, True),
+]
 
 
 TOOLS = [
@@ -166,6 +124,21 @@ TOOLS = [
     ),
 ]
 
+STAGE_BLEND_FILES = {
+    "build": "scene_base.blend",
+    "animate": "scene_animated.blend",
+    "machinery": "scene_final.blend",
+}
+
+STAGE_REQUIRES_INPUT = {"animate", "machinery", "render", "preview"}
+
+
+def _get_stage_config(stage_name):
+    for s in STAGES:
+        if s[0] == stage_name:
+            return s
+    return None
+
 
 def _handle_run_full_pipeline(arguments):
     with_machinery = arguments.get("with_machinery", True)
@@ -173,87 +146,83 @@ def _handle_run_full_pipeline(arguments):
     config_override = arguments.get("config_override")
 
     custom_out = arguments.get("output_dir")
+    config = load_project_config() if (not custom_out or config_override) else None
+
     if custom_out:
         proj_dir = custom_out
         blend_dir = os.path.join(proj_dir, "blend")
         os.makedirs(blend_dir, exist_ok=True)
     else:
-        config_path = os.path.join(DATA_DIR, "project_config.json")
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-        proj_name = config.get("project_name", "demolition")
-        proj_dir, blend_dir = _make_project_dir(proj_name)
+        if config_override:
+            config["building"].update(config_override)
+        proj_name = config.get("project_name", "demolition") if config else None
+        proj_dir, blend_dir = make_project_dir(proj_name)
 
     results = {"pipeline": "full", "project_dir": proj_dir, "stages": {}}
     start_time = time.time()
 
-    if config_override:
-        config_path = os.path.join(DATA_DIR, "project_config.json")
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-        config["building"].update(config_override)
+    env_base = {"BLENDER_OUTPUT_DIR": blend_dir}
+    if config_override and config:
         tmp_config = os.path.join(blend_dir, "_runtime_config.json")
         with open(tmp_config, "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
-        env_build = {"BLENDER_OUTPUT_DIR": blend_dir, "BLENDER_CONFIG_OVERRIDE": tmp_config}
-    else:
-        env_build = {"BLENDER_OUTPUT_DIR": blend_dir}
+        env_base["BLENDER_CONFIG_OVERRIDE"] = tmp_config
 
-    logger.info("Stage 1/4: Building frame model...")
-    ok, r = _run_blender("generate_building.py", env_extra=env_build, timeout=120)
-    blend_base = os.path.join(blend_dir, "scene_base.blend")
-    results["stages"]["build"] = {
-        "success": ok,
-        "blend_file": blend_base if os.path.exists(blend_base) else None,
-        **r,
-    }
-    if not ok:
-        results["duration_s"] = round(time.time() - start_time, 1)
-        return results
+    pipeline_stages = [
+        ("build", "generate_building.py", None, 120, True, "scene_base.blend", "blend_file"),
+        ("animate", "apply_demolition.py", None, 300, True, "scene_animated.blend", "blend_file"),
+    ]
 
-    logger.info("Stage 2/4: Applying demolition animation...")
-    ok, r = _run_blender("apply_demolition.py", blend_input=blend_base, env_extra={"BLENDER_OUTPUT_DIR": blend_dir}, timeout=300)
-    blend_animated = os.path.join(blend_dir, "scene_animated.blend")
-    csv_path = os.path.join(proj_dir, "computed_demolition_schedule.csv")
-    results["stages"]["animate"] = {
-        "success": ok,
-        "blend_file": blend_animated if os.path.exists(blend_animated) else None,
-        "schedule_csv": csv_path if os.path.exists(csv_path) else None,
-        **r,
-    }
-    if not ok:
-        results["duration_s"] = round(time.time() - start_time, 1)
-        return results
+    blend_base = None
+    blend_animated = None
+
+    for stage_name, script, _, timeout, bg, blend_name, result_key in pipeline_stages:
+        logger.info(f"Stage: {stage_name}...")
+        blend_input = blend_base if stage_name == "animate" else None
+        result = run_blender_script(script, blend_input=blend_input, env_extra=env_base, timeout=timeout, background=bg)
+        ok = result.get("success", False)
+        blend_path = os.path.join(blend_dir, blend_name)
+        stage_result = {"success": ok, result_key: blend_path if os.path.exists(blend_path) else None}
+        stage_result.update({k: v for k, v in result.items() if k != "success"})
+
+        if stage_name == "build":
+            blend_base = blend_path
+            if not ok:
+                results["stages"]["build"] = stage_result
+                results["duration_s"] = round(time.time() - start_time, 1)
+                return results
+        elif stage_name == "animate":
+            blend_animated = blend_path
+            csv_path = os.path.join(proj_dir, "computed_demolition_schedule.csv")
+            stage_result["schedule_csv"] = csv_path if os.path.exists(csv_path) else None
+
+        results["stages"][stage_name] = stage_result
+        if not ok:
+            results["duration_s"] = round(time.time() - start_time, 1)
+            return results
 
     if with_machinery:
-        logger.info("Stage 3/4: Adding machinery...")
-        env_mach = {"BLENDER_OUTPUT_DIR": blend_dir}
-        ok, r = _run_blender("add_machinery.py", blend_input=blend_animated, env_extra=env_mach, timeout=120)
+        logger.info("Stage: machinery...")
+        result = run_blender_script("add_machinery.py", blend_input=blend_animated, env_extra=env_base, timeout=120, background=True)
     else:
-        import shutil
         blend_final = os.path.join(blend_dir, "scene_final.blend")
         shutil.copy2(blend_animated, blend_final)
-        ok, r = True, {"status": "ok", "output": ["Machinery skipped, copied scene_animated to scene_final"]}
+        result = {"success": True, "output": ["Machinery skipped, copied scene_animated to scene_final"]}
     blend_final = os.path.join(blend_dir, "scene_final.blend")
     results["stages"]["machinery"] = {
-        "success": ok,
+        "success": result.get("success", False),
         "blend_file": blend_final if os.path.exists(blend_final) else None,
-        **r,
+        **{k: v for k, v in result.items() if k != "success"},
     }
 
-    if with_render and ok:
-        logger.info("Stage 4/4: Rendering animation...")
-        ok, r = _run_blender("render.py", blend_input=blend_final, env_extra={"BLENDER_OUTPUT_DIR": blend_dir}, timeout=1200, background=False)
-        video_file = None
-        for root, dirs, files in os.walk(proj_dir):
-            for fn in files:
-                if fn.endswith('.mp4'):
-                    video_file = os.path.join(root, fn)
-                    break
+    if with_render and result.get("success"):
+        logger.info("Stage: render...")
+        result = run_blender_script("render.py", blend_input=blend_final, env_extra=env_base, timeout=1200, background=False)
+        video_path, _ = find_video_file(proj_dir)
         results["stages"]["render"] = {
-            "success": ok,
-            "video_file": video_file,
-            **r,
+            "success": result.get("success", False),
+            "video_file": video_path,
+            **{k: v for k, v in result.items() if k != "success"},
         }
 
     results["duration_s"] = round(time.time() - start_time, 1)
@@ -267,45 +236,40 @@ def _handle_run_pipeline_stage(arguments):
     blend_input = arguments.get("blend_input")
     output_dir = arguments.get("output_dir")
 
-    stage_map = {
-        "build": ("generate_building.py", None, 120, True),
-        "animate": ("apply_demolition.py", blend_input, 300, True),
-        "machinery": ("add_machinery.py", blend_input, 120, True),
-        "render": ("render.py", blend_input, 1200, False),
-        "preview": ("preview_render.py", blend_input, 600, True),
-    }
+    stage_config = _get_stage_config(stage)
+    if not stage_config:
+        return {"error": f"Unknown stage: {stage}. Choose from: build, animate, machinery, render, preview"}
 
-    if stage not in stage_map:
-        return {"error": f"Unknown stage: {stage}. Choose from: {list(stage_map.keys())}"}
+    _, script, _, timeout, bg = stage_config
 
-    script, blend, timeout, bg = stage_map[stage]
-    if stage in ("animate", "machinery", "render", "preview") and not blend:
+    if stage in STAGE_REQUIRES_INPUT and not blend_input:
         return {"error": f"blend_input is required for stage '{stage}'"}
 
     if not output_dir:
-        output_dir = os.path.dirname(blend) if blend else os.path.join(OUTPUT_BASE, "blend")
+        output_dir = os.path.dirname(blend_input) if blend_input else os.path.join(OUTPUT_BASE, "blend")
     os.makedirs(output_dir, exist_ok=True)
 
     env = {"BLENDER_OUTPUT_DIR": output_dir}
-    ok, r = _run_blender(script, blend_input=blend, env_extra=env, timeout=timeout, background=bg)
+    result = run_blender_script(script, blend_input=blend_input, env_extra=env, timeout=timeout, background=bg)
 
-    result = {"stage": stage, "success": ok, "output_dir": output_dir, **r}
+    stage_result = {"stage": stage, "success": result.get("success", False), "output_dir": output_dir}
+    stage_result.update({k: v for k, v in result.items() if k != "success"})
 
-    blend_files = {
-        "build": "scene_base.blend",
-        "animate": "scene_animated.blend",
-        "machinery": "scene_final.blend",
-    }
-    if stage in blend_files:
-        path = os.path.join(output_dir, blend_files[stage])
+    if stage in STAGE_BLEND_FILES:
+        path = os.path.join(output_dir, STAGE_BLEND_FILES[stage])
         if os.path.exists(path):
-            result["blend_file"] = path
+            stage_result["blend_file"] = path
 
-    return result
+    if stage == "render":
+        video_path, _ = find_video_file(output_dir)
+        if video_path:
+            stage_result["video_file"] = video_path
+
+    return stage_result
 
 
 def _handle_check_environment():
-    blender_exe = _find_blender()
+    blender_exe = find_blender()
     result = {
         "blender_found": blender_exe is not None,
         "blender_path": blender_exe,
@@ -313,12 +277,13 @@ def _handle_check_environment():
 
     if blender_exe:
         try:
-            r = subprocess.run([blender_exe, "--version"], capture_output=True, text=True, timeout=30, encoding='utf-8', errors='replace')
+            r = subprocess.run([blender_exe, "--version"], capture_output=True, text=True,
+                               timeout=30, encoding='utf-8', errors='replace')
             result["blender_version"] = r.stdout.strip().split('\n')[0] if r.returncode == 0 else None
         except Exception:
             result["blender_version"] = None
 
-    result["pipeline_dir"] = BLENDER_PIPELINE_DIR
+    result["pipeline_dir"] = _paths["pipeline_dir"]
     result["scripts"] = {}
     for fn in ["generate_building.py", "apply_demolition.py", "add_machinery.py", "render.py", "preview_render.py"]:
         path = os.path.join(SCRIPTS_DIR, fn)

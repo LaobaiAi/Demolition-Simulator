@@ -1,36 +1,15 @@
-# caiao.yaml — Blender Animate Server manifest
-
 name: blender_animate_server
-version: 0.1.0
-kind: atomic-mcp
 description: "Demolition animation keyframing via Blender — metadata-driven sorting, grouping, and keyframe application for progressive structural collapse"
-status: active
-since: "2026-06-03"
-
 start_mode: lazy
-
-command:
-  python: auto
-  args: ["server.py"]
-  cwd: "."
-  env: {}
 
 health:
   timeout_ms: 300000
-  restart_on_crash: false
-  max_restarts: 2
-  health_check_interval_s: 0
 
 tools:
   - name: apply_demolition_sequence
     description: "Scan element metadata, sort by demolition strategy, and apply visibility/scale/location keyframes"
     tags: [blender, animation, demolition]
 
-capabilities:
-  - demolition_sequencing
-  - keyframe_animation
-  - metadata_sorting
-
-dependencies:
-  python: []
-  system: [blender]
+depends_on:
+  servers:
+    - blender_environment_server

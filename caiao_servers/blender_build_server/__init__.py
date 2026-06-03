@@ -1,1 +1,1 @@
-"""CAIAO Server."""
+"""Blender Build Server — procedural frame structure generation."""

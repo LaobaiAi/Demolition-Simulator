@@ -1,1 +1,1 @@
-"""CAIAO Server."""
+"""Blender Animate Server — demolition animation keyframing."""

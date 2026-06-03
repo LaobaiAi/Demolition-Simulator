@@ -4,7 +4,10 @@ import asyncio
 import json
 import logging
 import os
-import subprocess
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from blender_pipeline.common import find_blender, run_blender_script, get_pipeline_paths, find_video_file
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -13,27 +16,10 @@ from mcp.types import Tool, TextContent
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("blender_render")
 
-SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(os.path.dirname(SERVER_DIR))
-BLENDER_PIPELINE_DIR = os.path.join(PROJECT_ROOT, "blender_pipeline")
-SCRIPTS_DIR = os.path.join(BLENDER_PIPELINE_DIR, "scripts")
-OUTPUT_DIR = os.path.join(BLENDER_PIPELINE_DIR, "output")
+_paths = get_pipeline_paths()
+OUTPUT_DIR = _paths["output_dir"]
 
 server = Server("blender-render")
-
-
-def _find_blender():
-    exe = os.environ.get("BLENDER_EXE", "")
-    if exe and os.path.exists(exe):
-        return exe
-    portable = os.path.join(BLENDER_PIPELINE_DIR, "blender_portable", "blender-4.2.8-windows-x64", "blender.exe")
-    if os.path.exists(portable):
-        return portable
-    for p in os.environ.get("PATH", "").split(os.pathsep):
-        candidate = os.path.join(p, "blender.exe")
-        if os.path.exists(candidate):
-            return candidate
-    return None
 
 
 TOOLS = [
@@ -100,37 +86,12 @@ TOOLS = [
 ]
 
 
-def _run_blender_script(script_name, blend_input=None, env_extra=None, timeout=1200, background=True):
-    blender_exe = _find_blender()
-    if not blender_exe:
-        return {"error": "Blender not found. Set BLENDER_EXE env var or install Blender."}
-
-    script_path = os.path.join(SCRIPTS_DIR, script_name)
-    if not os.path.exists(script_path):
-        return {"error": f"Script not found: {script_path}"}
-
-    cmd = [blender_exe]
-    if background:
-        cmd.append("--background")
-    if blend_input and os.path.exists(blend_input):
-        cmd.append(blend_input)
-    cmd.extend(["--python", script_path])
-
-    env = os.environ.copy()
-    if env_extra:
-        env.update(env_extra)
-
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, encoding='utf-8', errors='replace', env=env)
-        output_lines = [l.strip() for l in r.stdout.split('\n') if l.strip()]
-        if r.returncode != 0:
-            error_lines = [l.strip() for l in r.stderr.split('\n') if l.strip()][:10]
-            return {"error": f"Blender exited with code {r.returncode}", "stderr": error_lines, "stdout": output_lines[-20:]}
-        return {"status": "ok", "returncode": 0, "output": output_lines}
-    except subprocess.TimeoutExpired:
-        return {"error": f"Blender script timed out ({timeout}s)"}
-    except Exception as e:
-        return {"error": str(e)}
+def _attach_video_info(result, output_dir):
+    path, size_mb = find_video_file(output_dir)
+    if path:
+        result["video_file"] = path
+        result["video_size_mb"] = size_mb
+    return result
 
 
 def _handle_render_animation(arguments):
@@ -139,17 +100,8 @@ def _handle_render_animation(arguments):
     os.makedirs(output_dir, exist_ok=True)
 
     env_extra = {"BLENDER_OUTPUT_DIR": output_dir}
-    result = _run_blender_script("render.py", blend_input=blend_input, env_extra=env_extra, timeout=1200, background=False)
-
-    if result.get("status") == "ok":
-        for root, dirs, files in os.walk(output_dir):
-            for fn in files:
-                if fn.endswith('.mp4'):
-                    result["video_file"] = os.path.join(root, fn)
-                    result["video_size_mb"] = round(os.path.getsize(os.path.join(root, fn)) / 1024 / 1024, 1)
-                    break
-
-    return result
+    result = run_blender_script("render.py", blend_input=blend_input, env_extra=env_extra, timeout=1200, background=False)
+    return _attach_video_info(result, output_dir)
 
 
 def _handle_render_preview(arguments):
@@ -158,17 +110,8 @@ def _handle_render_preview(arguments):
     os.makedirs(output_dir, exist_ok=True)
 
     env_extra = {"BLENDER_OUTPUT_DIR": output_dir}
-    result = _run_blender_script("preview_render.py", blend_input=blend_input, env_extra=env_extra, timeout=600, background=True)
-
-    if result.get("status") == "ok":
-        for root, dirs, files in os.walk(output_dir):
-            for fn in files:
-                if fn.endswith('.mp4'):
-                    result["video_file"] = os.path.join(root, fn)
-                    result["video_size_mb"] = round(os.path.getsize(os.path.join(root, fn)) / 1024 / 1024, 1)
-                    break
-
-    return result
+    result = run_blender_script("preview_render.py", blend_input=blend_input, env_extra=env_extra, timeout=600, background=True)
+    return _attach_video_info(result, output_dir)
 
 
 @server.list_tools()
