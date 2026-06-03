@@ -1,0 +1,63 @@
+# caiao.yaml — CAIAO Server manifest template
+# Copy this file to your new server directory and fill in the fields.
+# Every CAIAO Server MUST have a caiao.yaml manifest.
+
+# ── Identity ─────────────────────────────────────────────────────────────
+name: __SERVER_NAME__                 # Unique server name (matches directory)
+version: 0.1.0                        # SemVer
+kind: atomic-mcp                      # atomic-mcp | atomic-class | merged | composite | bridge
+description: ""                       # One-line purpose statement
+status: active                        # active | deprecated | experimental | maintenance
+since: "__DATE__"                     # ISO date of creation
+
+# ── Lifecycle ─────────────────────────────────────────────────────────────
+start_mode: lazy                      # eager | lazy (composite servers: omit this field)
+
+# ── Command (subprocess servers only; omit for composite) ────────────────
+command:
+  python: auto                        # auto = use gateway venv python
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+
+# ── Health ────────────────────────────────────────────────────────────────
+health:
+  timeout_ms: 5000
+  restart_on_crash: false
+  max_restarts: 3
+  health_check_interval_s: 0          # 0 = no periodic check
+
+# ── Tools ─────────────────────────────────────────────────────────────────
+tools: []
+# Example:
+#   - name: my_tool
+#     description: "What this tool does"
+#     tags: [tag1, tag2]
+
+# ── Imports (merged servers only) ─────────────────────────────────────────
+# imports:
+#   - module: server_a.core
+#     symbols: [FuncA, FuncB]
+
+# ── Pipeline (composite servers only) ─────────────────────────────────────
+# pipeline:
+#   - server: some_server
+#     tool: some_tool
+#     map_result: result_var
+#   - server: another_server
+#     tool: another_tool
+#     input_map:
+#       param1: $.previous_step.field_name
+
+# ── Capabilities ────────────────────────────────────────────────────────
+capabilities: []
+
+# ── Dependencies ─────────────────────────────────────────────────────────
+dependencies:
+  python: []
+  system: []
+
+# ── Testing ───────────────────────────────────────────────────────────────
+# testing:
+#   test_file: test_server.py
+#   test_command: ["python", "-m", "pytest", "test_server.py", "-v"]

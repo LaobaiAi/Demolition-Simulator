@@ -207,11 +207,43 @@ def my_merged_tool(args):
 
 See `caiao_servers/quick_analysis_server/server.py` for the full example.
 
+## CAIAO Server Manager (Meta-Server)
+
+The `manager_server` is a self-referential CAIAO server that manages all other CAIAO servers:
+
+```
+┌─────────────────────────────────────────────────┐
+│              Manager Server (meta)              │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
+│  │ Create   │  │ Health   │  │ Orchestrate  │  │
+│  │ Scaffold │  │ Monitor  │  │ Detect Merge │  │
+│  │ Validate │  │ Metrics  │  │ Dep Graph    │  │
+│  └──────────┘  └──────────┘  └──────────────┘  │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
+│  │ Extend   │  │ Migrate  │  │ Search       │  │
+│  │ Add Tool │  │ Rename   │  │ Semantic     │  │
+│  │ Import   │  │ Version  │  │ TF-IDF       │  │
+│  └──────────┘  └──────────┘  └──────────────┘  │
+└──────────┬──────────────┬──────────────────────┘
+           │              │
+    ┌──────▼──────┐  ┌────▼──────────────┐
+    │ caiao.yaml  │  │ Gateway REST APIs │
+    │ (manifests) │  │ /servers/*        │
+    └─────────────┘  └───────────────────┘
+```
+
+**Key principles:**
+- **Dogfooding:** The manager IS a CAIAO server, managed by the same hub it manages
+- **Declarative state:** Manager writes `caiao.yaml` manifests; Gateway auto-discovers them via `caiao_config.py`
+- **GitOps friendly:** All configuration is file-based, version-controllable
+- **24 tools across 6 groups:** Creation, Extension, Enhancement, Migration, Retrieval, Orchestration
+
 ## Full Reference
 
 See **[`CAIAO_PROTOCOL.md`](CAIAO_PROTOCOL.md)** for the complete CAIAO reference:
 - Server independence principle
 - Server registry (all servers, tools, status)
+- Server manager documentation
 - Merge roadmap
 - Naming conventions
 - Contract rules
