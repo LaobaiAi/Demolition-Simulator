@@ -3,25 +3,23 @@ render.py - OpenGL 视口渲染（UI模式，支持材料颜色）
 必须运行在非背景模式下才能使用GPU渲染颜色。
 """
 
-import bpy
 import json
-import os
-import sys
 import math
+import os
 from datetime import datetime
 
-BLENDER_PIPELINE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BLENDER_PIPELINE_DIR, "data")
-OUTPUT_BASE = os.path.join(BLENDER_PIPELINE_DIR, "output")
+import bpy
+
+from _common import compute_scene_bounds, OUTPUT_DIR
 
 
 def load_config():
-    with open(os.path.join(DATA_DIR, "project_config.json"), "r", encoding="utf-8") as f:
+    data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+    with open(os.path.join(data_dir, "project_config.json"), "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def setup_viewport():
-    """设置视口为 SOLID+MATERIAL 模式（唯一能在集成显卡上渲染颜色的方案）"""
     for window in bpy.context.window_manager.windows:
         for area in window.screen.areas:
             if area.type == 'VIEW_3D':
@@ -35,12 +33,11 @@ def setup_viewport():
 
 
 def setup_sky(config):
-    """设置天空颜色"""
     world = bpy.context.scene.world
     if world is None:
         world = bpy.data.worlds.new("World")
         bpy.context.scene.world = world
-    world.color = (0.45, 0.60, 0.85)  # 经典淡蓝天空
+    world.color = (0.45, 0.60, 0.85)
     print(f"  [OK] 天空: 淡蓝色")
 
 
@@ -54,48 +51,24 @@ def setup_lighting():
     print("  [OK] 光照已设置")
 
 
-def setup_camera(config, bld_override=None):
-    """根据场景尺寸智能设置摄像机，确保全景可见"""
+def setup_camera(config, bounds):
     scene = bpy.context.scene
+    cam_distance = bounds['diagonal'] * 1.2
+    cam_height = bounds['diagonal'] * 0.5
+    clip_end = bounds['diagonal'] * 3
 
-    # 从场景几何计算实际尺寸
-    min_x = min_y = min_z = float('inf')
-    max_x = max_y = max_z = float('-inf')
-    for obj in bpy.data.objects:
-        if obj.type != 'MESH' or obj.name == 'Ground':
-            continue
-        for vert in obj.data.vertices:
-            wc = obj.matrix_world @ vert.co
-            min_x = min(min_x, wc.x); max_x = max(max_x, wc.x)
-            min_y = min(min_y, wc.y); max_y = max(max_y, wc.y)
-            min_z = min(min_z, wc.z); max_z = max(max_z, wc.z)
-
-    total_w = max_x - min_x
-    total_d = max_y - min_y
-    total_h = max_z - min_z
-    cx = (min_x + max_x) / 2.0
-    cy = (min_y + max_y) / 2.0
-    cz = (min_z + max_z) / 2.0
-
-    # 相机距离和高度(与白模验证通过的同款公式)
-    diagonal = math.sqrt(total_w**2 + total_d**2 + total_h**2)
-    cam_distance = diagonal * 1.2
-    cam_height = diagonal * 0.5
-    clip_end = diagonal * 3
-
-    # 清除旧相机和目标（防止残留旧参数）
     for obj in list(bpy.data.objects):
         if obj.type == 'CAMERA' or obj.name == 'CameraTarget':
             bpy.data.objects.remove(obj)
-    # 广角镜头确保全景
-    bpy.ops.object.empty_add(type='PLAIN_AXES', location=(cx, cy, cz))
+
+    bpy.ops.object.empty_add(type='PLAIN_AXES', location=(bounds['cx'], bounds['cy'], bounds['cz']))
     target = bpy.context.active_object
     target.name = "CameraTarget"
 
     bpy.ops.object.camera_add(
-        location=(cx + cam_distance * 0.7,
-                  cy - cam_distance * 0.7,
-                  cz + cam_height))
+        location=(bounds['cx'] + cam_distance * 0.7,
+                  bounds['cy'] - cam_distance * 0.7,
+                  bounds['cz'] + cam_height))
     cam = bpy.context.active_object
     cam.name = "MainCamera"
     cam.data.lens = 24.0
@@ -106,23 +79,22 @@ def setup_camera(config, bld_override=None):
     c.up_axis = 'UP_Y'
     scene.camera = cam
 
-    # 摄像机动画: 缓慢环绕，保持同样高度(确保全景)
     total_frames = scene.frame_end - scene.frame_start
     angles = [45, 50, 55]
     for i, ang in enumerate(angles):
         t = int(total_frames * i / (len(angles) - 1)) if len(angles) > 1 else 0
         t = max(0, min(t, total_frames))
-        scene.frame_set(t)
-        cam.location = (cx + cam_distance * math.cos(math.radians(ang)),
-                         cy - cam_distance * math.sin(math.radians(ang)),
-                         cz + cam_height)
-        cam.keyframe_insert(data_path="location", index=-1)
+        cam.location = (bounds['cx'] + cam_distance * math.cos(math.radians(ang)),
+                         bounds['cy'] - cam_distance * math.sin(math.radians(ang)),
+                         bounds['cz'] + cam_height)
+        cam.keyframe_insert(data_path="location", frame=t, index=-1)
+
     if cam.animation_data and cam.animation_data.action:
         for fc in cam.animation_data.action.fcurves:
             for kf in fc.keyframe_points:
                 kf.interpolation = 'BEZIER'
 
-    info = f"{total_w:.0f}x{total_d:.0f}x{total_h:.1f}m, 对角线{diagonal:.0f}m, 距离{cam_distance:.0f}m"
+    info = f"{bounds['width']:.0f}x{bounds['depth']:.0f}x{bounds['height']:.1f}m, 对角线{bounds['diagonal']:.0f}m, 距离{cam_distance:.0f}m"
     print(f"  [OK] 摄像机: {info} | 镜头24mm广角 | 裁剪{clip_end:.0f}m")
 
 
@@ -140,7 +112,6 @@ def setup_render(config, scene):
     scene.render.ffmpeg.ffmpeg_preset = 'GOOD'
     scene.render.ffmpeg.audio_codec = 'NONE'
 
-    # Stamp 时间戳叠加
     scene.render.use_stamp = True
     scene.render.use_stamp_frame = True
     scene.render.use_stamp_time = True
@@ -164,7 +135,6 @@ def render_animation(config):
         print("  [ERROR] 无摄像机!")
         return None
 
-    # 关键：强制所有3D视口切换到相机视角（否则OpenGL渲染不用场景相机）
     for window in bpy.context.window_manager.windows:
         for area in window.screen.areas:
             if area.type == 'VIEW_3D':
@@ -187,10 +157,9 @@ if __name__ == "__main__":
     config = load_config()
     scene = bpy.context.scene
 
-    # 输出目录（带项目名和时间戳）
     project_name = config.get("project_name", "demolition").replace(" ", "_")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    proj_dir = os.path.join(OUTPUT_BASE, f"{project_name}_{timestamp}")
+    proj_dir = os.path.join(OUTPUT_DIR, f"{project_name}_{timestamp}")
     os.makedirs(proj_dir, exist_ok=True)
 
     ts_short = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -202,10 +171,15 @@ if __name__ == "__main__":
     print(f"  项目目录: {proj_dir}")
     print("=" * 60)
 
+    bounds = compute_scene_bounds()
+    if bounds is None:
+        print("  [ERROR] 场景中没有网格物体!")
+        exit(1)
+
     setup_viewport()
     setup_sky(config)
     setup_lighting()
-    setup_camera(config)
+    setup_camera(config, bounds)
     setup_render(config, scene)
     render_animation(config)
 

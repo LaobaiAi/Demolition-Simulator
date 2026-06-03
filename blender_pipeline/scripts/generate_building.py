@@ -15,15 +15,12 @@ generate_building.py - 程序化生成钢筋混凝土框架结构
 运行: blender --background --python generate_building.py
 """
 
-import bpy
 import json
 import os
 
-BLENDER_PIPELINE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BLENDER_PIPELINE_DIR, "data")
-OUTPUT_DIR = os.path.join(BLENDER_PIPELINE_DIR, "output")
-BLEND_DIR = os.environ.get("BLENDER_OUTPUT_DIR", os.path.join(OUTPUT_DIR, "blend"))
-os.makedirs(BLEND_DIR, exist_ok=True)
+import bpy
+
+from _common import add_cube, clear_scene, make_material, save_blend, DATA_DIR, BLEND_DIR
 
 
 def load_config():
@@ -35,37 +32,14 @@ def load_config():
         return json.load(f)
 
 
-def clear_scene():
-    bpy.ops.object.select_all(action='SELECT')
-    bpy.ops.object.delete(use_global=False)
-    for block in bpy.data.meshes:
-        bpy.data.meshes.remove(block)
-    for block in bpy.data.materials:
-        bpy.data.materials.remove(block)
-
-
-def make_material(name, base_rgb):
-    mat = bpy.data.materials.new(name=name)
-    mat.use_nodes = True
-    nodes = mat.node_tree.nodes
-    nodes.clear()
-    bsdf = nodes.new(type='ShaderNodeBsdfPrincipled')
-    bsdf.inputs['Base Color'].default_value = (*base_rgb, 1.0)
-    bsdf.inputs['Roughness'].default_value = 0.6
-    out = nodes.new(type='ShaderNodeOutputMaterial')
-    mat.node_tree.links.new(bsdf.outputs['BSDF'], out.inputs['Surface'])
-    mat.diffuse_color = (*base_rgb, 1.0)
-    return mat
-
-
 def get_materials():
     return {
-        "COL": make_material("Mat_Column",      (0.65, 0.56, 0.48)),
-        "BMX": make_material("Mat_BeamX",        (0.62, 0.66, 0.70)),
-        "BMY": make_material("Mat_BeamY",        (0.66, 0.70, 0.64)),
-        "SLAB": make_material("Mat_Slab",        (0.82, 0.78, 0.72)),
-        "FND":  make_material("Mat_Foundation",  (0.50, 0.42, 0.36)),
-        "GROUND": make_material("Mat_Ground",    (0.38, 0.44, 0.36)),
+        "COL":    make_material("Mat_Column",      (0.65, 0.56, 0.48)),
+        "BMX":    make_material("Mat_BeamX",        (0.62, 0.66, 0.70)),
+        "BMY":    make_material("Mat_BeamY",        (0.66, 0.70, 0.64)),
+        "SLAB":   make_material("Mat_Slab",         (0.82, 0.78, 0.72)),
+        "FND":    make_material("Mat_Foundation",   (0.50, 0.42, 0.36)),
+        "GROUND": make_material("Mat_Ground",       (0.38, 0.44, 0.36)),
     }
 
 
@@ -79,18 +53,6 @@ def set_element_props(obj, etype, floor, gx, gy, bx, by, importance):
     obj["importance"] = importance
     labels = {"COL": "柱", "BMX": "X向梁", "BMY": "Y向梁", "SLAB": "楼板", "FND": "基础"}
     obj["label_cn"] = f"{labels.get(etype, etype)} {floor}F"
-
-
-def add_cube(name, location, scale, material):
-    bpy.ops.mesh.primitive_cube_add(size=1.0, location=location)
-    obj = bpy.context.active_object
-    obj.name = name
-    obj.scale = scale
-    bpy.ops.object.transform_apply(scale=True)
-    if material:
-        obj.data.materials.append(material)
-        obj.color = material.diffuse_color
-    return obj
 
 
 def build_frame(config):
@@ -131,8 +93,7 @@ def build_frame(config):
                 z_center = z_bottom + story_h / 2.0
                 name = f"COL_{floor_label}F_{ix}_{iy}"
                 obj = add_cube(name, (x, y, z_center),
-                               (col_sz, col_sz, story_h),
-                               mats["COL"])
+                               (col_sz, col_sz, story_h), mats["COL"])
                 set_element_props(obj, "COL", floor_label, ix, iy, -1, -1, imp["column"])
                 all_objects.append(obj)
                 created_count["COL"] += 1
@@ -190,19 +151,10 @@ def build_frame(config):
             all_objects.append(obj)
             created_count["FND"] += 1
 
-    bpy.ops.mesh.primitive_plane_add(size=50, location=(total_wx / 2.0, total_wy / 2.0, -0.05))
-    ground = bpy.context.active_object
-    ground.name = "Ground"
-    ground.data.materials.append(mats["GROUND"])
+    add_cube("Ground", (total_wx / 2.0, total_wy / 2.0, -0.05),
+             (25, 25, 0.01), mats["GROUND"])
 
     return created_count, all_objects
-
-
-def save_blend():
-    path = os.path.join(BLEND_DIR, "scene_base.blend")
-    bpy.ops.wm.save_as_mainfile(filepath=path)
-    print(f"  [OK] 保存: {path}")
-    return path
 
 
 if __name__ == "__main__":
@@ -242,7 +194,7 @@ if __name__ == "__main__":
             if key in sample:
                 print(f"    {key} = {sample[key]}")
 
-    save_blend()
+    save_blend("scene_base.blend")
     print("=" * 60)
     print("  模型生成完成!")
     print("=" * 60)
