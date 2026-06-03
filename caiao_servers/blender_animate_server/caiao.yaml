@@ -1,0 +1,15 @@
+name: blender_animate_server
+description: "Demolition animation keyframing via Blender — metadata-driven sorting, grouping, and keyframe application for progressive structural collapse"
+start_mode: lazy
+
+health:
+  timeout_ms: 300000
+
+tools:
+  - name: apply_demolition_sequence
+    description: "Scan element metadata, sort by demolition strategy, and apply visibility/scale/location keyframes"
+    tags: [blender, animation, demolition]
+
+depends_on:
+  servers:
+    - blender_environment_server

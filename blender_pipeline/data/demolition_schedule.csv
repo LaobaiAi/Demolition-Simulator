@@ -1,0 +1,14 @@
+element_id,element_type,floor,start_frame,end_frame,method,description
+slab_3F,slab,3F,0,48,hide,拆除3层楼板
+beam_x_3F,beam,3F,48,96,hide,拆除3层X向梁
+beam_y_3F,beam,3F,48,96,hide,拆除3层Y向梁
+column_3F,column,3F,96,144,hide,拆除3层柱
+slab_2F,slab,2F,144,192,hide,拆除2层楼板
+beam_x_2F,beam,2F,192,240,hide,拆除2层X向梁
+beam_y_2F,beam,2F,192,240,hide,拆除2层Y向梁
+column_2F,column,2F,240,288,hide,拆除2层柱
+slab_1F,slab,1F,288,336,hide,拆除1层楼板
+beam_x_1F,beam,1F,336,384,hide,拆除1层X向梁
+beam_y_1F,beam,1F,336,384,hide,拆除1层Y向梁
+column_1F,column,1F,384,432,hide,拆除1层柱
+foundation,foundation,0F,432,456,hide,拆除基础

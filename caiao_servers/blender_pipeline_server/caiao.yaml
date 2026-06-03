@@ -1,0 +1,21 @@
+name: blender_pipeline_server
+description: "Full Blender demolition animation pipeline orchestrator — chains build → animate → machinery → render into end-to-end workflow"
+start_mode: lazy
+
+health:
+  timeout_ms: 2400000
+
+tools:
+  - name: run_full_pipeline
+    description: "Run the complete demolition animation pipeline end-to-end (build → animate → machinery → render)"
+    tags: [blender, pipeline, orchestration]
+  - name: run_pipeline_stage
+    description: "Run a single pipeline stage (build, animate, machinery, render, preview)"
+    tags: [blender, pipeline, stage]
+  - name: check_blender_environment
+    description: "Check Blender installation and pipeline file availability"
+    tags: [blender, diagnostics, environment]
+
+depends_on:
+  servers:
+    - blender_environment_server

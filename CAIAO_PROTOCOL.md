@@ -174,6 +174,39 @@ Or copy the template: `caiao_servers/_template/server.py`
 
 Add the server to §8 Server Registry below.
 
+### Server Kinds
+
+CAIAO recognizes three server kinds, declared in the `caiao.yaml` manifest:
+
+| Kind | Purpose | start_mode | Example |
+|------|---------|------------|---------|
+| `atomic-mcp` | Standard MCP server with tools. Independent, single-responsibility. | `lazy` (default) | `anastruct_server`, `blender_build_server` |
+| `composite` | Declarative pipeline that chains tools from other servers through the hub. No subprocess of its own. | — (hub-internal) | `run_full_analysis` |
+| `infrastructure` | Non-functional environment provider. Resolves and validates shared runtime dependencies (binaries, paths, configs). Exposes read-only diagnostic tools. | `eager` | `blender_environment_server` |
+
+**Infrastructure servers** are the newest kind. They solve the "hidden shared dependency" problem — when multiple functional servers all depend on the same external runtime (e.g., Blender, CUDA, a specific Python venv), the dependency is modeled as an explicit server rather than duplicated across manifests and code.
+
+Key properties of infrastructure servers:
+- **Eager start**: start before any dependent functional server. If the infrastructure server fails health check, all dependents are blocked with a clear error.
+- **Read-only tools**: `resolve_*`, `validate_*`, `provide_*` — no side effects, no heavy computation.
+- **Declared dependency**: functional servers declare `depends_on: servers: [<infra_server>]` in their `caiao.yaml`. The hub resolves the dependency graph at startup.
+- **Environment injection**: the hub calls the infrastructure server's tools to get paths/config, then injects them into dependent servers' startup environment. Functional servers never hardcode paths or run their own discovery.
+
+Example manifest declaration in a functional server:
+```yaml
+depends_on:
+  servers:
+    - blender_environment_server
+      # provides: resolve_blender_path, provide_pipeline_paths, provide_config
+```
+
+When the hub loads this server, it:
+1. Starts `blender_environment_server` first (eager)
+2. Calls `resolve_blender_path` → injects `BLENDER_EXE` env var
+3. Calls `provide_pipeline_paths` → injects `PIPELINE_SCRIPTS_DIR`, `PIPELINE_DATA_DIR` env vars
+4. Calls `validate_environment` → if checks fail, skips starting the functional server, reports why
+5. Starts the functional server with the injected environment
+
 ---
 
 ## 6. The Server Merge Pattern
@@ -273,6 +306,12 @@ If `frame_generator.core` has a breaking change, `quick_analysis_server` needs t
 | `comparison_server` | Atomic | `compare_demolition_strategies`, `get_comparison_summary`, `recommend_strategy` | Active (lazy) | 2026-05-31 |
 | `run_full_analysis` | Composite | (pipeline) | Legacy | — |
 | `manager_server` | Atomic | 24 tools: create/list/validate servers, health/metrics, search, dependency analysis, merge detection | Active | 2026-05-31 |
+| `blender_environment_server` | Infrastructure | `resolve_blender_path`, `validate_environment`, `provide_pipeline_paths`, `provide_config` | Active (eager) | 2026-06-03 |
+| `blender_build_server` | Atomic | `build_frame_model` | Active (lazy) | 2026-06-03 |
+| `blender_animate_server` | Atomic | `apply_demolition_sequence` | Active (lazy) | 2026-06-03 |
+| `blender_machinery_server` | Atomic | `add_construction_machinery` | Active (lazy) | 2026-06-03 |
+| `blender_render_server` | Atomic | `render_animation`, `render_preview` | Active (lazy) | 2026-06-03 |
+| `blender_pipeline_server` | Atomic | `run_full_pipeline`, `run_pipeline_stage`, `check_blender_environment` | Active (lazy) | 2026-06-03 |
 
 ### Server Details
 
@@ -426,6 +465,67 @@ If `frame_generator.core` has a breaking change, `quick_analysis_server` needs t
 - **Creation:** 2026-05-31
 - **Significance:** The highest-dimension CAIAO server — it manages the ecosystem that manages it. Enables self-service server creation, health monitoring, semantic search, and automated merge detection.
 
+#### `blender_environment_server` — Shared Blender Environment Provider (Infrastructure)
+
+- **Kind:** `infrastructure` — a non-functional server that provides environment capabilities to dependent servers. Does not perform user-facing work itself; instead, resolves and validates the shared Blender runtime environment.
+- **Start mode:** `eager` — starts before any dependent Blender functional server. If this server fails health check, all dependent servers are blocked with a clear "environment not ready" error.
+- **Tools (all read-only, O(1) except version check):**
+  - `resolve_blender_path` — Find Blender executable (env var → portable → PATH). Returns path, version, discovery source. Cached per process lifetime.
+  - `validate_environment` — Comprehensive health check: Blender binary, all 5 pipeline scripts, all 4 data files. Returns structured pass/fail per check.
+  - `provide_pipeline_paths` — Single source of truth for `pipeline_dir`, `scripts_dir`, `data_dir`, `output_dir`. Eliminates hardcoded path duplication across 5 functional servers.
+  - `provide_config` — Load and return `project_config.json` (building params, demolition strategy, machinery settings, render config).
+- **Dependencies:** None (pure Python, no system requirements — discovers Blender programmatically).
+- **Creation:** 2026-06-03
+- **Significance:** First `infrastructure` server in the CAIAO ecosystem. Establishes the pattern for modeling shared runtime environments as explicit, versioned, health-checkable entities. All 5 Blender functional servers declare `depends_on: servers: [blender_environment_server]` in their manifests. The hub resolves the dependency graph: start infrastructure servers first → inject environment info (paths, config) into functional server startup env → start functional servers. If the environment is broken, the hub reports it once at the infrastructure layer rather than getting 5 cryptic "Blender not found" errors.
+
+#### `blender_build_server` — Procedural Frame Modeling (Blender)
+
+- **Engine:** Blender 4.2+ (bpy)
+- **Lazy:** Yes
+- **Tool:** `build_frame_model`
+- **Output:** `scene_base.blend` with 139 individual elements, each carrying 8 metadata properties (element_type, floor, grid_x/y, bay_x/y, importance, label_cn)
+- **Config:** `blender_pipeline/data/project_config.json`
+- **Creation:** 2026-06-03
+
+#### `blender_animate_server` — Demolition Animation Keyframing (Blender)
+
+- **Engine:** Blender 4.2+ (bpy)
+- **Lazy:** Yes
+- **Tool:** `apply_demolition_sequence`
+- **Input:** `scene_base.blend`
+- **Output:** `scene_animated.blend` + `computed_demolition_schedule.csv`
+- **Logic:** Metadata-driven sorting (floor→importance→type→position) → grouping → visibility/scale/location keyframes
+- **Creation:** 2026-06-03
+
+#### `blender_machinery_server` — Construction Machinery Addition (Blender)
+
+- **Engine:** Blender 4.2+ (bpy)
+- **Lazy:** Yes
+- **Tool:** `add_construction_machinery`
+- **Input:** `scene_animated.blend`
+- **Output:** `scene_final.blend` (with excavator + dump truck models)
+- **Creation:** 2026-06-03
+
+#### `blender_render_server` — Animation Rendering (Blender)
+
+- **Engine:** Blender 4.2+ (OpenGL viewport + Workbench)
+- **Lazy:** Yes
+- **Tools:** `render_animation` (MP4 via OpenGL viewport), `render_preview` (fast white-model via Workbench)
+- **Input:** `scene_final.blend` (or any animated .blend)
+- **Output:** MP4 video (H.264, 1280×720, 24fps)
+- **Creation:** 2026-06-03
+
+#### `blender_pipeline_server` — Full Pipeline Orchestrator
+
+- **Purpose:** Chains build → animate → machinery → render into a single end-to-end workflow
+- **Lazy:** Yes
+- **Tools:**
+  - `run_full_pipeline` — Complete end-to-end pipeline with configurable stages (machinery on/off, render on/off)
+  - `run_pipeline_stage` — Execute a single stage independently (build/animate/machinery/render/preview)
+  - `check_blender_environment` — Verify Blender installation and pipeline file availability
+- **Pipeline flow:** generate_building.py → apply_demolition.py → add_machinery.py → render.py
+- **Creation:** 2026-06-03
+
 ---
 
 ## 9. Merge Roadmap
@@ -508,6 +608,8 @@ convert_to_unified_frame (embedded in the merged server):
 | 2026-05-31 | All new servers registered in Gateway; SYSTEM_PROMPT updated with tool descriptions | Claude |
 | 2026-05-31 | Added `comparison_server` — multi-strategy demolition plan comparison, scoring (safety/efficiency/visual), ranking, and rule-based strategy recommendation (low-stress->sequential, high-stress->top_down, irregular->llm, low-rise->bottom_up) | Claude |
 | 2026-05-31 | Added `manager_server` — meta-server managing all 15 CAIAO servers with 24 tools across 6 groups (creation, extension, enhancement, migration, retrieval, orchestration). Introduced `caiao.yaml` manifest format, `caiao_config.py` auto-discovery, hub state machine, and frontend management dashboard | Claude |
+| 2026-06-03 | Simplify review Phase 1-3: Created `blender_environment_server` (infrastructure, eager) — shared Blender discovery, env validation, path/config provision. Extracted `blender_pipeline/common.py` (system Python) and `scripts/_common.py` (Blender Python) — unified Blender discovery, subprocess runner, low-level mesh API (`add_cube`/`add_cylinder`/`make_material`/`clear_scene`/`compute_scene_bounds`), mesh cache for shared-dimension objects. Refactored all 5 Blender functional servers to import from common.py. Replaced all `bpy.ops` geometry operators with low-level data API in pipeline scripts — eliminated ~695 depsgraph evaluations per animation. Deleted `main_pipeline.py` CLI entry point per user decision (CLI serves development only, not LLM-driven workflows) | Claude |
+| 2026-06-04 | Simplify review Phase 4-6 + architecture redesign: **Blender Daemon Architecture** — agreed to add `blender_daemon_server` (infrastructure, eager) as single persistent Blender process shared by all functional servers, eliminating per-server subprocess cold starts. **Standard file format** — each structure type defined by two standard files (geometry manifest + demolition sequence), not by code; `build_server`/`animate_server` read files → validate → forward to daemon, containing zero geometry or demolition algorithms. **Three-mechanism parameter extension** — namespace isolation + schema registry + three-tier classification (base/extension/transient) applied to all four parameter files. **caiao.yaml template compression** — `_manifest_to_config()` now fills command/kind/health/dependencies defaults; 6 Blender server manifests stripped of ~120 lines boilerplate. Full architecture decision documented in `dev-notes/decisions/2026-06-04-blender-daemon-architecture.md` | Claude |
 
 ---
 

@@ -1,0 +1,15 @@
+name: blender_machinery_server
+description: "Construction machinery addition via Blender — adds excavator and dump truck models to demolition scenes with animation keyframes"
+start_mode: lazy
+
+health:
+  timeout_ms: 120000
+
+tools:
+  - name: add_construction_machinery
+    description: "Add excavator and dump truck to a demolition animation scene"
+    tags: [blender, machinery, construction]
+
+depends_on:
+  servers:
+    - blender_environment_server

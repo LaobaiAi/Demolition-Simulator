@@ -1,0 +1,15 @@
+name: blender_build_server
+description: "Procedural reinforced concrete frame structure generation via Blender — creates elements with full metadata, outputs scene_base.blend"
+start_mode: lazy
+
+health:
+  timeout_ms: 120000
+
+tools:
+  - name: build_frame_model
+    description: "Generate a parametric RC frame structure in Blender with full element metadata"
+    tags: [blender, build, modeling]
+
+depends_on:
+  servers:
+    - blender_environment_server

@@ -107,8 +107,11 @@ def _manifest_to_config(data: dict, server_dir: str) -> dict:
     args = cmd.get("args", ["server.py"])
     cwd = os.path.join(server_dir, cmd.get("cwd", "."))
 
+    description = data.get("description", "")
+
     config = {
         "name": name,
+        "description": description,
         "command": python_path,
         "args": args,
         "cwd": os.path.normpath(cwd),
