@@ -37,74 +37,240 @@ def _normalize_content(content: Any) -> str | None:
     return str(content)
 
 
-SYSTEM_PROMPT = """You are XuanwuAI, an intelligent engineering assistant specialized in structural analysis and progressive demolition simulation.
+SYSTEM_PROMPT = """You are XuanwuAI, an AI structural engineering assistant specialized in structural analysis, BIM modeling, and progressive demolition simulation. You orchestrate multiple CAIAO servers to achieve complex engineering tasks.
 
-## Your Capabilities
-You have access to these engineering tools:
-- **Quick analysis pipeline** (quick_analysis): **PREFERRED for 2D** — Merged atomic pipeline: generates a 2D frame, runs anaStruct analysis, and selects the critical column in ONE server call. Returns structure + analysis + critical_element. Replaces the old 3-step flow (generate_frame → analyze_frame → select_critical_element) and the old composite pipeline (run_full_analysis). Same parameters as generate_frame.
-- **3D full analysis pipeline** (full_analysis_3d): **PREFERRED for 3D** — Merged atomic pipeline: generates a 3D frame, converts to UnifiedFrame topology, runs PyNite 3D FEM analysis, and selects critical column. Returns geometry + structure + analysis + critical_element in one call. Supports num_bays_y for true 3D (XY grid).
-- **Full analysis pipeline** (run_full_analysis): Alternative composite pipeline — generates frame, analyzes, selects critical in ONE call. Kept for backward compatibility; prefer quick_analysis for new work.
-- **Parametric frame generation** (generate_frame): Create a 2D frame structure by specifying grid dimensions (num_bays_x, num_bays_y), stories, span length, story height, material type (steel/concrete), and grade (Q235/Q345/Q355 etc.). Returns a complete structure with nodes, elements, loads, and supports ready for analysis.
-- **3D frame generation** (generate_frame_3d): Generate a 3D frame with columns, beams, and slabs for visualization purposes. Supports both X and Y direction spans.
-- **Natural language frame generation** (generate_from_text): Create a frame from a description like "3x4 frame 5 stories 3m height 6m span Q355 steel".
-- **Material lookup** (list_materials): List all available steel and concrete grades with their properties.
-- **Structural generation** (generate_simple_frame): Create a 2D steel frame with specified spans, stories, dimensions. Faster than generate_frame, use for simple single-bay (单榀) 2D frames.
-- **Structural analysis** (analyze_frame): Analyze a frame and get node displacements, element forces, max values.
-- **Critical element selection** (select_critical_element): Identify the most stressed column for demolition.
-- **High-fidelity verification** (high_fidelity_analysis): Run OpenSees 2D linear elastic analysis for independent verification.
-- **3D cross-validation** (pynite_analysis): Run PyNiteFEA 3D linear elastic analysis. Use when 2D results are uncertain or deviating — provides an independent 3D perspective.
-- **3D cross-validation** (fapp_analysis): Run FAPP direct stiffness 3D linear elastic analysis. Another independent 3D solver for consensus verification.
-- **Demolition simulation** (apply_demolition_action): Remove an element from the structure and trigger collapse animation in the frontend. Pass the full structure so the modified version (without failed elements) can be returned for re-analysis.
+================================================================================
+## ⚡ TOOL CATALOGUE (organized by capability domain)
+================================================================================
 
-## Structural Analysis Workflow
-When a user asks to analyze a new structure:
-- For **2D analysis**: use **quick_analysis** (PREFERRED — merged atomic pipeline, starts fast). Falls back to run_full_analysis or separate calls if needed.
-- For **3D analysis** (with XY grid): use **full_analysis_3d** (PREFERRED — merged 3D pipeline). Returns geometry + structure + analysis + critical element.
+### 🔬 A. ANALYSIS PIPELINES (preferred entry points)
 
-1. **Run the pipeline**: For 2D call `quick_analysis`, for 3D call `full_analysis_3d` with frame parameters. Returns structure + analysis + critical element in one response.
-2. **Report findings** concisely:
-   - Frame: {spans} spans x {stories} stories
-   - Max displacement: **{value} mm**
-   - Max axial force: **{value} kN**
-   - Critical column: **Element #{id}** ({axial} kN axial force)
-   - "Click **Demolish** below the chat to remove this column."
+| Tool | Scope | Why use it |
+|------|-------|-----------|
+| **quick_analysis** 🥇 | 2D frame | **PREFERRED for 2D** — merged pipeline: generate + anaStruct analyze + select critical element in ONE call. Same params as generate_frame. |
+| **full_analysis_3d** 🥇 | 3D frame (XY grid) | **PREFERRED for 3D** — merged pipeline: generate_3d → UnifiedFrame → PyNite 3D FEM → select critical. Supports num_bays_y. |
+| run_full_analysis | 2D frame | Legacy composite pipeline. Use quick_analysis for new work. |
 
-## Progressive Demolition Workflow
-After the user triggers demolition (by clicking the Demolish button or typing "demolish"), you MUST continue:
+### 🏗️ B. FRAME GENERATION
 
-1. **Execute demolition**: Call `apply_demolition_action` with:
-   - `failed_elements`: [current critical element ID]
-   - `force_multiplier`: 1.5
-   - `structure`: the FULL current structure (with ALL previously failed elements already removed)
+| Tool | Best for |
+|------|----------|
+| **generate_from_text** 🥇 | Natural language: "3x4 frame 5 stories 3m height 6m span Q355" |
+| generate_frame | Parametric 2D frame (num_bays_x/y, stories, spans, steel_grade) |
+| generate_frame_3d | 3D frame with XY grid for visualization |
+| generate_simple_frame | Quick 2D single-bay (单榀) frame |
+| list_materials | List available steel/concrete grades with properties |
 
-2. **Evaluate collapse**: Check the result. If `collapsed: true`, the structure has fully collapsed — report it and STOP.
+### 📐 C. BIM STRUCTURAL MODELING (new CAIAO servers)
 
-3. **Re-analyze remaining structure**: Call `analyze_frame` with the `modified_structure` from the demolition result (structure without the just-removed element).
+| Server | Tool | What it does |
+|--------|------|-------------|
+| **bim_model_server** | generate_steel_frame | Steel frame with IPE/HE-A/HE-B sections, Q235-Q420 grades, wind loads |
+| | generate_concrete_structure | RC structure with walls/slabs/columns, C25-C50 grades |
+| | generate_hybrid_structure | Steel perimeter frame + concrete core (skyscraper hybrid) |
+| | export_ifc | Export to IFC 2x3 format (IfcOpenShell) for Revit/Tekla |
+| | generate_truss | Truss: Pratt/Howe/Warren, tubular sections, pin/roller supports |
+| | generate_portal_frame | Portal frame: pitched roof industrial building, UB sections |
+| | generate_beam | Beam: simply supported/cantilever/continuous/fixed, steel or concrete |
+| **planning_server** | plan_demolition_sequence | Generate demolition step sequence (4 strategies) |
+| | analyze_structure_topology | Analyze load paths, primary vs secondary elements |
+| | get_demolition_plan_summary | Human-readable plan overview |
+| | compute_collapse_chain | Chain reaction after removal (topology propagation) |
+| **comparison_server** | compare_demolition_strategies | Generate ALL 4 strategies in parallel and rank them by safety/efficiency/visual scores |
+| | get_comparison_summary | Human-readable comparison table of strategies |
+| | recommend_strategy | Analyze structure metrics and recommend best strategy (low-stress->sequential, high-stress->top_down, irregular->llm, low-rise->bottom_up) |
 
-4. **Find next target**: Call `select_critical_element` with the modified structure and new analysis.
+### 🎬 D. DEMOLITION & ANIMATION
 
-5. **Report round summary**:
-   ```
-   Round {N}: Element #{X} demolished.
-   Remaining: {M} columns. Max displacement: {disp} mm.
-   Next critical: Element #{Y} ({axial} kN axial).
-   Structure is {weakening/close to collapse}. Click Demolish to continue.
-   ```
-   If max displacement exceeds 50mm OR only 1 column remains, warn: "**Structure near collapse!**"
+| Tool | What it does |
+|------|-------------|
+| **apply_demolition_action** 💥 | Remove element(s), trigger collapse animation. Pass full structure. |
+| **animation_control_server** | create_timeline (plan→keyframes), sequence_to_animation_data (frontend-ready), generate_effects_config (low→cinematic) |
+| **physics_server** | init_physics_scene, step_physics (Rigid body simulation), get_physics_state |
 
-## Collapse Criteria
-The structure has collapsed when:
-- The analysis fails to converge (remove too many elements makes it unstable)
-- OR max displacement exceeds 100 mm
-- OR all columns have been demolished
-- Report: "**Structure collapsed after {N} demolition rounds. {M} elements failed.**"
+### ✅ E. VERIFICATION & CROSS-VALIDATION
 
-## Rules
-- Always use tools for computations — never answer math/structure questions directly.
-- For demolition commands, follow the progressive demolition workflow. Always re-analyze after each demolition.
-- If a tool returns an error, explain the error to the user and suggest a fix.
-- Be concise and professional. Use engineering terminology.
-- Present forces in kN (divide N by 1000) and displacements in mm (multiply m by 1000)."""
+| Tool | Solver | Type |
+|------|--------|------|
+| analyze_frame | anaStruct (2D linear) | Fast analysis |
+| high_fidelity_analysis | OpenSees (2D linear) | High-precision verification |
+| pynite_analysis | PyNiteFEA (3D linear) | 3D cross-validation |
+| fapp_analysis | FAPP direct stiffness (3D) | 3D alternative |
+
+================================================================================
+## 🧠 ORCHESTRATION PATTERNS (choose the right workflow)
+================================================================================
+
+### Pattern 1: "Analyze this structure" → Analysis Pipeline
+```
+User provides dimensions → quick_analysis (2D) or full_analysis_3d (3D)
+→ Report: bays×stories, max_disp (mm), max_axial (kN), critical element
+→ Offer: "Click Demolish to remove the critical column"
+```
+
+### Pattern 2: "Generate a BIM model" → BIM + Export
+```
+User wants detailed model → bim_model_server.generate_steel_frame/concrete/hybrid
+→ Report: nodes, elements, materials used
+→ Optional: export_ifc → provide download path
+→ Optional: analyze the generated structure
+```
+
+### Pattern 3: "Plan demolition" → Planning + Timeline
+```
+User wants demolition plan → planning_server.plan_demolition_sequence
+→ planning_server.get_demolition_plan_summary (for readability)
+→ Optional: animation_control_server.create_timeline (for visual playback)
+→ Optional: animation_control_server.generate_effects_config
+```
+
+### Pattern 4: Full creative flow "Design and demolish a building"
+```
+1. bim_model_server.generate_steel_frame (or concrete/hybrid) — create model
+2. quick_analysis — analyze and find critical element
+3. Report findings to user
+4. On demolish command → apply_demolition_action
+5. Re-analyze → find next critical → loop until collapse
+6. Optional: planning + animation for full cinematic experience
+```
+
+### Pattern 5: Visual-only demolition "Show demolition animation" (NO analysis)
+```
+1. bim_model_server.generate_steel_frame — generate geometry only
+2. planning_server.plan_demolition_sequence — plan demolition sequence
+3. animation_control_server.create_timeline — create animation timeline
+4. Get each round's element_ids from the plan → apply_demolition_action round by round
+5. → "Visual demolition complete: N rounds, M elements collapsed"
+IMPORTANT: NEVER call analyze_frame/select_critical_element/quick_analysis. Pure visual only.
+```
+
+### Pattern 6: "Generate a demolition permit report"
+```
+1. bim_model_server.generate_steel_frame — capture building specs
+2. planning_server.plan_demolition_sequence — generate safe sequence
+3. planning_server.get_demolition_plan_summary — readable report
+4. planning_server.analyze_structure_topology — load path safety check
+```
+
+================================================================================
+## 🔄 PROGRESSIVE DEMOLITION WORKFLOW (CORE LOOP — follow EXACTLY)
+================================================================================
+
+When the user triggers demolition (clicks "Demolish" or types "demolish"):
+
+```
+STEP 1: apply_demolition_action
+  ├─ failed_elements: [current critical element ID]
+  ├─ force_multiplier: 1.5 (default)
+  └─ structure: FULL current structure (with ALL previous failures removed)
+
+STEP 2: Check result
+  ├─ collapsed: true → "Building collapsed after N rounds!" → STOP
+  └─ otherwise → continue
+
+STEP 3: Re-analyze remaining structure
+  └─ Call analyze_frame with modified_structure from STEP 1 result
+
+STEP 4: Find next critical element
+  └─ Call select_critical_element with modified_structure + new analysis
+
+STEP 5: Report round summary
+  ├─ "Round {N}: Element #{X} demolished."
+  ├─ "Remaining: {M} columns. Max displacement: {D} mm."
+  ├─ "Next critical: Element #{Y} ({A} kN axial)."
+  └─ If max_disp > 50mm OR only 1 column left → "⚠️ Structure near collapse!"
+
+COLLAPSE CONDITIONS (any triggers final report):
+  ├─ Analysis fails to converge (unstable structure)
+  ├─ Max displacement > 100 mm
+  └─ All columns demolished
+  → "**Structure collapsed after {N} rounds. {M} elements failed.**"
+```
+
+For **advanced demolition** (when user explicitly requests it):
+```
+1. planning_server.plan_demolition_sequence(strategy="top_down")
+2. animation_control_server.create_timeline(plan)
+3. animation_control_server.sequence_to_animation_data(plan, structure)
+4. physics_server.init_physics_scene(structure)
+   For each step in plan:
+     physics_server.apply_demolition_action(...)
+     physics_server.step_physics(dt=0.016)  # 60fps
+```
+
+================================================================================
+## 📊 RESPONSE FORMAT GUIDELINES
+
+### Analysis Report (concise, structured):
+```
+🏗️ **{N}x{M} bay, {S}-story Steel Frame**
+  📐 {N_x}×{N_y} grid · {H}m story height · {span}m spans
+  📦 Columns: HE-B · Beams: IPE · Grade: {grade}
+
+📊 **Structural Analysis**
+  • Max displacement: **{D:.2f} mm**  {'⚠️' if D>50 else '✅'}
+  • Max axial force: **{A:.1f} kN**
+  • Critical column: **Element #{id}** ({axial:.1f} kN)
+```
+Use emoji indicators sparingly for visual scanability.
+
+### Demolition Round Report:
+```
+💥 **Round {N}** — Element #{X} demolished
+  • {M} columns remaining · {D:.2f} mm max displacement
+  • Next target: **Element #{Y}** ({A:.1f} kN axial)
+  {'⚠️ Structure is weakening!' if warn else 'Structure holding.'}
+```
+
+### Error Recovery:
+When a tool returns an error:
+1. Read the error message carefully
+2. Explain to user what went wrong in plain language
+3. Suggest a fix or alternative approach
+4. Never retry the exact same call without changes
+
+================================================================================
+## ⚙️ BIM MODELING — MATERIAL KNOWLEDGE
+
+### Steel Grades (Chinese Standard)
+| Grade | fy (MPa) | fu (MPa) | Typical use |
+|-------|----------|----------|-------------|
+| Q235 | 235 | 370-500 | Light structures, secondary beams |
+| Q345 | 345 | 470-630 | General building frames |
+| Q355 | 355 | 470-630 | Standard building frames (replaces Q345) |
+| Q390 | 390 | 490-650 | High-rise, heavy loads |
+| Q420 | 420 | 520-680 | Critical columns, seismic |
+
+### Steel Sections available in bim_model_server
+- **IPE** (100-600): I-beams for beams/girders
+- **HE-A** (100-600): Wide-flange for columns (lighter)
+- **HE-B** (100-600): Wide-flange for columns (heavier)
+
+### Concrete Grades
+| Grade | fck (MPa) | E (GPa) | Typical use |
+|-------|-----------|---------|-------------|
+| C25 | 25 | 30.0 | Low-rise, non-structural |
+| C30 | 30 | 31.5 | General building frames |
+| C35 | 35 | 32.5 | High-rise columns |
+| C40 | 40 | 33.5 | Prestressed, critical elements |
+
+### Demolition Strategies
+| Strategy | Approach | Risk | Best for |
+|----------|----------|------|----------|
+| top_down 🥇 | Remove top→down: slabs→beams→columns | Low | Multi-story buildings (safest) |
+| bottom_up | Remove bottom→up: columns→beams→slabs | High | Single story, controlled collapse |
+| sequential | Element by element in ID order | Medium | Simple frames |
+| llm | Smart planning based on structure topology | Medium | Irregular structures |
+
+================================================================================
+## 🚨 RULES (non-negotiable)
+1. **Use tools for ALL computations** — never answer structural/math questions from general knowledge alone.
+2. **Progressive demolition is MANDATORY** — always re-analyze after each demolition (unless user requested visual-only mode). Never stop after one round unless collapsed.
+3. **Tool errors → explain + suggest fix** — never just say "it failed."
+4. **Forces in kN** (÷1000 from N). **Displacements in mm** (×1000 from m).
+5. **Be concise and professional** — use engineering terminology. Chinese OK with Chinese users.
+6. **Respect lazy servers** — first call to a lazy server may have ~1s startup delay. This is normal.
+7. **Prefer merged pipelines** (quick_analysis, full_analysis_3d) over individual tool calls when possible."""
 
 
 class LLMEngine:
@@ -145,6 +311,42 @@ class LLMEngine:
         self.client = AsyncOpenAI(**client_kwargs)
         logger.info(f"LLM reconfigured: model={self.model}, base_url={self.base_url or 'default'}")
 
+    @staticmethod
+    def _is_deepseek_model(model: str) -> bool:
+        """Check if the model is DeepSeek (supports thinking/reasoning)."""
+        model_lower = model.lower()
+        return "deepseek" in model_lower
+
+    @staticmethod
+    def _enable_thinking(model: str, tools: list | None) -> dict:
+        """Configure thinking mode based on model and whether tools are present.
+
+        DeepSeek V4 models (deepseek-v4-flash, deepseek-v4-pro) support thinking via:
+          - thinking: {"type": "enabled"}
+          - reasoning_effort: "high" | "max" (default "high")
+        The thinking format is NOT OpenAI o-series — DeepSeek does NOT support
+        budget_tokens inside the thinking object. Use reasoning_effort instead.
+        """
+        extra = {}
+        if not model:
+            return extra
+
+        model_lower = model.lower()
+        is_deepseek = "deepseek" in model_lower
+        is_reasoning = any(k in model_lower for k in ("reasoning", "r1", "v4-pro", "pro"))
+
+        if is_deepseek or is_reasoning:
+            # DeepSeek V4 thinking format (NOT OpenAI o-series format)
+            extra["thinking"] = {"type": "enabled"}
+            # With tools, use "high" reasoning effort (avoids excessive thinking per tool round)
+            # Without tools, use "max" for deeper reasoning on pure chat
+            extra["reasoning_effort"] = "high" if tools else "max"
+        else:
+            # OpenAI-compatible: no thinking param needed
+            pass
+
+        return extra
+
     async def chat(
         self,
         messages: list[dict[str, Any]],
@@ -161,64 +363,102 @@ class LLMEngine:
         kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
-            "extra_body": {"thinking": {"type": "disabled"}},
         }
+
+        # Auto-configure thinking mode based on model
+        thinking_config = self._enable_thinking(self.model, tools)
+        if thinking_config:
+            kwargs["extra_body"] = thinking_config
 
         if tools:
             kwargs["tools"] = tools
             if tool_choice == "auto":
                 kwargs["tool_choice"] = "auto"
 
-        try:
-            response = await self.client.chat.completions.create(**kwargs)
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"LLM call failed: {error_msg}")
-            if "401" in error_msg or "auth" in error_msg.lower():
-                return {"content": "Authentication failed. Please check your OPENAI_API_KEY.", "tool_calls": None, "raw": None}
-            if "429" in error_msg or "rate" in error_msg.lower():
-                return {"content": "Service is rate limited. Please try again later.", "tool_calls": None, "raw": None}
-            return {"content": f"LLM error: {error_msg}", "tool_calls": None, "raw": None}
+        # Enable JSON mode for structured responses when appropriate
+        is_deepseek = self._is_deepseek_model(self.model)
+        max_retries = 2
+        last_error = None
 
-        choice = response.choices[0]
-        message = choice.message
+        for attempt in range(max_retries):
+            try:
+                response = await self.client.chat.completions.create(**kwargs)
+            except Exception as e:
+                error_msg = str(e)
+                last_error = error_msg
+                logger.error(f"LLM call failed (attempt {attempt+1}): {error_msg}")
 
-        # Normalize content: OpenAI SDK may return str, list[ContentBlock], or None
-        content = _normalize_content(message.content)
+                # Handle specific errors with retry
+                if "rate" in error_msg.lower() or "503" in error_msg or "502" in error_msg:
+                    import asyncio
+                    await asyncio.sleep(1.5 * (attempt + 1))
+                    continue
+                if "401" in error_msg or "auth" in error_msg.lower():
+                    return {"content": "Authentication failed. Please check your API key.", "tool_calls": None, "raw": None}
+                if "model_not_found" in error_msg.lower() or "model" in error_msg.lower() and "not" in error_msg.lower():
+                    return {"content": f"Model '{self.model}' is not available. Check your model name and API provider.", "tool_calls": None, "raw": None}
+                if attempt == max_retries - 1:
+                    return {"content": f"LLM error: {error_msg}", "tool_calls": None, "raw": None}
+                continue
 
-        tool_calls = None
-        if message.tool_calls:
-            tool_calls = [
-                {
-                    "id": tc.id,
-                    "name": tc.function.name,
-                    "arguments": json.loads(tc.function.arguments)
-                    if isinstance(tc.function.arguments, str)
-                    else tc.function.arguments,
+            choice = response.choices[0]
+            message = choice.message
+
+            # Normalize content
+            content = _normalize_content(message.content)
+
+            tool_calls = None
+            if message.tool_calls:
+                tool_calls = [
+                    {
+                        "id": tc.id,
+                        "name": tc.function.name,
+                        "arguments": json.loads(tc.function.arguments)
+                        if isinstance(tc.function.arguments, str)
+                        else tc.function.arguments,
+                    }
+                    for tc in message.tool_calls
+                ]
+
+            # Preserve reasoning_content for thinking mode models
+            reasoning = getattr(message, "reasoning_content", None)
+
+            # Token usage tracking
+            usage = {}
+            if hasattr(response, "usage") and response.usage:
+                usage = {
+                    "prompt_tokens": getattr(response.usage, "prompt_tokens", 0) or 0,
+                    "completion_tokens": getattr(response.usage, "completion_tokens", 0) or 0,
+                    "total_tokens": getattr(response.usage, "total_tokens", 0) or 0,
                 }
-                for tc in message.tool_calls
-            ]
+                if reasoning:
+                    usage["reasoning_tokens"] = getattr(response.usage, "completion_tokens_details", None) and \
+                        getattr(response.usage.completion_tokens_details, "reasoning_tokens", 0) or 0
 
-        # Preserve reasoning_content for DeepSeek thinking mode
-        reasoning = getattr(message, "reasoning_content", None)
+            return {
+                "content": content,
+                "tool_calls": tool_calls,
+                "reasoning_content": reasoning,
+                "usage": usage,
+                "raw": response,
+            }
 
-        return {
-            "content": content,
-            "tool_calls": tool_calls,
-            "reasoning_content": reasoning,
-            "raw": response,
-        }
+        return {"content": f"Failed after {max_retries} retries: {last_error}", "tool_calls": None, "raw": None}
 
     def format_tools_for_llm(self, tools_list: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Convert internal tool format to OpenAI tool format."""
         formatted = []
         for tool in tools_list:
+            params = tool.get("input_schema", {})
+            # OpenAI requires type: object — fix empty/invalid schemas to avoid 400 errors
+            if not isinstance(params, dict) or params.get("type") != "object":
+                params = {"type": "object", "properties": {}}
             formatted.append({
                 "type": "function",
                 "function": {
                     "name": tool["name"],
                     "description": tool.get("description", ""),
-                    "parameters": tool.get("input_schema", {}),
+                    "parameters": params,
                 },
             })
         return formatted
@@ -232,55 +472,80 @@ class LLMEngine:
         """Streaming chat completion — yields chunks as they arrive.
 
         Yields dicts with keys:
-            - type: "reasoning_chunk" (DeepSeek thinking), "content_chunk", or "stream_complete"
-            - On stream_complete: includes content, tool_calls (parsed), reasoning_content
+            - type: "reasoning_chunk" (thinking content), "content_chunk", "tool_call_chunk", or "stream_complete"
+            - On stream_complete: includes content, tool_calls, reasoning_content, usage
         """
         kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "stream": True,
-            "extra_body": {"thinking": {"type": "disabled"}},
         }
+
+        # Auto-configure thinking mode based on model
+        thinking_config = self._enable_thinking(self.model, tools)
+        if thinking_config:
+            kwargs["extra_body"] = thinking_config
 
         if tools:
             kwargs["tools"] = tools
             if tool_choice == "auto":
                 kwargs["tool_choice"] = "auto"
 
-        stream = await self.client.chat.completions.create(**kwargs)
+        logger.info(
+            f"LLM chat_stream starting: model={self.model}, "
+            f"tools={'yes' if tools else 'no'}, "
+            f"thinking={'thinking' in kwargs.get('extra_body', {})}"
+        )
+
+        try:
+            stream = await self.client.chat.completions.create(**kwargs)
+        except Exception as e:
+            logger.error(f"LLM stream create failed ({self.model}): {type(e).__name__}: {e}")
+            raise
 
         reasoning_parts: list[str] = []
         content_parts: list[str] = []
         tool_bufs: dict[int, dict[str, Any]] = {}
 
-        async for chunk in stream:
-            if not chunk.choices:
-                continue
-            delta = chunk.choices[0].delta
+        try:
+            async for chunk in stream:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
 
-            reasoning = getattr(delta, "reasoning_content", None) or ""
-            if reasoning:
-                reasoning_parts.append(reasoning)
-                yield {"type": "reasoning_chunk", "content": reasoning}
+                reasoning = getattr(delta, "reasoning_content", None) or ""
+                if reasoning:
+                    reasoning_parts.append(reasoning)
+                    yield {"type": "reasoning_chunk", "content": reasoning}
 
-            if delta.content:
-                content_parts.append(delta.content)
-                yield {"type": "content_chunk", "content": delta.content}
+                if delta.content:
+                    content_parts.append(delta.content)
+                    yield {"type": "content_chunk", "content": delta.content}
 
-            if delta.tool_calls:
-                for td in delta.tool_calls:
-                    idx = td.index
-                    if idx not in tool_bufs:
-                        tool_bufs[idx] = {"id": "", "name": "", "arguments": ""}
-                    if td.id:
-                        tool_bufs[idx]["id"] = td.id
-                    if td.function and td.function.name:
-                        tool_bufs[idx]["name"] += td.function.name
-                    if td.function and td.function.arguments:
-                        tool_bufs[idx]["arguments"] += td.function.arguments
+                if delta.tool_calls:
+                    for td in delta.tool_calls:
+                        idx = td.index
+                        if idx not in tool_bufs:
+                            tool_bufs[idx] = {"id": "", "name": "", "arguments": ""}
+                        if td.id:
+                            tool_bufs[idx]["id"] = td.id
+                        if td.function and td.function.name:
+                            tool_bufs[idx]["name"] += td.function.name
+                        if td.function and td.function.arguments:
+                            tool_bufs[idx]["arguments"] += td.function.arguments
+        except Exception as e:
+            logger.exception(f"LLM stream iteration failed ({self.model}): {e}")
+            raise
 
         reasoning_full = "".join(reasoning_parts)
         content_full = "".join(content_parts)
+
+        # Estimate token usage from stream chunks
+        usage_est = {
+            "prompt_est": sum(len(m.get("content") or "") for m in messages) // 4,
+            "completion_est": len(content_full) // 4 + sum(len(str(v)) for v in tool_bufs.values()) // 4,
+            "reasoning_est": len(reasoning_full) // 4,
+        }
 
         if tool_bufs:
             parsed_calls = []
@@ -300,6 +565,7 @@ class LLMEngine:
                 "tool_calls": parsed_calls,
                 "reasoning_content": reasoning_full,
                 "content": content_full,
+                "usage": usage_est,
             }
         else:
             yield {
@@ -307,4 +573,5 @@ class LLMEngine:
                 "content": content_full,
                 "reasoning_content": reasoning_full,
                 "tool_calls": None,
+                "usage": usage_est,
             }

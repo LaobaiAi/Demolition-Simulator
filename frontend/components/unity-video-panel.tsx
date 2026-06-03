@@ -212,9 +212,11 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
     };
   }, [phase, establishWebRTC]);
 
-  // If disconnected/error and offer appears, auto-reconnect
+  // If disconnected and a fresh offer appears, auto-reconnect.
+  // Only poll in "disconnected" (Unity process is alive, WebRTC was lost).
+  // Skip polling in "idle" (Unity not running) or "error" (explicit failure) — no offer will appear.
   useEffect(() => {
-    if (phase === "idle" || phase === "disconnected" || phase === "error") {
+    if (phase === "disconnected") {
       pollRef.current = setInterval(async () => {
         try {
           const res = await fetch(`${GATEWAY}/webrtc/offer`);
@@ -281,7 +283,7 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
   const badge = phaseBadge();
 
   return (
-    <div className="flex-1 flex flex-col bg-[#0a0f1a] relative">
+    <div className="flex-1 flex flex-col bg-xuanwu-deep relative">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-4 py-2">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">

@@ -268,7 +268,11 @@ If `frame_generator.core` has a breaking change, `quick_analysis_server` needs t
 | `pynite_server` | Atomic | `pynite_analysis` | Active (lazy) | — |
 | `fapp_server` | Atomic | `fapp_analysis` | Active (lazy) | — |
 | `unity_simulator` | Atomic | `apply_demolition_action`, `modify_structure`, `get_structure_status`, `get_removed_elements` | Active (lazy) | — |
+| `animation_control_server` | Atomic | `create_timeline`, `get_timeline_state`, `sequence_to_animation_data`, `generate_effects_config` | Active | 2026-05-31 |
+| `planning_server` | Atomic | `plan_demolition_sequence`, `analyze_structure_topology`, `get_demolition_plan_summary`, `compute_collapse_chain` | Active | 2026-05-31 |
+| `comparison_server` | Atomic | `compare_demolition_strategies`, `get_comparison_summary`, `recommend_strategy` | Active (lazy) | 2026-05-31 |
 | `run_full_analysis` | Composite | (pipeline) | Legacy | — |
+| `manager_server` | Atomic | 24 tools: create/list/validate servers, health/metrics, search, dependency analysis, merge detection | Active | 2026-05-31 |
 
 ### Server Details
 
@@ -335,11 +339,92 @@ If `frame_generator.core` has a breaking change, `quick_analysis_server` needs t
 - **Lazy:** Yes
 - **Tools:** Demolition action, structure modification, status queries
 
+#### `animation_control_server` — Animation Timeline Management
+
+- **Purpose:** Manages demolition animation timelines, converts multi-round demolition plans into keyframe-based timelines, and generates effects configurations for the frontend.
+- **Lazy:** Yes
+- **Tools:**
+  - `create_timeline` — Convert demolition plan to keyframe-based timeline with flash/fall/explode/dust/settle phases
+  - `get_timeline_state` — Query element state (active/removed/falling/flashing/exploding) at any timestamp
+  - `sequence_to_animation_data` — Generate frontend-compatible cascade/debris/dust/impactRings animation data
+  - `generate_effects_config` — Build effects config matching frontend EffectKey system (cascade/explosion/dust/shake/buckling/fracture/flash/trail/bounce) with intensity/style presets
+- **Presets:** 4 intensity levels (low/medium/high/cinematic), 3 style overlays (realistic/dramatic/technical)
+
+#### `planning_server` — Demolition Sequence Planning
+
+- **Purpose:** Plans demolition step sequences for building structures using rule-based and template-based strategies. Analyzes structural topology (load paths, floor mapping, element dependencies).
+- **Lazy:** Yes
+- **Strategies:**
+  - `top_down` — Remove top floor first: slabs → beams → columns, repeat downward (safest)
+  - `bottom_up` — Remove from bottom: columns → beams → slabs, going upward (riskiest)
+  - `sequential` — Element by element in ID order
+  - `llm` — Template-based smart planning with perimeter/core and floor-aware strategies
+- **Tools:**
+  - `plan_demolition_sequence` — Generate demolition step sequence with configurable strategy and constraints
+  - `analyze_structure_topology` — Build dependency graph, detect primary vs secondary elements, trace critical load paths
+  - `get_demolition_plan_summary` — Human-readable text or structured JSON summary of a demolition plan
+- **Step format:** Each step includes element_id, element_type, action, description, duration_ms, and visual effects (flash_red, shake, fall_down, debris, dust, crack, sway, collapse_chain, smoke)
+- **Constraints:** Supports max_steps cap, skip_element_types filter, and custom_durations overrides
+
+#### `bim_model_server` — BIM Structural Modeling
+
+- **Purpose:** Generates structural geometry models for steel, concrete, and hybrid structures. Exports to industry-standard IFC format.
+- **Lazy:** Yes
+- **Tools:**
+  - `generate_steel_frame` — Steel frame with IPE/HE-A/HE-B section families, Q235-Q420/S235-S355 steel grades, wind loads
+  - `generate_concrete_structure` — RC structure with columns, beams, shear walls, slabs; C25-C50 grades
+  - `generate_hybrid_structure` — Steel perimeter frame + RC core (configurable core position and span ratio)
+  - `export_ifc` — Export to IFC/ifcXML via IfcOpenShell; falls back to JSON summary if not installed
+- **Dependencies:** `ifcopenshell` (optional, for IFC export), `numpy`
+- **Output format:** Standard `{nodes, elements, loads, supports, materials}` JSON
+
+#### `physics_server` — Rigid Body Physics Simulation
+
+- **Purpose:** Simulates rigid body dynamics for demolition animation (falling elements, collisions, debris).
+- **Lazy:** Yes
+- **Tools:**
+  - `init_physics_scene` — Create physics world from structure nodes/elements
+  - `apply_demolition_action` — Apply force or remove bodies from simulation
+  - `step_physics` — Step simulation by dt_seconds with substeps
+  - `get_physics_state` — Get position, rotation, velocity of bodies
+  - `reset_physics` — Reset scene to initial state
+- **Engines:**
+  - **Primary:** Rapier (Rust-based, high perf) — `pip install rapier`
+  - **Fallback:** KinematicSimulator (zero deps, Euler integration with ground collision)
+- **State format:** `{element_id, position: [x,y,z], rotation: [x,y,z,w], velocity: [x,y,z]}`
+
+#### `comparison_server` — Multi-Strategy Demolition Plan Comparison
+
+- **Purpose:** Compares all 4 demolition strategies (top_down, bottom_up, sequential, llm) and provides scoring, ranking, and recommendations.
+- **Lazy:** Yes
+- **Tools:**
+  - `compare_demolition_strategies` — Generate ALL 4 strategies for a structure, compute quality scores (safety, efficiency, visual), and return ranked comparison data
+  - `get_comparison_summary` — Human-readable comparison table with rankings, scores, and per-strategy details
+  - `recommend_strategy` — Rule-based recommendation engine: low-stress (<0.3)->sequential, high-stress (>0.8)->top_down, irregular (>0.5)->llm, low-rise (<4 floors)->bottom_up
+- **Importing from:** `planning_server.rule_planner`, `planning_server.llm_planner` (pure functions, no process dependency)
+- **Scoring:** safety_score (0-100), efficiency_score (0-100), visual_score (0-100), weighted recommendation_score (safety=0.5, efficiency=0.3, visual=0.2)
+
 #### `run_full_analysis` — Composite Pipeline (Legacy)
 
 - **Type:** Gateway-level orchestration (no subprocess)
 - **Pipeline:** `generate_frame → analyze_frame → select_critical_element`
 - **Status:** Legacy — replaced by `quick_analysis_server` for new work
+
+#### `manager_server` — CAIAO Server Manager (Meta-Server)
+
+- **Purpose:** Manage all CAIAO servers — creation, extension, enhancement, migration, retrieval, orchestration
+- **Kind:** Atomic MCP Server (starts eagerly at gateway init)
+- **Lazy:** No
+- **Tools (24):**
+  - **Creation (4):** `create_server`, `list_archetypes`, `generate_manifest`, `validate_server`
+  - **Extension (4):** `add_tool`, `update_tool`, `remove_tool`, `add_import`
+  - **Enhancement (4):** `health_check`, `get_metrics`, `restart_server`, `configure_health`
+  - **Migration (4):** `rename_server`, `bump_version`, `archive_server`, `migrate_to_manifest`
+  - **Retrieval (5):** `search_capabilities`, `list_servers`, `get_server`, `find_tool_owner`, `build_search_index`
+  - **Orchestration (3):** `detect_merge_opportunities`, `analyze_dependency_graph`, `suggest_pipeline`
+- **Architecture:** The manager is itself a CAIAO server (dogfooding). It operates through `caiao.yaml` manifest files — the manager writes manifests, the gateway auto-discovers them via `caiao_config.py`. Health/metrics data comes from hub REST endpoints.
+- **Creation:** 2026-05-31
+- **Significance:** The highest-dimension CAIAO server — it manages the ecosystem that manages it. Enables self-service server creation, health monitoring, semantic search, and automated merge detection.
 
 ---
 
@@ -415,6 +500,14 @@ convert_to_unified_frame (embedded in the merged server):
 | 2026-05-25 | Registered all 8 servers in Server Registry | Claude |
 | 2026-05-25 | Added `full_analysis_3d_server` — second server merge (Merge #2, Pipeline B) | Claude |
 | 2026-05-25 | UnifiedFrame converter: generate_3d geometry → topology format for 3D analysis | Claude |
+| 2026-05-31 | Added `animation_control_server` — demolition animation timeline management with effects presets (4 intensities, 3 styles), keyframe state query, and frontend-compatible animation data export | Claude |
+| 2026-05-31 | Added `planning_server` — demolition sequence planning (top_down, bottom_up, sequential, llm strategies), structural topology analysis (load paths, dependency graph, floor mapping), and plan summary generation | Claude |
+| 2026-05-31 | Added `bim_model_server` — structural BIM generation with steel frames (IPE/HE-A/HE-B), RC structures (C25-C50), hybrid steel-concrete, and IFC export via IfcOpenShell | Claude |
+| 2026-05-31 | Added `physics_server` — rigid body physics simulation with Rapier (high perf) / kinematic fallback (zero deps), including init/step/force/reset tools | Claude |
+| 2026-05-31 | Added `DemolitionController` and `IFCViewer` frontend components; updated frontend with web-ifc and cannon-es packages | Claude |
+| 2026-05-31 | All new servers registered in Gateway; SYSTEM_PROMPT updated with tool descriptions | Claude |
+| 2026-05-31 | Added `comparison_server` — multi-strategy demolition plan comparison, scoring (safety/efficiency/visual), ranking, and rule-based strategy recommendation (low-stress->sequential, high-stress->top_down, irregular->llm, low-rise->bottom_up) | Claude |
+| 2026-05-31 | Added `manager_server` — meta-server managing all 15 CAIAO servers with 24 tools across 6 groups (creation, extension, enhancement, migration, retrieval, orchestration). Introduced `caiao.yaml` manifest format, `caiao_config.py` auto-discovery, hub state machine, and frontend management dashboard | Claude |
 
 ---
 

@@ -1,0 +1,45 @@
+# caiao.yaml — Scenario Server manifest
+
+name: scenario_server
+version: 0.1.0
+kind: atomic-mcp
+description: "Demolition scenario presets — structured configs for visual demolition launch"
+status: active
+since: "2026-06-01"
+
+start_mode: lazy
+
+command:
+  python: auto
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+
+health:
+  timeout_ms: 5000
+  restart_on_crash: false
+  max_restarts: 3
+  health_check_interval_s: 0
+
+tools:
+  - name: list_scenarios
+    description: "List all available demolition scenarios with their parameters"
+    tags: [scenario, discovery]
+  - name: get_scenario
+    description: "Get full parameters for a specific scenario by name"
+    tags: [scenario, config]
+  - name: recommend_scenario
+    description: "Recommend a scenario based on user description or structural metrics"
+    tags: [scenario, recommendation]
+
+capabilities:
+  - scenario_management
+  - preset_discovery
+  - strategy_recommendation
+
+dependencies:
+  python: []
+  system: []
+
+testing:
+  test_file: test_server.py

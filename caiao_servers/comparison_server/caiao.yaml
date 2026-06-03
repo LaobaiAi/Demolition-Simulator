@@ -1,0 +1,42 @@
+# caiao.yaml — Comparison Server manifest
+
+name: comparison_server
+version: 0.1.0
+kind: atomic-mcp
+description: "Multi-strategy demolition comparison — compares all demolition strategies (top_down, bottom_up, sequential, center_out, alternating_floors, llm) with scoring, ranking, and recommendations"
+status: active
+since: "2026-06-01"
+
+start_mode: lazy
+
+command:
+  python: auto
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+
+health:
+  timeout_ms: 5000
+  restart_on_crash: false
+  max_restarts: 3
+  health_check_interval_s: 0
+
+tools:
+  - name: compare_demolition_strategies
+    description: "Run all available demolition strategies against a structure and compare results"
+    tags: [comparison, strategy]
+  - name: get_comparison_summary
+    description: "Get a human-readable summary of a previous comparison"
+    tags: [comparison, summary]
+  - name: recommend_strategy
+    description: "Recommend the best demolition strategy based on structural metrics and comparison results"
+    tags: [comparison, recommendation]
+
+capabilities:
+  - strategy_comparison
+  - multi_strategy_analysis
+  - strategy_recommendation
+
+dependencies:
+  python: []
+  system: []

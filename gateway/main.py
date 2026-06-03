@@ -92,7 +92,6 @@ def _sanitize_for_json(obj: Any) -> Any:
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(BASE_DIR)
 CAIAO_SERVERS_DIR = os.path.join(PROJECT_DIR, "caiao_servers")
-# Check multiple possible venv locations (uv may create it at project root)
 _VENV_CANDIDATES = [
     os.path.join(BASE_DIR, "venv", "Scripts", "python.exe"),
     os.path.join(PROJECT_DIR, ".venv", "Scripts", "python.exe"),
@@ -100,7 +99,11 @@ _VENV_CANDIDATES = [
 ]
 VENV_PYTHON = next((p for p in _VENV_CANDIDATES if os.path.exists(p)), "python")
 
-SERVER_CONFIGS = [
+from caiao_config import discover_server_configs
+
+SERVER_CONFIGS = discover_server_configs()
+
+_LEGACY_CONFIGS = [
     {
         "name": "anastruct_server",
         "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
@@ -164,6 +167,7 @@ SERVER_CONFIGS = [
         "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
         "args": ["server.py"],
         "cwd": os.path.join(CAIAO_SERVERS_DIR, "full_analysis_3d_server"),
+        "lazy": True,
         "tools": ["full_analysis_3d"],
     },
     # P1: Declarative composite pipeline — auto-registered by _build_composite_handlers
@@ -201,6 +205,112 @@ SERVER_CONFIGS = [
                 "tool": "select_critical_element",
                 "input_map": {"structure": "structure", "analysis_result": "analysis"},
                 "map_result": "critical_element",
+            },
+        ],
+    },
+    # === Visual Demolition Animation Servers (Phase 1-3) ===
+    {
+        "name": "bim_model_server",
+        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
+        "args": ["server.py"],
+        "cwd": os.path.join(CAIAO_SERVERS_DIR, "bim_model_server"),
+        "lazy": True,
+        "tools": [
+            "generate_steel_frame",
+            "generate_concrete_structure",
+            "generate_hybrid_structure",
+            "export_ifc",
+            "generate_truss",
+            "generate_portal_frame",
+            "generate_beam",
+        ],
+    },
+    {
+        "name": "planning_server",
+        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
+        "args": ["server.py"],
+        "cwd": os.path.join(CAIAO_SERVERS_DIR, "planning_server"),
+        "lazy": True,
+        "tools": [
+            "plan_demolition_sequence",
+            "analyze_structure_topology",
+            "get_demolition_plan_summary",
+            "compute_collapse_chain",
+        ],
+    },
+    {
+        "name": "animation_control_server",
+        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
+        "args": ["server.py"],
+        "cwd": os.path.join(CAIAO_SERVERS_DIR, "animation_control_server"),
+        "lazy": True,
+        "tools": [
+            "create_timeline",
+            "get_timeline_state",
+            "sequence_to_animation_data",
+            "generate_effects_config",
+        ],
+    },
+    {
+        "name": "physics_server",
+        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
+        "args": ["server.py"],
+        "cwd": os.path.join(CAIAO_SERVERS_DIR, "physics_server"),
+        "lazy": True,
+        "tools": [
+            "init_physics_scene",
+            "apply_demolition_action",
+            "step_physics",
+            "get_physics_state",
+            "reset_physics",
+        ],
+    },
+    {
+        "name": "comparison_server",
+        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
+        "args": ["server.py"],
+        "cwd": os.path.join(CAIAO_SERVERS_DIR, "comparison_server"),
+        "lazy": True,
+        "tools": [
+            "compare_demolition_strategies",
+            "get_comparison_summary",
+            "recommend_strategy",
+        ],
+    },
+    # Composite pipeline: Full BIM + Demolition workflow (Phase 4 Merge)
+    {
+        "name": "full_bim_demolition",
+        "composite": True,
+        "description": "Pipeline: generate BIM model → plan demolition → create animation timeline in ONE call. Accepts the same parameters as generate_steel_frame. Returns the complete structure, demolition plan, and animation data.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "num_bays_x": {"type": "integer", "description": "Number of bays in X direction (default 3)"},
+                "num_bays_y": {"type": "integer", "description": "Number of bays in Y direction (default 3)"},
+                "num_stories": {"type": "integer", "description": "Number of stories (default 4)"},
+                "span_x_m": {"type": "number", "description": "Span length in X in meters (default 6.0)"},
+                "story_height_m": {"type": "number", "description": "Story height in meters (default 3.5)"},
+                "steel_grade": {"type": "string", "description": "Steel grade (default Q355)"},
+                "demolition_strategy": {"type": "string", "description": "top_down, bottom_up, sequential, or llm (default top_down)"},
+            },
+        },
+        "pipeline": [
+            {
+                "server": "bim_model_server",
+                "tool": "generate_steel_frame",
+                "map_result": "structure",
+            },
+            {
+                "server": "planning_server",
+                "tool": "plan_demolition_sequence",
+                "input_map": {"structure": "structure", "strategy": "demolition_strategy"},
+                "map_result": "demolition_plan",
+            },
+            {
+                "server": "animation_control_server",
+                "tool": "create_timeline",
+                "input_map": {"demolition_plan": "demolition_plan", "structure": "structure"},
+                "map_result": "timeline",
             },
         ],
     },
@@ -290,6 +400,82 @@ async def call_tool(req: ToolCallRequest):
         return JSONResponse({"error": "Hub not initialized"}, status_code=503)
     result = await hub.call_tool(req.tool_name, req.arguments)
     return result
+
+
+@app.get("/scenarios")
+async def list_scenarios(category: str | None = None, tag: str | None = None):
+    if hub is None:
+        return JSONResponse({"error": "Hub not initialized"}, status_code=503)
+    args: dict[str, Any] = {}
+    if category:
+        args["category"] = category
+    if tag:
+        args["tag"] = tag
+    result = await hub.call_tool("list_scenarios", args)
+    return result
+
+
+@app.get("/scenarios/{name}")
+async def get_scenario(name: str):
+    if hub is None:
+        return JSONResponse({"error": "Hub not initialized"}, status_code=503)
+    result = await hub.call_tool("get_scenario", {"name": name})
+    return result
+
+
+# ── Server management endpoints (for manager_server + frontend) ──────────────
+
+@app.get("/servers")
+async def list_servers_status():
+    if hub is None:
+        return JSONResponse({"error": "Hub not initialized"}, status_code=503)
+    return {"servers": hub.get_all_status()}
+
+
+@app.get("/servers/health")
+async def servers_health():
+    if hub is None:
+        return JSONResponse({"error": "Hub not initialized"}, status_code=503)
+    return {"health": hub.get_all_health()}
+
+
+@app.get("/servers/metrics")
+async def servers_metrics():
+    if hub is None:
+        return JSONResponse({"error": "Hub not initialized"}, status_code=503)
+    return {"metrics": hub._metrics}
+
+
+@app.post("/servers/{server_name}/restart")
+async def restart_server(server_name: str):
+    if hub is None:
+        return JSONResponse({"error": "Hub not initialized"}, status_code=503)
+    success = await hub.restart_server(server_name)
+    return {"status": "ok" if success else "error"}
+
+
+@app.post("/servers/{server_name}/pause")
+async def pause_server(server_name: str):
+    if hub is None:
+        return JSONResponse({"error": "Hub not initialized"}, status_code=503)
+    await hub.pause_server(server_name)
+    return {"status": "ok"}
+
+
+@app.post("/servers/{server_name}/resume")
+async def resume_server(server_name: str):
+    if hub is None:
+        return JSONResponse({"error": "Hub not initialized"}, status_code=503)
+    success = await hub.restart_server(server_name)
+    return {"status": "ok" if success else "error"}
+
+
+@app.post("/servers/{server_name}/stop")
+async def stop_server(server_name: str):
+    if hub is None:
+        return JSONResponse({"error": "Hub not initialized"}, status_code=503)
+    await hub.stop_server(server_name)
+    return {"status": "ok"}
 
 
 class VerifyRequest(BaseModel):
@@ -869,6 +1055,194 @@ async def unity_status():
     }
 
 
+# --- Visual Demolition Pipeline Definitions ---
+
+PIPELINE_VISUAL_DEMOLITION_TOPOLOGY: list[dict[str, Any]] = [
+    {
+        "server": "frame_generator",
+        "tool": "generate_frame",
+        "label": "Generating structural frame",
+        "skip_if_structure": True,
+    },
+    {
+        "server": "planning_server",
+        "tool": "plan_demolition_sequence",
+        "label": "Planning demolition sequence",
+    },
+    {
+        "server": "animation_control_server",
+        "tool": "create_timeline",
+        "label": "Creating animation timeline",
+    },
+    {
+        "server": "animation_control_server",
+        "tool": "sequence_to_animation_data",
+        "label": "Building animation data",
+    },
+    {
+        "server": "animation_control_server",
+        "tool": "generate_effects_config",
+        "label": "Configuring visual effects",
+    },
+    {
+        "server": "physics_server",
+        "tool": "init_physics_scene",
+        "label": "Initializing physics engine",
+    },
+]
+
+PIPELINE_VISUAL_DEMOLITION_MECHANICS: list[dict[str, Any]] = [
+    {
+        "server": "frame_generator",
+        "tool": "generate_frame",
+        "label": "Generating structural frame",
+    },
+    {
+        "server": "anastruct_server",
+        "tool": "analyze_frame",
+        "label": "Running structural analysis",
+    },
+    {
+        "server": "anastruct_server",
+        "tool": "select_critical_element",
+        "label": "Identifying critical elements",
+    },
+    {
+        "server": "planning_server",
+        "tool": "plan_demolition_sequence",
+        "label": "Planning demolition sequence",
+    },
+    {
+        "server": "animation_control_server",
+        "tool": "create_timeline",
+        "label": "Creating animation timeline",
+    },
+    {
+        "server": "animation_control_server",
+        "tool": "sequence_to_animation_data",
+        "label": "Building animation data",
+    },
+    {
+        "server": "animation_control_server",
+        "tool": "generate_effects_config",
+        "label": "Configuring visual effects",
+    },
+    {
+        "server": "physics_server",
+        "tool": "init_physics_scene",
+        "label": "Initializing physics engine",
+    },
+]
+
+
+def _resolve_pipeline_args(
+    tool_name: str,
+    structure: dict[str, Any] | None,
+    strategy: str,
+    effects_preset: str,
+    speed: float,
+    structure_params: dict[str, Any],
+    ctx: dict[str, Any],
+) -> dict[str, Any]:
+    """Build arguments for a pipeline step, using prior results from ctx."""
+    # Resolve effective structure: prefer ctx (from generate_frame) over param
+    effective_structure = structure
+    gen_result = _parse_step_result(ctx.get("generate_frame", {}))
+    if gen_result.get("nodes") and gen_result.get("elements"):
+        effective_structure = gen_result
+
+    if tool_name == "plan_demolition_sequence":
+        return {"structure": effective_structure or structure_params, "strategy": strategy}
+    if tool_name == "create_timeline":
+        return {
+            "demolition_plan": _parse_step_result(ctx.get("plan_demolition_sequence", {})),
+            "effects_preset": effects_preset,
+        }
+    if tool_name == "sequence_to_animation_data":
+        return {
+            "demolition_sequence": _parse_step_result(ctx.get("create_timeline", {})),
+            "speed": speed,
+        }
+    if tool_name == "generate_effects_config":
+        return {"preset": effects_preset, "structure": effective_structure or structure_params}
+    if tool_name == "init_physics_scene":
+        return {
+            "structure": effective_structure or structure_params,
+            "animation_data": _parse_step_result(ctx.get("sequence_to_animation_data", {})),
+        }
+    if tool_name == "generate_frame":
+        return {
+            "num_bays_x": structure_params.get("num_bays_x", 3),
+            "num_stories": structure_params.get("num_stories", 4),
+            "span_x_m": structure_params.get("span_x_m", 6.0),
+            "story_height_m": structure_params.get("story_height_m", 3.0),
+            "steel_grade": structure_params.get("steel_grade", "Q355"),
+        }
+    if tool_name == "analyze_frame":
+        return {"structure": effective_structure or structure_params}
+    if tool_name == "select_critical_element":
+        analysis = _parse_step_result(ctx.get("analyze_frame", {}))
+        return {
+            "structure": effective_structure or structure_params,
+            "analysis_result": analysis,
+        }
+    return {}
+
+
+def _parse_step_result(raw: dict[str, Any]) -> dict[str, Any]:
+    """Unwrap CAIAO tool result: if raw has a 'result' key with a JSON string, parse it."""
+    result_val = raw.get("result")
+    if isinstance(result_val, str):
+        try:
+            return json.loads(result_val)
+        except (json.JSONDecodeError, TypeError):
+            return {"raw": result_val}
+    if isinstance(result_val, dict):
+        return result_val
+    return raw
+
+
+def _trim_for_pipeline(result: dict[str, Any]) -> dict[str, Any]:
+    """Trim verbose fields from a pipeline step result for progress messages.
+
+    Preserves the 'result' key (the actual tool output) intact — the frontend
+    parses it to extract structures, plans, and animation data.
+    """
+    trimmed: dict[str, Any] = {}
+    for k, v in result.items():
+        if k == "result":
+            trimmed[k] = v
+        elif k in ("steps", "chain_rounds", "animation_sequence", "body_states", "keyframes"):
+            trimmed[k] = f"[{len(v)} items]" if isinstance(v, list) else str(v)[:200]
+        elif k == "error":
+            trimmed[k] = str(v)[:300]
+        elif isinstance(v, str) and len(v) > 500:
+            trimmed[k] = v[:500] + "..."
+        else:
+            trimmed[k] = v
+    return trimmed
+
+
+def _extract_timeline_steps(ctx: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract a simplified timeline step list from pipeline context for the frontend."""
+    plan_raw = _parse_step_result(ctx.get("plan_demolition_sequence", {}))
+    timeline_raw = _parse_step_result(ctx.get("create_timeline", {}))
+
+    steps = plan_raw.get("steps") or timeline_raw.get("steps") or []
+    if isinstance(steps, list) and len(steps) > 0 and isinstance(steps[0], dict):
+        return [
+            {
+                "id": s.get("step", i),
+                "elementId": s.get("element_id", 0),
+                "elementType": s.get("element_type", "unknown"),
+                "phase": s.get("action", "remove"),
+                "durationMs": s.get("duration_ms", 2000),
+            }
+            for i, s in enumerate(steps)
+        ][:50]  # cap at 50 for message size
+    return []
+
+
 # --- WebSocket for Chat ---
 
 @app.websocket("/ws/chat")
@@ -896,6 +1270,52 @@ async def ws_chat(websocket: WebSocket):
     heartbeat_task = asyncio.create_task(_heartbeat())
 
     history: list[dict[str, Any]] = []
+    agent_task: asyncio.Task | None = None
+
+    async def _run_agent(user_message: str, memory_context: str) -> None:
+        """Run the agent loop as a background task, sending steps to frontend."""
+        nonlocal history
+        try:
+            final_content = ""
+            new_history: list[dict[str, Any]] = []
+            async for step in agent.run(user_message, history, memory_context):
+                if step["type"] == "history":
+                    new_history = step["messages"]
+                    continue
+                await _safe_send(step)
+                if step["type"] == "response":
+                    final_content = step["content"]
+
+            if new_history:
+                history = new_history
+            else:
+                history.append({"role": "user", "content": user_message})
+                if final_content:
+                    history.append({"role": "assistant", "content": final_content})
+
+            if memory:
+                memory.add(f"User: {user_message}")
+                if final_content:
+                    memory.add(f"Assistant: {final_content}")
+
+            if len(history) > 20:
+                history = history[-20:]
+            while history and history[0].get("role") == "tool":
+                history.pop(0)
+
+        except asyncio.CancelledError:
+            await _safe_send({
+                "type": "response",
+                "content": "Task cancelled by user.",
+                "cancelled": True,
+            })
+        except Exception as e:
+            logger.exception("Agent loop error")
+            await _safe_send({
+                "type": "error",
+                "content": f"Agent error: {e}",
+            })
+
     try:
         while True:
             data = await websocket.receive_text()
@@ -907,14 +1327,12 @@ async def ws_chat(websocket: WebSocket):
                 if not user_message:
                     continue
 
-                # Echo user message back so frontend can display it
                 await _safe_send({
                     "type": "user_echo",
                     "content": user_message,
                 })
 
                 if agent and hub:
-                    # Retrieve relevant memories
                     memory_context = ""
                     if memory:
                         memory_context = memory.get_memory_context(user_message)
@@ -924,50 +1342,42 @@ async def ws_chat(websocket: WebSocket):
                                 "content": memory_context,
                             })
 
-                    # Run the agent loop with memory context (streaming)
-                    try:
-                        final_content = ""
-                        new_history: list[dict[str, Any]] = []
-                        async for step in agent.run(user_message, history, memory_context):
-                            if step["type"] == "history":
-                                new_history = step["messages"]
-                                continue
-                            await _safe_send(step)
-                            if step["type"] == "response":
-                                final_content = step["content"]
+                    agent.reset_signals()
+                    if agent_task and not agent_task.done():
+                        agent.cancel()
+                        agent_task.cancel()
+                        try:
+                            await agent_task
+                        except asyncio.CancelledError:
+                            pass
 
-                        # Use full message history from agent (preserving reasoning_content, tool_calls)
-                        if new_history:
-                            history = new_history
-                        else:
-                            history.append({"role": "user", "content": user_message})
-                            if final_content:
-                                history.append({"role": "assistant", "content": final_content})
-
-                        # Store exchange in persistent memory
-                        if memory:
-                            memory.add(f"User: {user_message}")
-                            if final_content:
-                                memory.add(f"Assistant: {final_content}")
-
-                        # Trim history to prevent context overflow (keep last 20)
-                        # Ensure we don't orphan tool messages from their tool_calls
-                        if len(history) > 20:
-                            history = history[-20:]
-                        while history and history[0].get("role") == "tool":
-                            history.pop(0)
-
-                    except Exception as e:
-                        logger.exception("Agent loop error")
-                        await _safe_send({
-                            "type": "error",
-                            "content": f"Agent error: {e}",
-                        })
+                    agent_task = asyncio.create_task(_run_agent(user_message, memory_context))
                 else:
                     await _safe_send({
                         "type": "response",
                         "content": "Agent not initialized. Check server configuration.",
                     })
+
+            elif msg_type == "cancel":
+                if agent:
+                    agent.cancel()
+                if agent_task and not agent_task.done():
+                    agent_task.cancel()
+                    try:
+                        await agent_task
+                    except asyncio.CancelledError:
+                        pass
+                    agent_task = None
+
+            elif msg_type == "pause":
+                if agent:
+                    agent.pause()
+                await _safe_send({"type": "status", "content": "paused"})
+
+            elif msg_type == "resume":
+                if agent:
+                    agent.resume()
+                await _safe_send({"type": "status", "content": "resumed"})
 
             elif msg_type == "tool_call" and hub:
                 tool_name = msg.get("tool_name", "")
@@ -979,11 +1389,130 @@ async def ws_chat(websocket: WebSocket):
                     "result": result,
                 })
 
+            elif msg_type == "launch_pipeline":
+                pipeline_name = msg.get("pipeline", "visual_demolition_topology")
+                params = msg.get("params", {})
+
+                if pipeline_name == "visual_demolition_topology":
+                    pipeline_def = PIPELINE_VISUAL_DEMOLITION_TOPOLOGY
+                elif pipeline_name == "visual_demolition_mechanics":
+                    pipeline_def = PIPELINE_VISUAL_DEMOLITION_MECHANICS
+                else:
+                    await _safe_send({
+                        "type": "pipeline_error",
+                        "content": f"Unknown pipeline: {pipeline_name}",
+                    })
+                    continue
+
+                structure = params.get("structure")
+                strategy = params.get("strategy", "top_down")
+                effects_preset = params.get("effects_preset", "standard")
+                speed = params.get("speed", 1.0)
+                structure_params = params.get("structure_params", {})
+
+                has_structure = structure and structure.get("nodes") and structure.get("elements")
+                has_generator = any(s.get("tool") == "generate_frame" for s in pipeline_def)
+
+                if not has_structure and not has_generator:
+                    await _safe_send({
+                        "type": "pipeline_error",
+                        "content": "Pipeline requires a valid structure — none provided and no generator step in pipeline",
+                    })
+                    continue
+
+                await _safe_send({
+                    "type": "pipeline_start",
+                    "pipeline": pipeline_name,
+                    "total_steps": len(pipeline_def),
+                    "strategy": strategy,
+                })
+
+                try:
+                    pipeline_ctx: dict[str, Any] = {}
+                    has_structure = structure and structure.get("nodes") and structure.get("elements")
+                    for i, step in enumerate(pipeline_def):
+                        if step.get("skip_if_structure") and has_structure:
+                            logger.info(f"Pipeline skipping {step['tool']} — structure already provided")
+                            pipeline_ctx[step["tool"]] = {"nodes": structure["nodes"], "elements": structure["elements"], "loads": structure.get("loads", []), "supports": structure.get("supports", [])}
+                            await _safe_send({
+                                "type": "pipeline_step",
+                                "phase": step.get("label", step["tool"]),
+                                "progress": round((i + 1) / len(pipeline_def), 2),
+                                "step_index": i,
+                                "total_steps": len(pipeline_def),
+                                "tool": step["tool"],
+                                "data": {"status": "skipped", "reason": "structure already provided"},
+                            })
+                            continue
+                        tool_name = step["tool"]
+                        label = step.get("label", tool_name)
+                        server_hint = step.get("server")
+
+                        # Resolve arguments at execution time (may depend on earlier results)
+                        arguments = _resolve_pipeline_args(
+                            tool_name, structure, strategy, effects_preset,
+                            speed, structure_params, pipeline_ctx,
+                        )
+
+                        if server_hint:
+                            await hub._ensure_server(tool_name, server_hint)
+
+                        result = await hub.call_tool(tool_name, arguments)
+                        pipeline_ctx[tool_name] = result
+
+                        progress = round((i + 1) / len(pipeline_def), 2)
+
+                        if "error" in result:
+                            await _safe_send({
+                                "type": "pipeline_step",
+                                "phase": label,
+                                "progress": progress,
+                                "step_index": i,
+                                "total_steps": len(pipeline_def),
+                                "tool": tool_name,
+                                "error": str(result.get("error", "Unknown error")),
+                            })
+                            await _safe_send({
+                                "type": "pipeline_error",
+                                "content": f"Pipeline failed at step {i+1}/{len(pipeline_def)} ({label}): {result.get('error', 'Unknown error')}",
+                            })
+                            break
+
+                        await _safe_send({
+                            "type": "pipeline_step",
+                            "phase": label,
+                            "progress": progress,
+                            "step_index": i,
+                            "total_steps": len(pipeline_def),
+                            "tool": tool_name,
+                            "data": _trim_for_pipeline(result),
+                        })
+                    else:
+                        plan_result = _parse_step_result(pipeline_ctx.get("plan_demolition_sequence", {}))
+                        step_count = plan_result.get("total_steps", 0) if isinstance(plan_result, dict) else 0
+                        timeline_steps = _extract_timeline_steps(pipeline_ctx)
+                        await _safe_send({
+                            "type": "pipeline_complete",
+                            "pipeline": pipeline_name,
+                            "timeline_steps": timeline_steps,
+                            "strategy": strategy,
+                            "step_count": step_count,
+                        })
+                except Exception as e:
+                    logger.exception("Pipeline execution error")
+                    await _safe_send({
+                        "type": "pipeline_error",
+                        "content": f"Pipeline execution error: {e}",
+                    })
+
     except WebSocketDisconnect:
         logger.info("WebSocket client disconnected")
     except Exception as e:
         logger.exception("WebSocket error")
     finally:
+        if agent_task and not agent_task.done():
+            agent.cancel() if agent else None
+            agent_task.cancel()
         heartbeat_task.cancel()
 
 

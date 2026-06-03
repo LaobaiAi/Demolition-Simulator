@@ -1,0 +1,48 @@
+# caiao.yaml — Physics Server manifest
+
+name: physics_server
+version: 0.1.0
+kind: atomic-mcp
+description: "Rigid body physics for demolition animation — Rapier physics engine (with kinematic fallback) for simulating structural collapse with removal, explosion, and push actions"
+status: active
+since: "2026-06-01"
+
+start_mode: lazy
+
+command:
+  python: auto
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+
+health:
+  timeout_ms: 5000
+  restart_on_crash: false
+  max_restarts: 3
+  health_check_interval_s: 0
+
+tools:
+  - name: init_physics_scene
+    description: "Initialize a physics scene with structural elements as rigid bodies"
+    tags: [physics, initialization]
+  - name: apply_demolition_action
+    description: "Apply a demolition action (remove/explode/push) to elements in the physics scene"
+    tags: [physics, demolition]
+  - name: step_physics
+    description: "Advance the physics simulation by a number of time steps"
+    tags: [physics, simulation]
+  - name: get_physics_state
+    description: "Get the current state (positions, velocities) of all bodies in the scene"
+    tags: [physics, state]
+  - name: reset_physics
+    description: "Reset a physics scene to its initial state"
+    tags: [physics, lifecycle]
+
+capabilities:
+  - rigid_body_physics
+  - collapse_simulation
+  - kinematic_fallback
+
+dependencies:
+  python: [rapier]
+  system: []

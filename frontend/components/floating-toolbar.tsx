@@ -10,13 +10,18 @@ import {
   ChevronUp,
   Wifi,
   WifiOff,
+  Hammer,
 } from "lucide-react";
+import { t, type Lang } from "@/lib/i18n";
 
 interface FloatingToolbarProps {
+  lang: Lang;
   wsConnected: "connected" | "reconnecting" | "disconnected";
   toolsCount: number;
+  demolitionMode: boolean;
   onOpenSettings: () => void;
   onClearChat: () => void;
+  onToggleDemolitionMode: () => void;
   quickActions: string[];
   onQuickAction: (action: string) => void;
 }
@@ -30,10 +35,13 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export function FloatingToolbar({
+  lang,
   wsConnected,
   toolsCount,
+  demolitionMode,
   onOpenSettings,
   onClearChat,
+  onToggleDemolitionMode,
   quickActions,
   onQuickAction,
 }: FloatingToolbarProps) {
@@ -147,19 +155,19 @@ export function FloatingToolbar({
     <div
       ref={toolbarRef}
       onMouseDown={handleMouseDown}
-      className={`fixed z-50 select-none rounded-xl border border-border bg-[#0f172a]/95 backdrop-blur-sm shadow-xl shadow-black/30 transition-shadow cursor-grab active:cursor-grabbing ${
+      className={`fixed z-50 select-none rounded-xl border border-border bg-xuanwu-bg/95 backdrop-blur-sm shadow-xl shadow-black/20 transition-shadow cursor-grab active:cursor-grabbing ${
         dragging ? "shadow-2xl shadow-black/50 ring-1 ring-primary/30" : ""
       }`}
       style={posStyle}
     >
       {/* Collapsed state */}
       {!expanded && (
-        <div className="flex items-center gap-2 px-3 py-2 hover:bg-white/5 rounded-xl transition-colors">
+        <div className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 rounded-xl transition-colors">
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <text x="1" y="8" fill="#22d3ee" fontSize="8" fontWeight="bold" fontFamily="sans-serif">玄</text>
-            <text x="8" y="16" fill="#22d3ee" fontSize="8" fontWeight="bold" fontFamily="sans-serif">武</text>
+            <text x="1" y="8" fill="var(--xuanwu-cyan)" fontSize="8" fontWeight="bold" fontFamily="sans-serif">玄</text>
+            <text x="8" y="16" fill="var(--xuanwu-cyan)" fontSize="8" fontWeight="bold" fontFamily="sans-serif">武</text>
           </svg>
-          <span className="text-xs font-medium text-slate-300">XuanwuAI</span>
+          <span className="text-xs font-medium text-muted-foreground">XuanwuAI</span>
         </div>
       )}
 
@@ -167,13 +175,13 @@ export function FloatingToolbar({
       {expanded && (
         <div className="w-[260px]">
           {/* Drag handle -- click anywhere on the title bar to collapse */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 hover:bg-white/5 rounded-t-xl transition-colors cursor-pointer"
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 hover:bg-muted/50 rounded-t-xl transition-colors cursor-pointer"
                onClick={() => setExpanded(false)}>
             <div className="flex items-center gap-2 pointer-events-none">
               <GripHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <text x="1" y="7" fill="#22d3ee" fontSize="6" fontWeight="bold" fontFamily="sans-serif">玄</text>
-                <text x="6" y="13" fill="#22d3ee" fontSize="6" fontWeight="bold" fontFamily="sans-serif">武</text>
+                <text x="1" y="7" fill="var(--xuanwu-cyan)" fontSize="6" fontWeight="bold" fontFamily="sans-serif">玄</text>
+                <text x="6" y="13" fill="var(--xuanwu-cyan)" fontSize="6" fontWeight="bold" fontFamily="sans-serif">武</text>
               </svg>
               <span className="text-xs font-semibold text-foreground">XuanwuAI</span>
             </div>
@@ -189,61 +197,71 @@ export function FloatingToolbar({
           {/* Content */}
           <div className="p-2 space-y-1.5">
             {/* Status row */}
-            <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-white/[0.03]">
-              <span className="text-[11px] text-muted-foreground">Gateway</span>
+            <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-muted/30">
+              <span className="text-[11px] text-muted-foreground">{t("toolbar.gateway", lang)}</span>
               <span className="flex items-center gap-1.5">
                 {wsConnected === "connected" ? (
                   <>
                     <Wifi className="h-3 w-3 text-emerald-400" />
-                    <span className="text-[11px] font-medium text-emerald-400">Connected</span>
+                    <span className="text-[11px] font-medium text-emerald-400">{t("toolbar.connected", lang)}</span>
                   </>
                 ) : wsConnected === "reconnecting" ? (
                   <>
                     <WifiOff className="h-3 w-3 text-amber-400 animate-pulse" />
-                    <span className="text-[11px] font-medium text-amber-400">Reconnecting</span>
+                    <span className="text-[11px] font-medium text-amber-400">{t("toolbar.reconnecting", lang)}</span>
                   </>
                 ) : (
                   <>
                     <WifiOff className="h-3 w-3 text-red-400" />
-                    <span className="text-[11px] font-medium text-red-400">Offline</span>
+                    <span className="text-[11px] font-medium text-red-400">{t("toolbar.offline", lang)}</span>
                   </>
                 )}
               </span>
             </div>
 
-            <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-white/[0.03]">
-              <span className="text-[11px] text-muted-foreground">Tools</span>
+            <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-muted/30">
+              <span className="text-[11px] text-muted-foreground">{t("toolbar.tools", lang)}</span>
               <span className="flex items-center gap-1.5">
                 <Activity className="h-3 w-3 text-primary" />
-                <span className="text-[11px] font-medium text-primary">{toolsCount} loaded</span>
+                <span className="text-[11px] font-medium text-primary">{t("toolbar.tools_loaded", lang).replace("{n}", String(toolsCount))}</span>
               </span>
             </div>
 
             {/* Actions */}
             <div className="pt-1">
-              <p className="px-2 py-1 text-[10px] text-muted-foreground uppercase tracking-wider">Actions</p>
+              <p className="px-2 py-1 text-[10px] text-muted-foreground uppercase tracking-wider">{t("toolbar.actions", lang)}</p>
+              <button
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={() => { onToggleDemolitionMode(); setExpanded(false); }}
+                className={`flex w-full items-center gap-2 px-2 py-1.5 rounded-md transition-colors cursor-pointer text-left ${demolitionMode ? "bg-primary/15 hover:bg-primary/20" : "hover:bg-muted/50"}`}
+              >
+                <Hammer className={`h-3.5 w-3.5 ${demolitionMode ? "text-primary" : "text-muted-foreground"}`} />
+                <span className={`text-xs ${demolitionMode ? "text-primary font-medium" : "text-foreground"}`}>
+                  {demolitionMode ? t("toolbar.demolition_on", lang) : t("toolbar.demolition_off", lang)}
+                </span>
+              </button>
               <button
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => onOpenSettings()}
-                className="flex w-full items-center gap-2 px-2 py-1.5 rounded-md hover:bg-white/[0.05] transition-colors cursor-pointer text-left"
+                className="flex w-full items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer text-left"
               >
                 <Settings className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-xs text-foreground">LLM Settings</span>
+                <span className="text-xs text-foreground">{t("toolbar.llm_settings", lang)}</span>
               </button>
               <button
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => { onClearChat(); setExpanded(false); }}
-                className="flex w-full items-center gap-2 px-2 py-1.5 rounded-md hover:bg-white/[0.05] transition-colors cursor-pointer text-left"
+                className="flex w-full items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer text-left"
               >
                 <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-xs text-foreground">Clear Chat</span>
+                <span className="text-xs text-foreground">{t("toolbar.clear", lang)}</span>
               </button>
             </div>
 
             {/* Quick analyses */}
             <div className="pt-1">
               <p className="px-2 py-1 text-[10px] text-muted-foreground uppercase tracking-wider">
-                Quick Analysis
+                {t("toolbar.quick_analysis", lang)}
               </p>
               <div className="space-y-0.5">
                 {quickActions.slice(0, 5).map((action) => (
@@ -251,7 +269,7 @@ export function FloatingToolbar({
                     key={action}
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={() => { onQuickAction(action); setExpanded(false); }}
-                    className="flex w-full items-center gap-2 px-2 py-1.5 rounded-md hover:bg-white/[0.05] transition-colors cursor-pointer text-left"
+                    className="flex w-full items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer text-left"
                   >
                     <Zap className="h-3.5 w-3.5 text-amber-400 shrink-0" />
                     <span className="text-xs text-foreground truncate">{action}</span>

@@ -26,6 +26,9 @@ interface Props {
   animationTrigger?: number;
   animatingElements?: number[];
   onAnimationComplete?: () => void;
+  // External control
+  activeEffects?: Record<string, boolean>;
+  canvasCallback?: (canvas: HTMLCanvasElement | null) => void;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -144,6 +147,7 @@ interface AnimationState {
 export function FrameVisualization3D({
   structure, displacements, criticalElementId, failedElements, displayFailedElements, maxDisplacement, elementForces,
   animationTrigger, animatingElements, onAnimationComplete,
+  activeEffects, canvasCallback,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -192,6 +196,13 @@ export function FrameVisualization3D({
   // Sync effects to ref for render loop
   useEffect(() => { effectsRef.current = effects; }, [effects]);
 
+  // Sync external activeEffects into local state + ref
+  useEffect(() => {
+    if (!activeEffects) return;
+    setEffects(activeEffects);
+    effectsRef.current = activeEffects;
+  }, [activeEffects]);
+
   const toggleEffect = (k: EffectKey) => setEffects(p => ({ ...p, [k]: !p[k] }));
   const activeScore = EFFECT_DEFS.filter(d => effects[d.key]).reduce((s, d) => s + d.score, 0);
 
@@ -213,6 +224,7 @@ export function FrameVisualization3D({
     renderer.toneMappingExposure = 1.1;
     canvas.appendChild(renderer.domElement);
     rendererRef.current = renderer;
+    canvasCallback?.(renderer.domElement);
 
     // Scene
     const scene = new THREE.Scene();
@@ -302,6 +314,7 @@ export function FrameVisualization3D({
       running = false;
       ro.disconnect();
       controls.dispose();
+      canvasCallback?.(null);
       renderer.dispose();
       if (canvas.contains(renderer.domElement)) canvas.removeChild(renderer.domElement);
       [scene, fg, ag, dg, dug, frg].forEach(g => g.traverse(obj => {
@@ -764,7 +777,7 @@ export function FrameVisualization3D({
   if (!structure || !structure.nodes.length) {
     return (
       <div ref={containerRef} className="flex-1 flex flex-col min-h-0">
-        <div ref={canvasRef} className="flex-1 relative bg-[#0a0f1a] overflow-hidden">
+        <div ref={canvasRef} className="flex-1 relative bg-xuanwu-deep overflow-hidden">
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="flex flex-col items-center gap-6 text-center">
               <svg width="120" height="120" viewBox="0 0 120 120" fill="none" className="opacity-60">
@@ -826,7 +839,7 @@ export function FrameVisualization3D({
       </div>
 
       {/* Canvas */}
-      <div ref={canvasRef} className="flex-1 relative bg-[#0a0f1a] overflow-hidden">
+      <div ref={canvasRef} className="flex-1 relative bg-xuanwu-deep overflow-hidden">
         {/* Flash overlay */}
         {flashOpacity > 0 && (
           <div className="absolute inset-0 pointer-events-none z-10" style={{ backgroundColor: `rgba(239,68,68,${flashOpacity})` }} />
@@ -900,7 +913,7 @@ export function FrameVisualization3D({
           )}
           {/* Mini health bar */}
           {structure.elements.length > 0 && (
-            <div className="w-12 h-1.5 rounded-full bg-[#1e293b] overflow-hidden shrink-0">
+            <div className="w-12 h-1.5 rounded-full bg-muted overflow-hidden shrink-0">
               <div className="h-full rounded-full bg-red-500 transition-all duration-300"
                 style={{ width: `${(collapsedCount / structure.elements.length) * 100}%` }} />
             </div>

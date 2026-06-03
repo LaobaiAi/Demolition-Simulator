@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import platform
+import time
 from typing import Any
 
 from mcp.client.stdio import stdio_client, StdioServerParameters
@@ -78,6 +79,10 @@ class CAIAOClientHub:
         self._local_handlers: dict[str, Any] = {}
         # Semantic index for P2: fuzzy tool name matching (must init BEFORE composite handlers)
         self._semantic_index: list[dict[str, Any]] = []
+        # State machine & metrics tracking (for manager_server health monitoring)
+        self._server_states: dict[str, dict[str, Any]] = {}
+        self._metrics: dict[str, dict[str, Any]] = {}
+        self._init_server_states()
         self._build_semantic_index()
         # Auto-register composite pipeline handlers from config
         self._build_composite_handlers()
@@ -191,6 +196,30 @@ class CAIAOClientHub:
 
         self.register_local_tool(name, description, input_schema, _pipeline_handler)
         logger.info(f"Composite pipeline registered: '{name}' ({len(pipeline)} steps)")
+
+    def _init_server_states(self) -> None:
+        """Initialize state tracking for all configured servers."""
+        for config in self._server_configs:
+            name = config["name"]
+            is_composite = config.get("composite", False)
+            is_lazy = config.get("lazy", False)
+            self._server_states[name] = {
+                "state": "composite" if is_composite else ("hibernating" if is_lazy else "registered"),
+                "pid": None,
+                "started_at": None,
+                "crash_count": 0,
+                "restart_count": 0,
+                "max_restarts": 3,
+                "last_error": None,
+            }
+            self._metrics[name] = {
+                "total_calls": 0,
+                "error_count": 0,
+                "total_latency_ms": 0.0,
+                "avg_latency_ms": 0.0,
+                "last_called": None,
+                "tool_metrics": {},
+            }
 
     def _build_tool_config_map(self) -> dict[str, str]:
         """Build static tool_name → server_name lookup from configs.
@@ -336,6 +365,8 @@ class CAIAOClientHub:
         if name in self._sessions:
             return  # already running
 
+        self._server_states.setdefault(name, {})["state"] = "starting"
+
         server_params = StdioServerParameters(
             command=config["command"],
             args=config["args"],
@@ -360,6 +391,11 @@ class CAIAOClientHub:
             desc = getattr(tool, "description", "") or ""
             keywords = self._tokenize(f"{tool.name} {desc}")
             self._semantic_index.append({"name": tool.name, "keywords": keywords, "description": desc})
+
+        st = self._server_states.setdefault(name, {})
+        st["state"] = "running"
+        st["pid"] = getattr(read, "pid", None) or getattr(write, "pid", None)
+        st["started_at"] = time.time()
 
         logger.info(f"CAIAO server '{name}' ready with {len(tools_result.tools)} tools")
 
@@ -418,12 +454,15 @@ class CAIAOClientHub:
         return False
 
     async def list_tools(self) -> list[dict[str, Any]]:
-        """Return all available tools from all running servers plus local handlers.
+        """Return all available tools from all running servers, local handlers,
+        AND lazy servers that are registered but not yet started.
 
-        Lazy servers that haven't been started yet are NOT listed until
-        their first tool call triggers startup. Local tools are always listed.
+        Lazy server tools are included from their static config so the LLM
+        can see the full capability set even before a server is first called.
         """
         tools = list(self._local_tools.values())
+
+        # Running servers
         for name, session in self._sessions.items():
             try:
                 result = await session.list_tools()
@@ -436,6 +475,23 @@ class CAIAOClientHub:
                     })
             except Exception:
                 logger.warning(f"Failed to list tools from '{name}', skipping")
+
+        # Lazy servers — include from static config so the LLM knows about them
+        seen_names = {t["name"] for t in tools}
+        for config in self._server_configs:
+            if config.get("lazy") and not config.get("composite"):
+                server_name = config["name"]
+                for tool_name in config.get("tools", []):
+                    if tool_name not in seen_names:
+                        tools.append({
+                            "name": tool_name,
+                            "description": f"Tool from CAIAO server '{server_name}' (lazy — starts on first call)",
+                            "input_schema": {"type": "object", "properties": {}},
+                            "server": server_name,
+                            "lazy": True,
+                        })
+                        seen_names.add(tool_name)
+
         return tools
 
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -473,8 +529,11 @@ class CAIAOClientHub:
         if session is None:
             return {"error": f"Server '{server_name}' is not connected"}
 
+        call_start = time.time()
         try:
             result = await session.call_tool(tool_name, arguments=arguments)
+            elapsed_ms = (time.time() - call_start) * 1000
+            self._record_metric(server_name, tool_name, elapsed_ms, None)
             # Extract text content from result
             if hasattr(result, "content") and result.content:
                 texts = []
@@ -486,8 +545,28 @@ class CAIAOClientHub:
                 return {"result": texts[0] if len(texts) == 1 else texts}
             return {"result": str(result)}
         except Exception as e:
+            elapsed_ms = (time.time() - call_start) * 1000
+            self._record_metric(server_name, tool_name, elapsed_ms, str(e))
             logger.exception(f"Tool call '{tool_name}' failed")
             return {"error": str(e)}
+
+    def _record_metric(self, server_name: str, tool_name: str, latency_ms: float, error: str | None) -> None:
+        """Record a tool call metric."""
+        m = self._metrics.setdefault(server_name, {})
+        m["total_calls"] = m.get("total_calls", 0) + 1
+        m["total_latency_ms"] = m.get("total_latency_ms", 0.0) + latency_ms
+        m["avg_latency_ms"] = round(m["total_latency_ms"] / m["total_calls"], 2)
+        m["last_called"] = time.time()
+        if error:
+            m["error_count"] = m.get("error_count", 0) + 1
+
+        tm = m.setdefault("tool_metrics", {})
+        tm.setdefault(tool_name, {"calls": 0, "errors": 0, "total_latency_ms": 0.0})
+        tm[tool_name]["calls"] += 1
+        tm[tool_name]["total_latency_ms"] += latency_ms
+        tm[tool_name]["avg_latency_ms"] = round(tm[tool_name]["total_latency_ms"] / tm[tool_name]["calls"], 2)
+        if error:
+            tm[tool_name]["errors"] += 1
 
     async def call_tools_parallel(
         self,
@@ -535,6 +614,173 @@ class CAIAOClientHub:
                 results.append(await self.call_tool(tool_name, args))
             return results
 
+    async def execute_pipeline(
+        self,
+        steps: list[dict[str, Any]],
+        initial_context: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        """Execute a sequential pipeline of tool calls, yielding progress events.
+
+        Each step dict:
+          - tool: str (tool name to call)
+          - arguments: dict (passed directly to call_tool)
+          - server: str (optional, for lazy-start hint via tool→config lookup)
+          - label: str (human-readable phase label for frontend progress)
+
+        Returns (final_context, progress_events) where each event has:
+          phase, progress (0-1), label, tool, data (step result, trimmed)
+        """
+        context = dict(initial_context or {})
+        progress_events: list[dict[str, Any]] = []
+        total = len(steps)
+
+        for i, step in enumerate(steps):
+            tool_name = step["tool"]
+            arguments = step.get("arguments", {})
+            label = step.get("label", tool_name)
+            server_hint = step.get("server")
+
+            logger.info(f"Pipeline [{i+1}/{total}]: {label} ({tool_name})")
+
+            # Ensure lazy server is running
+            if server_hint:
+                await self._ensure_server(tool_name, server_hint)
+            else:
+                await self._ensure_server(tool_name)
+
+            result = await self.call_tool(tool_name, arguments)
+            context[tool_name] = result
+
+            event = {
+                "phase": label,
+                "progress": round((i + 1) / total, 2),
+                "step_index": i,
+                "total_steps": total,
+                "tool": tool_name,
+                "data": _trim_pipeline_result(result),
+            }
+
+            if "error" in result:
+                event["error"] = result["error"]
+                progress_events.append(event)
+                break
+
+            progress_events.append(event)
+
+        context["pipeline_status"] = "complete" if len(progress_events) == total else "partial"
+        return context, progress_events
+
+    @staticmethod
+    def _trim_pipeline_result(result: dict[str, Any], max_len: int = 2000) -> dict[str, Any]:
+        """Trim large fields in a result dict for progress-event transmission."""
+        trimmed: dict[str, Any] = {}
+        for k, v in result.items():
+            if k in ("steps", "chain_rounds", "animation_sequence", "body_states"):
+                if isinstance(v, list):
+                    trimmed[k] = f"[{len(v)} items]"
+                else:
+                    trimmed[k] = str(v)[:200]
+            elif k == "error":
+                trimmed[k] = str(v)[:500]
+            elif isinstance(v, str) and len(v) > max_len:
+                trimmed[k] = v[:max_len] + "..."
+            else:
+                trimmed[k] = v
+        return trimmed
+
+
+    def get_all_status(self) -> list[dict[str, Any]]:
+        """Return status for all registered servers (for manager_server)."""
+        results = []
+        for name, state in self._server_states.items():
+            metrics = self._metrics.get(name, {})
+            results.append({
+                "name": name,
+                "state": state.get("state", "unknown"),
+                "pid": state.get("pid"),
+                "started_at": state.get("started_at"),
+                "crash_count": state.get("crash_count", 0),
+                "restart_count": state.get("restart_count", 0),
+                "total_calls": metrics.get("total_calls", 0),
+                "error_count": metrics.get("error_count", 0),
+                "avg_latency_ms": metrics.get("avg_latency_ms", 0),
+            })
+        return results
+
+    def get_all_health(self) -> dict[str, Any]:
+        """Return health states for all servers."""
+        return {
+            name: {
+                "state": st.get("state", "unknown"),
+                "pid": st.get("pid"),
+                "started_at": st.get("started_at"),
+                "crash_count": st.get("crash_count", 0),
+                "last_error": st.get("last_error"),
+            }
+            for name, st in self._server_states.items()
+        }
+
+    async def restart_server(self, name: str) -> bool:
+        """Stop and restart a server. Returns True if successful."""
+        await self.stop_server(name)
+        config = next((c for c in self._server_configs if c["name"] == name), None)
+        if config is None:
+            return False
+        try:
+            await self._start_one(config)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to restart server '{name}': {e}")
+            st = self._server_states.setdefault(name, {})
+            st["state"] = "crashed"
+            st["crash_count"] = st.get("crash_count", 0) + 1
+            st["last_error"] = str(e)
+            return False
+
+    async def pause_server(self, name: str) -> None:
+        """Pause a server: stop its process but keep config for resume."""
+        ctx = self._contexts.pop(name, None)
+        if ctx is not None:
+            cm, session, read, write = ctx
+            try:
+                await session.__aexit__(None, None, None)
+            except Exception:
+                pass
+            try:
+                await cm.__aexit__(None, None, None)
+            except Exception:
+                pass
+            self._sessions.pop(name, None)
+            for tool, svr in list(self._tool_registry.items()):
+                if svr == name:
+                    del self._tool_registry[tool]
+        st = self._server_states.get(name, {})
+        st["state"] = "hibernating"
+        logger.info(f"Server '{name}' paused (hibernating)")
+
+    async def stop_server(self, name: str) -> None:
+        """Stop a single server and clean up its resources."""
+        ctx = self._contexts.pop(name, None)
+        if ctx is None:
+            self._sessions.pop(name, None)
+            return
+        cm, session, read, write = ctx
+        try:
+            await session.__aexit__(None, None, None)
+        except Exception:
+            pass
+        try:
+            await cm.__aexit__(None, None, None)
+        except Exception:
+            pass
+        self._sessions.pop(name, None)
+        for tool, svr in list(self._tool_registry.items()):
+            if svr == name:
+                del self._tool_registry[tool]
+        st = self._server_states.get(name, {})
+        st["state"] = "stopped"
+        logger.info(f"Server '{name}' stopped")
+
     async def stop_all(self) -> None:
         """Close all sessions and terminate subprocesses."""
         for cm, session, read, write in self._contexts.values():
@@ -549,4 +795,7 @@ class CAIAOClientHub:
         self._sessions.clear()
         self._contexts.clear()
         self._tool_registry.clear()
+        for st in self._server_states.values():
+            if st.get("state") not in ("composite", "archived"):
+                st["state"] = "stopped"
         logger.info("All CAIAO servers stopped")

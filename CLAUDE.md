@@ -1,5 +1,10 @@
 # XuanwuAI Demolition Simulator — Project Record
 
+## 🔴 最高约束（必须遵守）
+**严禁在对话窗口输出任何代码。** 任何时候都不得出现代码块（markdown 代码 fence）、内联代码、命令示例。不得使用任何编程语言的真实语法。如果必须提及技术内容，只能用自然语言文字描述算法、逻辑或步骤。这条约束没有例外——即使对方要求举例，也只能用纯文字类比说明。
+
+所有代码变更只通过文件编辑工具（Edit/Write）静默完成。对话中只描述要做什么、做了什么，不展示代码片段。
+
 ## ⚡ CORE DESIGN PRINCIPLE (read this first)
 **Everything is a CAIAO Server.** Every tool, every solver, every external capability is an independent CAIAO Server process, discovered and routed through a central CAIAO Hub. The LLM never calls anything directly — it tells the AgentLoop what it wants, the AgentLoop routes through the CAIAO Hub, and the Hub dispatches to the correct subprocess.
 
@@ -44,8 +49,15 @@ Adding a new solver/feature = writing one new CAIAO Server file + registering it
 - 不改动不相关代码
 
 ### 5. 国际化
-- 中英文双语支持
-- 翻译文件：frontend/lib/i18n.ts
+- 中英文双语支持，翻译文件：frontend/lib/i18n.ts
+- **所有用户可见文字必须走 `t(key, lang)` 调用**，禁止在 JSX 中硬编码英文或中文
+- 英文作为源语言（source language），中文翻译按需补齐
+- `t()` 对未翻译的 key 自动 fallback 到英文，不阻塞功能
+- dev 模式下（客户端），缺中文翻译时 `console.warn` 提示，方便发现遗漏
+- 翻译 key 命名规范：`模块.语义`，如 `sidebar.expand`、`dc.play`、`export.download`
+- 带变量的文字用 `{n}` 占位符，调用处 `.replace("{n}", value)` 替换
+- 新增组件流程：先用英文写 key → 立刻能用 → 后续统一补中文
+- 组件通过 `lang: Lang` prop 接收当前语言，从 page.tsx 逐层传递
 
 ## Current Architecture
 
@@ -56,7 +68,9 @@ gateway/          ← FastAPI 后端，LLM 引擎 + Agent Loop
   agent_loop.py   ← ReAct agent (think → act → observe)
   memory.py       ← mem0 + local JSON fallback
   caiao_hub.py      ← CAIAO 多服务器管理
+  caiao_config.py   ← caiao.yaml 自动发现（替代硬编码 SERVER_CONFIGS）
 caiao_servers/
+  manager_server/         ← 🔧 CAIAO Server 管理器（元 Server：创建/扩展/健康/迁移/检索/编排）
   anastruct_server/       ← 快速线性分析 (anaStruct)
   opensees_server/        ← 高精度分析 (OpenSeesPy)
   pynite_server/          ← 3D FEM (PyNite)
@@ -81,6 +95,7 @@ frontend/
     verification-panel.tsx   ← 双轨验证面板（Displacements/Forces/Compare/Dev）
     sidebar.tsx
     floating-toolbar.tsx
+    server-manager.tsx
     mechanical-summary.tsx
   lib/
     i18n.ts     ← 中英文翻译

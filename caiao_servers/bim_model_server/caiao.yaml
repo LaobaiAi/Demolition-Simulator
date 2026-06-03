@@ -1,0 +1,47 @@
+# caiao.yaml — BIM Model Server manifest
+
+name: bim_model_server
+version: 0.1.0
+kind: atomic-mcp
+description: "Structural geometry generation and IFC export — steel frame, reinforced concrete, and hybrid steel-concrete models using standard sections and material grades"
+status: active
+since: "2026-06-01"
+
+start_mode: lazy
+
+command:
+  python: auto
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+
+health:
+  timeout_ms: 5000
+  restart_on_crash: false
+  max_restarts: 3
+  health_check_interval_s: 0
+
+tools:
+  - name: generate_steel_frame
+    description: "Generate a 3D steel frame structure with standard I-beam sections (IPE for beams, HE-A/HE-B for columns)"
+    tags: [bim, steel, generation]
+  - name: generate_concrete_structure
+    description: "Generate a reinforced concrete frame structure with columns, beams, and slabs"
+    tags: [bim, concrete, generation]
+  - name: generate_hybrid_structure
+    description: "Generate a hybrid steel-concrete structure (steel frame + concrete core/slabs)"
+    tags: [bim, hybrid, generation]
+  - name: export_ifc
+    description: "Export a generated structure model to IFC format"
+    tags: [bim, export, ifc]
+
+capabilities:
+  - structural_geometry
+  - bim_generation
+  - ifc_export
+  - steel_design
+  - concrete_design
+
+dependencies:
+  python: []
+  system: []
