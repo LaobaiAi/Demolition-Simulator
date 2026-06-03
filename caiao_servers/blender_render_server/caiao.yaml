@@ -1,0 +1,39 @@
+# caiao.yaml — Blender Render Server manifest
+
+name: blender_render_server
+version: 0.1.0
+kind: atomic-mcp
+description: "Animation rendering and preview via Blender — OpenGL viewport rendering to MP4 video, plus fast Workbench white-model preview"
+status: active
+since: "2026-06-03"
+
+start_mode: lazy
+
+command:
+  python: auto
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+
+health:
+  timeout_ms: 1200000
+  restart_on_crash: false
+  max_restarts: 2
+  health_check_interval_s: 0
+
+tools:
+  - name: render_animation
+    description: "Render demolition animation to MP4 video using OpenGL viewport (H.264, 1280x720, 24fps)"
+    tags: [blender, render, video]
+  - name: render_preview
+    description: "Fast white-model preview render using Workbench engine (~0.1s/frame, 640x360)"
+    tags: [blender, preview, quick]
+
+capabilities:
+  - video_rendering
+  - preview_rendering
+  - animation_output
+
+dependencies:
+  python: []
+  system: [blender]

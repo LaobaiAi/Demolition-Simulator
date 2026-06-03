@@ -1,0 +1,43 @@
+# caiao.yaml — Blender Pipeline Server manifest (composite orchestrator)
+
+name: blender_pipeline_server
+version: 0.1.0
+kind: atomic-mcp
+description: "Full Blender demolition animation pipeline orchestrator — chains build → animate → machinery → render into a single end-to-end workflow, with per-stage execution and environment checking"
+status: active
+since: "2026-06-03"
+
+start_mode: lazy
+
+command:
+  python: auto
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+
+health:
+  timeout_ms: 2400000
+  restart_on_crash: false
+  max_restarts: 2
+  health_check_interval_s: 0
+
+tools:
+  - name: run_full_pipeline
+    description: "Run the complete demolition animation pipeline end-to-end (build → animate → machinery → render)"
+    tags: [blender, pipeline, orchestration]
+  - name: run_pipeline_stage
+    description: "Run a single pipeline stage (build, animate, machinery, render, preview)"
+    tags: [blender, pipeline, stage]
+  - name: check_blender_environment
+    description: "Check Blender installation and pipeline file availability"
+    tags: [blender, diagnostics, environment]
+
+capabilities:
+  - pipeline_orchestration
+  - demolition_animation
+  - video_rendering
+  - environment_diagnostics
+
+dependencies:
+  python: []
+  system: [blender]

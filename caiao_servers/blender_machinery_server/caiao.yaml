@@ -1,0 +1,35 @@
+# caiao.yaml — Blender Machinery Server manifest
+
+name: blender_machinery_server
+version: 0.1.0
+kind: atomic-mcp
+description: "Construction machinery addition via Blender — adds excavator and dump truck models to demolition scenes, with optional animation keyframes"
+status: active
+since: "2026-06-03"
+
+start_mode: lazy
+
+command:
+  python: auto
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+
+health:
+  timeout_ms: 120000
+  restart_on_crash: false
+  max_restarts: 2
+  health_check_interval_s: 0
+
+tools:
+  - name: add_construction_machinery
+    description: "Add excavator and dump truck to a demolition animation scene, output scene_final.blend"
+    tags: [blender, machinery, construction]
+
+capabilities:
+  - machinery_modeling
+  - construction_visualization
+
+dependencies:
+  python: []
+  system: [blender]

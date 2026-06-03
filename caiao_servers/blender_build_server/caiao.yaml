@@ -1,0 +1,36 @@
+# caiao.yaml — Blender Build Server manifest
+
+name: blender_build_server
+version: 0.1.0
+kind: atomic-mcp
+description: "Procedural reinforced concrete frame structure generation via Blender — creates 139 individual elements with 8 metadata properties each, outputs scene_base.blend"
+status: active
+since: "2026-06-03"
+
+start_mode: lazy
+
+command:
+  python: auto
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+
+health:
+  timeout_ms: 120000
+  restart_on_crash: false
+  max_restarts: 2
+  health_check_interval_s: 0
+
+tools:
+  - name: build_frame_model
+    description: "Generate a parametric RC frame structure in Blender with full element metadata"
+    tags: [blender, build, modeling]
+
+capabilities:
+  - blender_modeling
+  - frame_generation
+  - element_metadata
+
+dependencies:
+  python: []
+  system: [blender]
