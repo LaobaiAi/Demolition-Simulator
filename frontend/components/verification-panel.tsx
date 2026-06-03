@@ -194,7 +194,7 @@ export function VerificationPanel({ fastResult, structure, lang, analysisSolver,
 
       {/* Dialog with tabs */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="!max-w-[58vw] max-h-[92vh] w-[58vw] overflow-hidden flex flex-col bg-[#0f172a] border-border text-foreground">
+        <DialogContent className="!max-w-[58vw] max-h-[92vh] w-[58vw] overflow-hidden flex flex-col bg-xuanwu-bg border-border text-foreground">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3 text-lg w-full">
               <div className="flex items-center gap-3">
@@ -230,7 +230,7 @@ export function VerificationPanel({ fastResult, structure, lang, analysisSolver,
                   <ChevronDown className="h-3 w-3" />
                 </button>
                 {roundDropdownOpen && (
-                  <div className="absolute top-full left-0 mt-1 z-50 min-w-[180px] bg-[#1a2332] border border-border rounded-lg shadow-xl overflow-hidden">
+                  <div className="absolute top-full left-0 mt-1 z-50 min-w-[180px] bg-popover border border-border rounded-lg shadow-xl overflow-hidden">
                     <button
                       onClick={() => { onRoundClick?.(-1); setRoundDropdownOpen(false); }}
                       className={`w-full text-left px-3 py-1.5 text-[11px] transition-colors cursor-pointer ${
@@ -349,7 +349,7 @@ export function VerificationPanel({ fastResult, structure, lang, analysisSolver,
               {tab === "displacements" && (
                 <div className="space-y-6">
                   {/* Displacement card */}
-                  <div className="rounded-xl border border-border bg-[#0a0f1a] p-5">
+                  <div className="rounded-xl border border-border bg-xuanwu-deep p-5">
                     <div className="text-xs text-muted-foreground uppercase tracking-wide mb-3">{t("verify.disp", lang)}</div>
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
@@ -383,7 +383,7 @@ export function VerificationPanel({ fastResult, structure, lang, analysisSolver,
                       <h4 className="text-sm font-semibold text-foreground mb-3">Node Displacements</h4>
                       <div className="rounded-lg border border-border overflow-hidden max-h-[400px] overflow-y-auto">
                         <table className="w-full text-sm">
-                          <thead className="sticky top-0 bg-[#0f172a]">
+                          <thead className="sticky top-0 bg-background">
                             <tr className="border-b border-border bg-muted/50">
                               <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">Node ID</th>
                               <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground">Ux (mm)</th>
@@ -417,7 +417,7 @@ export function VerificationPanel({ fastResult, structure, lang, analysisSolver,
               {tab === "forces" && (
                 <div className="space-y-6">
                   {/* Axial force card */}
-                  <div className="rounded-xl border border-border bg-[#0a0f1a] p-5">
+                  <div className="rounded-xl border border-border bg-xuanwu-deep p-5">
                     <div className="text-xs text-muted-foreground uppercase tracking-wide mb-3">{t("verify.axial", lang)}</div>
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
@@ -451,7 +451,7 @@ export function VerificationPanel({ fastResult, structure, lang, analysisSolver,
                       <h4 className="text-sm font-semibold text-foreground mb-3">Element Forces</h4>
                       <div className="rounded-lg border border-border overflow-hidden max-h-[400px] overflow-y-auto">
                         <table className="w-full text-sm">
-                          <thead className="sticky top-0 bg-[#0f172a]">
+                          <thead className="sticky top-0 bg-background">
                             <tr className="border-b border-border bg-muted/50">
                               <th className="text-left px-3 py-2.5 text-xs font-semibold text-muted-foreground">Elem</th>
                               <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">N (kN)</th>
@@ -489,7 +489,7 @@ export function VerificationPanel({ fastResult, structure, lang, analysisSolver,
               {tab === "comparison" && (
                 <div>
                   <h4 className="text-sm font-semibold text-foreground mb-3">{t("verify.visual_comparison", lang)}</h4>
-                  <div className="rounded-lg border border-border p-5 bg-[#0a0f1a]">
+                  <div className="rounded-lg border border-border p-5 bg-xuanwu-deep">
                     <ResponsiveContainer width="100%" height={320}>
                       <BarChart data={getChartData()}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
@@ -516,7 +516,7 @@ export function VerificationPanel({ fastResult, structure, lang, analysisSolver,
               {tab === "deviation" && (
                 <div>
                   <h4 className="text-sm font-semibold text-foreground mb-3">{t("verify.deviation_analysis", lang)}</h4>
-                  <div className="rounded-lg border border-border p-5 bg-[#0a0f1a]">
+                  <div className="rounded-lg border border-border p-5 bg-xuanwu-deep">
                     <ResponsiveContainer width="100%" height={280}>
                       <BarChart data={getDiffData()}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
@@ -566,7 +566,7 @@ export function VerificationPanel({ fastResult, structure, lang, analysisSolver,
                     </div>
                   ) : (
                     <>
-                      <div className="rounded-xl border border-border bg-[#0a0f1a] p-5">
+                      <div className="rounded-xl border border-border bg-xuanwu-deep p-5">
                         <h4 className="text-xs text-muted-foreground uppercase tracking-wide mb-4">{t("verify.all_solvers_table", lang)}</h4>
                         <div className="space-y-5">
                           {/* Max Displacement row */}
@@ -686,7 +686,7 @@ export function VerificationPanel({ fastResult, structure, lang, analysisSolver,
                       )}
 
                       {/* Deviation summary */}
-                      <div className="rounded-xl border border-border bg-[#0a0f1a] p-5">
+                      <div className="rounded-xl border border-border bg-xuanwu-deep p-5">
                         <h4 className="text-xs text-muted-foreground uppercase tracking-wide mb-3">{t("verify.deviation_analysis", lang)}</h4>
                         <div className="space-y-2">
                           {Object.entries(multiResult.deviations).map(([key, dev]) => {

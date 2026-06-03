@@ -19,6 +19,7 @@ import {
   Wrench,
   Brain,
 } from "lucide-react";
+import { t, type Lang } from "@/lib/i18n";
 
 export interface Conversation {
   id: string;
@@ -29,6 +30,7 @@ export interface Conversation {
 }
 
 interface Props {
+  lang: Lang;
   conversations: Conversation[];
   activeId: string | null;
   collapsed: boolean;
@@ -43,9 +45,11 @@ interface Props {
   onOpenTools?: () => void;
   onOpenMemory?: () => void;
   toolsCount?: number;
+  scenariosCount?: number;
 }
 
 export function Sidebar({
+  lang,
   conversations,
   activeId,
   collapsed,
@@ -60,6 +64,7 @@ export function Sidebar({
   onOpenTools,
   onOpenMemory,
   toolsCount,
+  scenariosCount,
 }: Props) {
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -114,18 +119,18 @@ export function Sidebar({
 
   if (collapsed) {
     return (
-      <div className="flex w-14 min-w-[56px] flex-col items-center border-r border-border py-3 gap-3 bg-[#060a12] h-full">
+      <div className="flex w-14 min-w-[56px] flex-col items-center border-r border-border py-3 gap-3 bg-xuanwu-deeper h-full">
         <button
           onClick={onToggleCollapse}
           className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-muted transition-colors cursor-pointer"
-          title="Expand sidebar"
+          title={t("sidebar.expand", lang)}
         >
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
         <button
           onClick={onNew}
           className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/20 hover:bg-primary/30 transition-colors cursor-pointer"
-          title="New Chat"
+          title={t("sidebar.new_chat", lang)}
         >
           <Plus className="h-5 w-5 text-primary" />
         </button>
@@ -150,34 +155,34 @@ export function Sidebar({
           <button
             onClick={onOpenTools}
             className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-muted transition-colors cursor-pointer"
-            title={`Available Tools (${toolsCount ?? 0})`}
+            title={t("sidebar.available_tools", lang).replace("{n}", String(toolsCount ?? 0))}
           >
             <Wrench className="h-4 w-4 text-muted-foreground hover:text-foreground" />
           </button>
           <button
             onClick={onOpenMemory}
             className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-muted transition-colors cursor-pointer"
-            title="Context Memory"
+            title={t("sidebar.context_memory", lang)}
           >
             <Brain className="h-4 w-4 text-muted-foreground hover:text-foreground" />
           </button>
           <button
             onClick={onOpenDemoLibrary}
             className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-muted transition-colors cursor-pointer"
-            title="Demo Library"
+            title={`${t("sidebar.demo_library", lang)} (${scenariosCount ?? 0})`}
           >
             <Library className="h-4 w-4 text-muted-foreground hover:text-foreground" />
           </button>
           <button
             onClick={onOpenSettings}
             className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-muted transition-colors cursor-pointer"
-            title="Settings"
+            title={t("sidebar.settings", lang)}
           >
             <Settings className="h-4 w-4 text-muted-foreground hover:text-foreground" />
           </button>
           <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <text x="2" y="13" fill="#22d3ee" fontSize="14" fontWeight="bold" fontFamily="sans-serif" opacity="0.7">玄</text>
-            <text x="13" y="26" fill="#22d3ee" fontSize="14" fontWeight="bold" fontFamily="sans-serif" opacity="0.7">武</text>
+            <text x="2" y="13" fill="var(--xuanwu-cyan)" fontSize="14" fontWeight="bold" fontFamily="sans-serif" opacity="0.7">玄</text>
+            <text x="13" y="26" fill="var(--xuanwu-cyan)" fontSize="14" fontWeight="bold" fontFamily="sans-serif" opacity="0.7">武</text>
           </svg>
         </div>
       </div>
@@ -185,20 +190,20 @@ export function Sidebar({
   }
 
   return (
-    <div className="flex w-[260px] min-w-[260px] flex-col border-r border-border bg-[#060a12] h-full">
+    <div className="flex w-[260px] min-w-[260px] flex-col border-r border-border bg-xuanwu-deeper h-full">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-3 border-b border-border">
         <div className="flex items-center gap-2">
           <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-            <text x="1" y="9" fill="#22d3ee" fontSize="9" fontWeight="bold" fontFamily="sans-serif">玄</text>
-            <text x="10" y="19" fill="#22d3ee" fontSize="9" fontWeight="bold" fontFamily="sans-serif">武</text>
+            <text x="1" y="9" fill="var(--xuanwu-cyan)" fontSize="9" fontWeight="bold" fontFamily="sans-serif">玄</text>
+            <text x="10" y="19" fill="var(--xuanwu-cyan)" fontSize="9" fontWeight="bold" fontFamily="sans-serif">武</text>
           </svg>
           <span className="text-sm font-semibold text-foreground">XuanwuAI <span className="text-primary">玄武</span></span>
         </div>
         <button
           onClick={onToggleCollapse}
           className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted transition-colors cursor-pointer"
-          title="Collapse sidebar"
+          title={t("sidebar.collapse", lang)}
         >
           <ChevronLeft className="h-4 w-4 text-muted-foreground" />
         </button>
@@ -211,7 +216,7 @@ export function Sidebar({
           className="flex w-full items-center gap-2 rounded-lg border border-border hover:border-primary/40 bg-transparent px-3 py-2 text-sm text-foreground hover:bg-muted/50 transition-all cursor-pointer"
         >
           <Plus className="h-4 w-4" />
-          New Chat
+          {t("sidebar.new_chat", lang)}
         </button>
       </div>
 
@@ -222,7 +227,7 @@ export function Sidebar({
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search conversations..."
+            placeholder={t("sidebar.search", lang)}
             className="h-8 w-full rounded-lg border border-border bg-transparent pl-8 pr-3 text-xs outline-none focus:border-primary/40 transition-colors"
           />
           {search && (
@@ -242,7 +247,7 @@ export function Sidebar({
         {pinnedConvs.length > 0 && (
           <div className="mb-2">
             <div className="px-2 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-              Pinned
+              {t("sidebar.pinned", lang)}
             </div>
             {pinnedConvs.map((conv) => (
               <ConversationItem
@@ -262,6 +267,7 @@ export function Sidebar({
                 onToggleMenu={() => setMenuOpenId(menuOpenId === conv.id ? null : conv.id)}
                 editRef={editRef}
                 menuRef={menuRef}
+                lang={lang}
               />
             ))}
           </div>
@@ -272,7 +278,7 @@ export function Sidebar({
           <div>
             {pinnedConvs.length > 0 && (
               <div className="px-2 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                Recent
+                {t("sidebar.recent", lang)}
               </div>
             )}
             {unpinnedConvs.map((conv) => (
@@ -293,6 +299,7 @@ export function Sidebar({
                 onToggleMenu={() => setMenuOpenId(menuOpenId === conv.id ? null : conv.id)}
                 editRef={editRef}
                 menuRef={menuRef}
+                lang={lang}
               />
             ))}
           </div>
@@ -300,7 +307,7 @@ export function Sidebar({
 
         {filtered.length === 0 && (
           <div className="px-3 py-8 text-center text-xs text-muted-foreground">
-            {search ? "No conversations found" : "No conversations yet"}
+            {search ? t("sidebar.no_found", lang) : t("sidebar.no_conversations", lang)}
           </div>
         )}
       </div>
@@ -312,28 +319,28 @@ export function Sidebar({
           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
         >
           <Wrench className="h-3.5 w-3.5" />
-          Available Tools ({toolsCount ?? 0})
+          {t("sidebar.available_tools", lang).replace("{n}", String(toolsCount ?? 0))}
         </button>
         <button
           onClick={onOpenMemory}
           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
         >
           <Brain className="h-3.5 w-3.5" />
-          Context Memory
+          {t("sidebar.context_memory", lang)}
         </button>
         <button
           onClick={onOpenDemoLibrary}
           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
         >
           <Library className="h-3.5 w-3.5" />
-          Demo Library
+          {t("sidebar.demo_library", lang)} ({scenariosCount ?? 0})
         </button>
         <button
           onClick={onOpenSettings}
           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
         >
           <Settings className="h-3.5 w-3.5" />
-          Settings
+          {t("sidebar.settings", lang)}
         </button>
       </div>
     </div>
@@ -356,6 +363,7 @@ function ConversationItem({
   onToggleMenu,
   editRef,
   menuRef,
+  lang,
 }: {
   conv: Conversation;
   active: boolean;
@@ -372,6 +380,7 @@ function ConversationItem({
   onToggleMenu: () => void;
   editRef: React.RefObject<HTMLInputElement | null>;
   menuRef: React.RefObject<HTMLDivElement | null>;
+  lang: Lang;
 }) {
   return (
     <div
@@ -436,7 +445,7 @@ function ConversationItem({
             className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted transition-colors cursor-pointer"
           >
             <Pencil className="h-3 w-3" />
-            Rename
+            {t("sidebar.rename", lang)}
           </button>
           <button
             onClick={onTogglePin}
@@ -445,12 +454,12 @@ function ConversationItem({
             {conv.pinned ? (
               <>
                 <PinOff className="h-3 w-3" />
-                Unpin
+                {t("sidebar.unpin", lang)}
               </>
             ) : (
               <>
                 <Pin className="h-3 w-3" />
-                Pin
+                {t("sidebar.pin", lang)}
               </>
             )}
           </button>
@@ -460,7 +469,7 @@ function ConversationItem({
             className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
           >
             <Trash2 className="h-3 w-3" />
-            Delete
+            {t("sidebar.delete", lang)}
           </button>
         </div>
       )}

@@ -49,11 +49,46 @@
   --color-xuanwu-bg: var(--xuanwu-bg);
   --color-xuanwu-cyan: var(--xuanwu-cyan);
   --color-xuanwu-surface: var(--xuanwu-surface);
+  --color-xuanwu-deep: var(--xuanwu-deep);
+  --color-xuanwu-deeper: var(--xuanwu-deeper);
   --color-xuanwu-border: var(--xuanwu-border);
 }
 
 :root {
   --radius: 0.625rem;
+  /* Default theme: Xuanwu Dark — ensures dark background even before inline script runs */
+  --background: #0f172a;
+  --foreground: #e2e8f0;
+  --card: #1e293b;
+  --card-foreground: #e2e8f0;
+  --popover: #1e293b;
+  --popover-foreground: #e2e8f0;
+  --primary: #22d3ee;
+  --primary-foreground: #0f172a;
+  --secondary: #334155;
+  --secondary-foreground: #e2e8f0;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --accent: #22d3ee;
+  --accent-foreground: #0f172a;
+  --destructive: #ef4444;
+  --border: rgb(51 65 85 / 0.6);
+  --input: rgb(51 65 85 / 0.8);
+  --ring: #22d3ee;
+  --sidebar: #0f172a;
+  --sidebar-foreground: #e2e8f0;
+  --sidebar-primary: #22d3ee;
+  --sidebar-primary-foreground: #0f172a;
+  --sidebar-accent: #1e293b;
+  --sidebar-accent-foreground: #e2e8f0;
+  --sidebar-border: rgb(51 65 85 / 0.6);
+  --sidebar-ring: #22d3ee;
+  --xuanwu-bg: #0f172a;
+  --xuanwu-cyan: #22d3ee;
+  --xuanwu-surface: #1e293b;
+  --xuanwu-deep: #0a0f1a;
+  --xuanwu-deeper: #060a12;
+  --xuanwu-border: rgb(51 65 85 / 0.6);
 }
 
 /* ── Theme: Xuanwu Dark (default) ─────────────────────────────────── */
@@ -93,6 +128,8 @@
   --xuanwu-bg: #0f172a;
   --xuanwu-cyan: #22d3ee;
   --xuanwu-surface: #1e293b;
+  --xuanwu-deep: #0a0f1a;
+  --xuanwu-deeper: #060a12;
   --xuanwu-border: rgb(51 65 85 / 0.6);
 }
 
@@ -133,6 +170,8 @@
   --xuanwu-bg: #ffffff;
   --xuanwu-cyan: #0284c7;
   --xuanwu-surface: #f8fafc;
+  --xuanwu-deep: #f8fafc;
+  --xuanwu-deeper: #f1f5f9;
   --xuanwu-border: rgb(203 213 225 / 0.8);
 }
 
@@ -173,6 +212,8 @@
   --xuanwu-bg: #0a1a0f;
   --xuanwu-cyan: #10b981;
   --xuanwu-surface: #122618;
+  --xuanwu-deep: #0d1f12;
+  --xuanwu-deeper: #07180d;
   --xuanwu-border: rgb(34 84 45 / 0.6);
 }
 
@@ -213,6 +254,8 @@
   --xuanwu-bg: #1a1214;
   --xuanwu-cyan: #f97316;
   --xuanwu-surface: #24181a;
+  --xuanwu-deep: #1e1417;
+  --xuanwu-deeper: #140e10;
   --xuanwu-border: rgb(140 80 55 / 0.6);
 }
 
@@ -253,6 +296,8 @@
   --xuanwu-bg: #0b0d1e;
   --xuanwu-cyan: #8b5cf6;
   --xuanwu-surface: #131636;
+  --xuanwu-deep: #0e1025;
+  --xuanwu-deeper: #070914;
   --xuanwu-border: rgb(70 73 130 / 0.6);
 }
 
@@ -293,6 +338,8 @@
   --xuanwu-bg: #111318;
   --xuanwu-surface: #191c22;
   --xuanwu-cyan: #6b8ca3;
+  --xuanwu-deep: #13161d;
+  --xuanwu-deeper: #0c0e13;
   --xuanwu-border: rgb(60 68 80 / 0.6);
 }
 

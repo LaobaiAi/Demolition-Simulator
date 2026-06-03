@@ -325,7 +325,7 @@ export function FrameVisualization({
               <Settings2 className="h-3.5 w-3.5" />
             </button>
             {legendSettingsOpen && (
-              <div className="absolute right-0 top-full mt-1 z-20 bg-[#0f172a] border border-border rounded-lg p-3 shadow-xl min-w-[160px]">
+              <div className="absolute right-0 top-full mt-1 z-20 bg-popover border border-border rounded-lg p-3 shadow-xl min-w-[160px]">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-2">Legend Size</div>
                 <div className="flex items-center gap-2">
                   <button
@@ -379,7 +379,7 @@ export function FrameVisualization({
               Scroll to zoom · Drag to pan
             </div>
           )}
-          <svg
+          <svg data-xw-svg="main"
             viewBox={`0 0 ${svgW} ${svgH}`}
             className="w-full h-full"
             // eslint-disable-next-line react-hooks/refs
@@ -398,7 +398,7 @@ export function FrameVisualization({
                 y1={pad + i * (svgH - pad * 2) / 5}
                 x2={svgW - pad}
                 y2={pad + i * (svgH - pad * 2) / 5}
-                stroke="#1e293b"
+                stroke="var(--border)"
                 strokeWidth={0.5}
               />
             ))}
@@ -409,7 +409,7 @@ export function FrameVisualization({
                 y1={pad}
                 x2={pad + i * (svgW - pad * 2) / 7}
                 y2={svgH - pad}
-                stroke="#1e293b"
+                stroke="var(--border)"
                 strokeWidth={0.5}
               />
             ))}
@@ -429,7 +429,7 @@ export function FrameVisualization({
                     y1={p1.y}
                     x2={p2.x}
                     y2={p2.y}
-                    stroke="#334155"
+                    stroke="var(--border)"
                     strokeWidth={isColumn ? 3 : 2}
                     strokeDasharray="4 3"
                   />
@@ -478,7 +478,7 @@ export function FrameVisualization({
                   {isStressMode && ratio !== undefined && (
                     <g>
                       <rect x={midX - 16 + labelOffsetX} y={midY - 10 + labelOffsetY} width={32} height={16} rx={3}
-                        fill="#0f172a" stroke={stressColor(ratio)} strokeWidth={0.8} opacity={0.9} />
+                        fill="var(--xuanwu-surface)" stroke={stressColor(ratio)} strokeWidth={0.8} opacity={0.9} />
                       <text x={midX + labelOffsetX} y={midY + 1 + labelOffsetY} textAnchor="middle"
                         fill={stressColor(ratio)} fontSize={9} fontWeight="bold">
                         {stressLabel(ratio)}
@@ -621,25 +621,25 @@ export function FrameVisualization({
             {/* Legend — fixed position, not affected by pan/zoom */}
             {tab === "structure" && viewMode === "stress" && hasStress ? (
               <g transform={`translate(10, 10) scale(${legendScale})`}>
-                <rect x={0} y={0} width={170} height={90} rx={6} fill="#0f172a" stroke="#1e293b" strokeWidth={1} />
-                <text x={10} y={18} fill="#94a3b8" fontSize={9}>Stress Ratio</text>
+                <rect x={0} y={0} width={170} height={90} rx={6} fill="var(--xuanwu-surface)" stroke="var(--border)" strokeWidth={1} />
+                <text x={10} y={18} fill="var(--muted-foreground)" fontSize={9}>Stress Ratio</text>
                 {[0, 30, 60, 85, 100].map((pct, i) => (
                   <rect key={i} x={10 + i * 31} y={24} width={29} height={10} rx={2}
                     fill={stressColor(pct / 100)} opacity={0.85} />
                 ))}
                 <text x={10} y={46} fill="#22c55e" fontSize={7}>Safe</text>
                 <text x={165} y={46} fill="#ef4444" fontSize={7} textAnchor="end">Critical</text>
-                <text x={10} y={60} fill="#94a3b8" fontSize={7}>Stress = |N| / (A * fy)</text>
-                <text x={10} y={78} fill="#94a3b8" fontSize={8}>
+                <text x={10} y={60} fill="var(--muted-foreground)" fontSize={7}>Stress = |N| / (A * fy)</text>
+                <text x={10} y={78} fill="var(--muted-foreground)" fontSize={8}>
                   {elements.length} elems, {nodes.length} nodes
                 </text>
               </g>
             ) : (
               <g transform={`translate(10, 10) scale(${legendScale})`}>
-                <rect x={0} y={0} width={170} height={90} rx={6} fill="#0f172a" stroke="#1e293b" strokeWidth={1} />
-                <text x={10} y={20} fill="#94a3b8" fontSize={9}>Legend</text>
+                <rect x={0} y={0} width={170} height={90} rx={6} fill="var(--xuanwu-surface)" stroke="var(--border)" strokeWidth={1} />
+                <text x={10} y={20} fill="var(--muted-foreground)" fontSize={9}>Legend</text>
                 <line x1={10} y1={32} x2={40} y2={32} stroke="#22d3ee" strokeWidth={2} />
-                <text x={44} y={35} fill="#94a3b8" fontSize={8}>Element</text>
+                <text x={44} y={35} fill="var(--muted-foreground)" fontSize={8}>Element</text>
                 {criticalElementId != null && (
                   <>
                     <line x1={10} y1={48} x2={40} y2={48} stroke="#f97316" strokeWidth={3} />
@@ -648,11 +648,11 @@ export function FrameVisualization({
                 )}
                 {hasDeformation && (
                   <>
-                    <line x1={10} y1={64} x2={40} y2={64} stroke="#334155" strokeWidth={2} strokeDasharray="4 3" />
-                    <text x={44} y={67} fill="#94a3b8" fontSize={8}>Original shape</text>
+                    <line x1={10} y1={64} x2={40} y2={64} stroke="var(--border)" strokeWidth={2} strokeDasharray="4 3" />
+                    <text x={44} y={67} fill="var(--muted-foreground)" fontSize={8}>Original shape</text>
                   </>
                 )}
-                <text x={10} y={80} fill="#94a3b8" fontSize={8}>
+                <text x={10} y={80} fill="var(--muted-foreground)" fontSize={8}>
                   Scale: {rangeX.toFixed(0)}m x {rangeY.toFixed(0)}m — {elements.length} elems, {nodes.length} nodes
                 </text>
               </g>
@@ -1098,10 +1098,10 @@ function CollapseAnimation({
 
             {/* ── Grid ── */}
             {Array.from({ length: 6 }).map((_, i) => (
-              <line key={`gh-${i}`} x1={pad} y1={pad + i * (svgH - pad*2)/5} x2={svgW-pad} y2={pad + i * (svgH - pad*2)/5} stroke="#1e293b" strokeWidth={0.5} />
+              <line key={`gh-${i}`} x1={pad} y1={pad + i * (svgH - pad*2)/5} x2={svgW-pad} y2={pad + i * (svgH - pad*2)/5} stroke="var(--border)" strokeWidth={0.5} />
             ))}
             {Array.from({ length: 8 }).map((_, i) => (
-              <line key={`gv-${i}`} x1={pad + i * (svgW - pad*2)/7} y1={pad} x2={pad + i * (svgW - pad*2)/7} y2={svgH-pad} stroke="#1e293b" strokeWidth={0.5} />
+              <line key={`gv-${i}`} x1={pad + i * (svgW - pad*2)/7} y1={pad} x2={pad + i * (svgW - pad*2)/7} y2={svgH-pad} stroke="var(--border)" strokeWidth={0.5} />
             ))}
 
             {/* ── Smoke Trails ── */}
@@ -1387,12 +1387,12 @@ function CollapseAnimation({
             {elements.length > 0 && (
               <g>
                 <rect x={svgW / 2 - 80} y={svgH - 48} width={160} height={6} rx={3}
-                  fill="#1e293b" stroke="#334155" strokeWidth={0.5} />
+                  fill="var(--muted)" stroke="var(--border)" strokeWidth={0.5} />
                 {/* Collapsed portion */}
                 <rect x={svgW / 2 - 80} y={svgH - 48}
                   width={Math.round(160 * (failedElements.length / elements.length))} height={6} rx={3}
                   fill="#ef4444" opacity={hasFailed ? 0.8 : 0} />
-                <text x={svgW / 2} y={svgH - 52} textAnchor="middle" fill="#64748b" fontSize={7}>
+                <text x={svgW / 2} y={svgH - 52} textAnchor="middle" fill="var(--muted-foreground)" fontSize={7}>
                   {elements.length - failedElements.length}/{elements.length} standing
                   {failedElements.length > 0 && ` · ${failedElements.length} collapsed`}
                 </text>

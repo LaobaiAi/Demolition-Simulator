@@ -20,6 +20,49 @@ export async function fetchTools(): Promise<Tool[]> {
   return data.tools;
 }
 
+export interface ScenarioSummary {
+  name: string;
+  title: { en: string; zh: string };
+  description: { en: string; zh: string };
+  category: "topology" | "mechanics";
+  needs_analysis: boolean;
+  tags: string[];
+  viz_mode: string;
+}
+
+export interface ScenarioFull extends ScenarioSummary {
+  structure_params: Record<string, unknown>;
+  strategy: string;
+  effects_preset: string;
+  effects: Record<string, boolean>;
+  speed: number;
+}
+
+export async function fetchScenarios(category?: string, tag?: string): Promise<ScenarioSummary[]> {
+  const params = new URLSearchParams();
+  if (category) params.set("category", category);
+  if (tag) params.set("tag", tag);
+  const url = `${API_BASE}/scenarios${params.toString() ? "?" + params.toString() : ""}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch scenarios: ${res.status}`);
+  const data = await res.json();
+  const raw = data.result || data;
+  if (typeof raw === "string") {
+    const parsed = JSON.parse(raw);
+    return parsed.scenarios || [];
+  }
+  return raw.scenarios || [];
+}
+
+export async function fetchScenario(name: string): Promise<ScenarioFull | null> {
+  const res = await fetch(`${API_BASE}/scenarios/${name}`);
+  if (!res.ok) return null;
+  const data = await res.json();
+  const raw = data.result || data;
+  if (typeof raw === "string") return JSON.parse(raw);
+  return raw as ScenarioFull;
+}
+
 export async function callTool(
   toolName: string,
   arguments_: Record<string, unknown>
@@ -135,4 +178,97 @@ export async function getLLMConfig(): Promise<{
   const res = await fetch(`${API_BASE}/settings/llm`);
   if (!res.ok) throw new Error(`Failed to get config: ${res.status}`);
   return res.json();
+}
+
+// ── Server management APIs ──────────────────────────────────────────────────
+
+export interface ServerStatus {
+  name: string;
+  state: string;
+  pid: number | null;
+  started_at: number | null;
+  crash_count: number;
+  restart_count: number;
+  total_calls: number;
+  error_count: number;
+  avg_latency_ms: number;
+}
+
+export interface ServerHealth {
+  [serverName: string]: {
+    state: string;
+    pid: number | null;
+    started_at: number | null;
+    crash_count: number;
+    last_error: string | null;
+  };
+}
+
+export interface ServerMetrics {
+  [serverName: string]: {
+    total_calls: number;
+    error_count: number;
+    avg_latency_ms: number;
+    last_called: number | null;
+  };
+}
+
+export async function fetchServerStatus(): Promise<ServerStatus[]> {
+  const res = await fetch(`${API_BASE}/servers`);
+  if (!res.ok) throw new Error(`Failed to fetch servers: ${res.status}`);
+  const data = await res.json();
+  return data.servers;
+}
+
+export async function fetchServerHealth(): Promise<ServerHealth> {
+  const res = await fetch(`${API_BASE}/servers/health`);
+  if (!res.ok) throw new Error(`Failed to fetch health: ${res.status}`);
+  const data = await res.json();
+  return data.health;
+}
+
+export async function fetchServerMetrics(): Promise<ServerMetrics> {
+  const res = await fetch(`${API_BASE}/servers/metrics`);
+  if (!res.ok) throw new Error(`Failed to fetch metrics: ${res.status}`);
+  const data = await res.json();
+  return data.metrics;
+}
+
+export async function pauseServer(serverName: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/servers/${serverName}/pause`, { method: "POST" });
+  if (!res.ok) throw new Error(`Failed to pause: ${res.status}`);
+}
+
+export async function resumeServer(serverName: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/servers/${serverName}/resume`, { method: "POST" });
+  if (!res.ok) throw new Error(`Failed to resume: ${res.status}`);
+}
+
+export async function restartServer(serverName: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/servers/${serverName}/restart`, { method: "POST" });
+  if (!res.ok) throw new Error(`Failed to restart: ${res.status}`);
+}
+
+export async function stopServer(serverName: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/servers/${serverName}/stop`, { method: "POST" });
+  if (!res.ok) throw new Error(`Failed to stop: ${res.status}`);
+}
+
+export async function callManagerTool(
+  toolName: string,
+  args: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${API_BASE}/tools/call`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tool_name: toolName, arguments: args }),
+  });
+  if (!res.ok) throw new Error(`Manager tool call failed: ${res.status}`);
+  const data = await res.json();
+  if (data.error) return data;
+  try {
+    return JSON.parse(data.result);
+  } catch {
+    return data;
+  }
 }

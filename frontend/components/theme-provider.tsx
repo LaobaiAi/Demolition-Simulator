@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useLayoutEffect, type ReactNode } from "react";
 
 export interface Theme {
   key: string;
@@ -68,18 +68,22 @@ export function useTheme() {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState(() => {
-    if (typeof document === "undefined") return DEFAULT_THEME;
-    // Read the theme applied by the inline script in layout
-    const current = document.documentElement.className;
-    const match = THEMES.find((t) => current.includes(t.key));
-    if (match) return match.key;
+  const [theme, setThemeState] = useState(DEFAULT_THEME);
+
+  // Initialize theme from localStorage before first paint
+  useLayoutEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved && THEMES.some((t) => t.key === saved)) return saved;
+      const themeKey = saved && THEMES.some((t) => t.key === saved) ? saved : DEFAULT_THEME;
+      setThemeState(themeKey);
+      const root = document.documentElement;
+      // Add theme classes (swap from SSR default theme-xuanwu-dark)
+      for (const t of THEMES) root.classList.remove(t.key);
+      if (themeKey !== "theme-light") root.classList.add("dark");
+      else root.classList.remove("dark");
+      root.classList.add(themeKey);
     } catch {}
-    return DEFAULT_THEME;
-  });
+  }, []);
 
   const setTheme = useCallback((key: string) => {
     setThemeState(key);

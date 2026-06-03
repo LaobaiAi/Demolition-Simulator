@@ -34,14 +34,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { fetchTools, type Tool } from "@/lib/api";
+import { fetchTools, fetchScenarios, fetchScenario, type Tool, type ScenarioSummary } from "@/lib/api";
 import { VerificationPanel } from "@/components/verification-panel";
 import { MechanicalSummary, type DemolitionRound, type StructuralMetrics } from "@/components/mechanical-summary";
 import { FloatingToolbar } from "@/components/floating-toolbar";
 import { FrameVisualization } from "@/components/frame-visualization";
 import { FrameVisualization3D } from "@/components/frame-visualization-3d";
+import { IFCViewer } from "@/components/ifc-viewer";
 import { UnityVideoPanel } from "@/components/unity-video-panel";
 import { Sidebar, type Conversation } from "@/components/sidebar";
+import ServerManager from "@/components/server-manager";
+import { ScenarioPicker } from "@/components/scenario-picker";
+import { TimelineEditor } from "@/components/timeline-editor";
+import { DemolitionController } from "@/components/demolition-controller";
+import { AnimationExporter } from "@/components/animation-exporter";
+import { playCollapseSound, playRumbleSound, stopAll } from "@/lib/sound-effects";
 import { t, getSavedLang, saveLang, type Lang } from "@/lib/i18n";
 import { useTheme, THEMES } from "@/components/theme-provider";
 
@@ -97,6 +104,16 @@ function extractMaxAxialForce(elemForces: Record<string, unknown>[] | undefined)
 }
 
 const ANALYSIS_TOOLS = new Set(["analyze_frame", "pynite_analysis", "fapp_analysis", "high_fidelity_analysis"]);
+
+interface DemolishStrategy { key: string; category: "topology" | "mechanics"; }
+const DEMOLISH_STRATEGIES: DemolishStrategy[] = [
+  { key: "top_down", category: "topology" },
+  { key: "bottom_up", category: "topology" },
+  { key: "center_out", category: "topology" },
+  { key: "alternating_floors", category: "topology" },
+  { key: "sequential", category: "topology" },
+  { key: "llm", category: "mechanics" },
+];
 
 // Extract analysis results keyed by demolition round index.
 // round -1 = intact (before any demolition)
@@ -270,6 +287,18 @@ interface StepEvent {
   arguments?: Record<string, unknown>;
   result?: unknown;
   content?: string;
+  pipeline?: string;
+  total_steps?: number;
+  progress?: number;
+  phase?: string;
+  timeline_steps?: unknown[];
+  error?: string;
+  // Pipeline step fields
+  tool?: string;
+  step_index?: number;
+  step_count?: number;
+  data?: { result?: string; [key: string]: unknown };
+  strategy?: string;
 }
 
 function SettingsTabs({
@@ -317,11 +346,28 @@ export default function Home() {
   const [memoryDialogOpen, setMemoryDialogOpen] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [demolishDialogOpen, setDemolishDialogOpen] = useState(false);
+  const [vdConfigOpen, setVdConfigOpen] = useState(false);
+  const [vdStrategy, setVdStrategy] = useState("top_down");
+  const [vdEffectsPreset, setVdEffectsPreset] = useState<"minimal" | "standard" | "cinematic">("standard");
+  const [animSpeed, setAnimSpeed] = useState(1);
+  const [animEffects, setAnimEffects] = useState<Record<string, boolean>>({
+    cascade: true, explosion: true, dust: true, shake: true,
+    buckling: true, fracture: true, flash: true, trail: true, bounce: true,
+  });
+  const [canvas3dRef, setCanvas3dRef] = useState<HTMLCanvasElement | null>(null);
+  const [pipelineActive, setPipelineActive] = useState(false);
+  const [pipelineProgress, setPipelineProgress] = useState(0);
+  const [pipelinePhase, setPipelinePhase] = useState("");
+  const [timelineSteps, setTimelineSteps] = useState<Array<{ id: number; elementId: number; elementType: string; phase: string; durationMs: number }>>([]);
+  const [scenarios, setScenarios] = useState<ScenarioSummary[]>([]);
+  const [scenariosCount, setScenariosCount] = useState(0);
+  const [scenariosLoading, setScenariosLoading] = useState(false);
+  const [demolitionMode, setDemolitionMode] = useState(false);
   const [demolishReady, setDemolishReady] = useState(false);
   const [frameStructure, setFrameStructure] = useState<FrameStructure | null>(null);
   const [nodeDisplacements, setNodeDisplacements] = useState<NodeDisp[] | null>(null);
   const [analysisSolver, setAnalysisSolver] = useState<string | null>(null);
-  const [vizMode, setVizMode] = useState<"svg" | "webgl" | "unity">("webgl");
+  const [vizMode, setVizMode] = useState<"svg" | "webgl" | "unity" | "ifc">("webgl");
   const [demolitionRounds, setDemolitionRounds] = useState<DemolitionRound[]>([]);
   const [activeRoundIdx, setActiveRoundIdx] = useState(-1);       // -1 = show all rounds
   const [autoPlaying, setAutoPlaying] = useState(false);
@@ -354,8 +400,42 @@ export default function Home() {
   const [convLoaded, setConvLoaded] = useState(false);
   const [demoLibraryOpen, setDemoLibraryOpen] = useState(false);
   const [demoRunning, setDemoRunning] = useState(false);
+  const [runningDemoKey, setRunningDemoKey] = useState<string | null>(null);
   const [demoStatus, setDemoStatus] = useState("");
   const demoRef = useRef<{ running: boolean; phase: string }>({ running: false, phase: "" });
+
+  const handleStopDemo = useCallback(() => {
+    demoRef.current.running = false;
+    setDemoRunning(false);
+    setRunningDemoKey(null);
+    setDemoStatus("");
+    setPipelineActive(false);
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
+  }, []);
+
+  // Fetch scenarios on mount (for count badge) and whenever dialog opens.
+  // Guards against stale responses overwriting newer ones.
+  const scenariosFetchId = useRef(0);
+  useEffect(() => {
+    const id = ++scenariosFetchId.current;
+    setScenariosLoading(true);
+    fetchScenarios()
+      .then((data) => {
+        if (id !== scenariosFetchId.current) return;
+        setScenarios(data);
+        setScenariosCount(data.length);
+      })
+      .catch(() => {
+        if (id !== scenariosFetchId.current) return;
+        setScenarios([]);
+        setScenariosCount(0);
+      })
+      .finally(() => {
+        if (id === scenariosFetchId.current) setScenariosLoading(false);
+      });
+  }, [demoLibraryOpen]);
 
   // Load conversations from localStorage on mount
   useEffect(() => {
@@ -543,14 +623,18 @@ export default function Home() {
   const LLM_STORAGE_KEY = "xuanwu_llm_profiles";
   const COMMON_MODELS = ["gpt-4o", "gpt-4o-mini", "deepseek-v4-pro", "deepseek-v4-chat", "claude-sonnet-4-6", "claude-opus-4-7"];
 
-  const [lang, setLang] = useState<Lang>(() => {
-    if (typeof localStorage === "undefined") return "en";
-    return getSavedLang();
-  });
+  const [lang, setLang] = useState<Lang>("en");
+
+  useEffect(() => {
+    const saved = getSavedLang();
+    setLang(saved);
+    document.documentElement.setAttribute("data-lang", saved);
+  }, []);
 
   const handleLangChange = (newLang: Lang) => {
     setLang(newLang);
     saveLang(newLang);
+    document.documentElement.setAttribute("data-lang", newLang);
   };
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -758,6 +842,82 @@ export default function Home() {
 
         // Server heartbeat — just ignore
         if (data.type === "ping") return;
+
+        if (data.type === "pipeline_start") {
+          setPipelineActive(true); setPipelineProgress(0);
+          setPipelinePhase(t("vd.pipeline_starting", langRef.current));
+          setMessages((prev) => { const copy = [...prev]; copy.push({ role: "user", content: "Pipeline launched" }); return copy; });
+          return;
+        }
+        if (data.type === "pipeline_step") {
+          setPipelineProgress(data.progress || 0);
+          setPipelinePhase(data.phase || "");
+          // Extract structure from generate_frame result
+          if (data.tool === "generate_frame" && data.data?.result) {
+            try {
+              const parsed = JSON.parse(data.data.result);
+              if (parsed.nodes && parsed.elements) {
+                console.log("[pipeline] Setting frameStructure:", parsed.nodes.length, "nodes,", parsed.elements.length, "elements");
+                setFrameStructure(parsed as FrameStructure);
+                setDemolitionMode(true);
+              } else {
+                console.log("[pipeline] generate_frame result missing nodes/elements:", Object.keys(parsed));
+              }
+            } catch (e) { console.warn("[pipeline] Failed to parse generate_frame result:", e); }
+          }
+          // Extract demolition plan for rounds
+          if (data.tool === "plan_demolition_sequence" && data.data?.result) {
+            try {
+              const parsed = JSON.parse(data.data.result);
+              if (parsed.steps && Array.isArray(parsed.steps)) {
+                const elementIds = parsed.steps
+                  .filter((s: Record<string, unknown>) => (s.element_id as number) > 0)
+                  .map((s: Record<string, unknown>) => s.element_id as number);
+                if (elementIds.length > 0) {
+                  console.log("[pipeline] Setting demolitionRounds:", elementIds.length, "elements");
+                  setDemolitionRounds([{
+                    round: 1,
+                    elementIds,
+                    cumulativeIds: elementIds,
+                  }]);
+                }
+              }
+            } catch { /* ignore */ }
+          }
+          return;
+        }
+        if (data.type === "pipeline_complete") {
+          setPipelineActive(false); setPipelineProgress(1); setPipelinePhase("");
+          if (data.timeline_steps) {
+            const steps = data.timeline_steps as unknown as typeof timelineSteps;
+            console.log("[pipeline] Complete — timeline_steps:", steps.length);
+            setTimelineSteps(steps);
+            // Trigger animation with all element IDs from the timeline
+            const validIds = steps
+              .filter((s: { elementId: number }) => s.elementId > 0)
+              .map((s: { elementId: number }) => s.elementId);
+            if (validIds.length > 0) {
+              const uniqueIds = [...new Set(validIds)];
+              console.log("[pipeline] Triggering animation with", uniqueIds.length, "unique element IDs");
+              setAnimRequest(prev => ({
+                key: (prev?.key ?? 0) + 1,
+                targets: uniqueIds,
+              }));
+              setAnimPlaying(true);
+            }
+          }
+          setDemoRunning(false); setRunningDemoKey(null);
+          demoRef.current.running = false;
+          setMessages((prev) => { const copy = [...prev]; copy.push({ role: "ai", content: "Pipeline complete" }); return copy; });
+          return;
+        }
+        if (data.type === "pipeline_error") {
+          setPipelineActive(false); setPipelineProgress(0); setPipelinePhase("");
+          setLogEntries((prev) => [...prev, { type: "error", content: (data.content || "") }].slice(-200));
+          setDemoRunning(false); setRunningDemoKey(null);
+          demoRef.current.running = false;
+          return;
+        }
 
         if (data.type === "user_echo") {
           // Reset for new message
@@ -1156,6 +1316,67 @@ export default function Home() {
     wsRef.current.send(JSON.stringify({ type: "message", content: msg }));
   }, [structuralMetrics]);
 
+  const launchVisualDemolition = useCallback(() => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    if (!frameStructure) return;
+    const strategy = DEMOLISH_STRATEGIES.find(s => s.key === vdStrategy);
+    const needsAnalysis = strategy?.category === "mechanics";
+    const pipeline = needsAnalysis ? "visual_demolition_mechanics" : "visual_demolition_topology";
+    setPipelineActive(true);
+    setPipelineProgress(0);
+    setPipelinePhase(t("vd.button", lang));
+    setVdConfigOpen(false);
+    setDemolishReady(false);
+    wsRef.current.send(JSON.stringify({
+      type: "launch_pipeline",
+      pipeline,
+      params: {
+        structure: frameStructure,
+        strategy: vdStrategy,
+        effects_preset: vdEffectsPreset,
+        speed: 1,
+        structure_params: { num_bays_x: 3, num_stories: 4, span_x_m: 6.0, story_height_m: 3.0, steel_grade: "Q355" },
+      },
+    }));
+  }, [frameStructure, vdStrategy, vdEffectsPreset, lang]);
+
+  const launchScenarioFromDemo = useCallback(async (scenarioName: string, scenario: ScenarioSummary) => {
+    setDemoLibraryOpen(false);
+    setDemoRunning(true);
+    demoRef.current = { running: true, phase: "launching" };
+    setRunningDemoKey(scenarioName);
+    const isZh = langRef.current === "zh";
+    setDemoStatus(scenario.description[isZh ? "zh" : "en"].slice(0, 80) + "...");
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      const needsAnalysis = scenario.category === "mechanics";
+      const pipeline = needsAnalysis ? "visual_demolition_mechanics" : "visual_demolition_topology";
+      // Fetch full scenario for actual structure_params
+      let structureParams = { num_bays_x: 3, num_stories: 4, span_x_m: 6.0, story_height_m: 3.0, steel_grade: "Q355" };
+      try {
+        const full = await fetchScenario(scenarioName);
+        if (full?.structure_params) {
+          structureParams = full.structure_params as Record<string, unknown>;
+        }
+      } catch { /* use defaults */ }
+      wsRef.current.send(JSON.stringify({
+        type: "launch_pipeline",
+        pipeline,
+        params: {
+          strategy: needsAnalysis ? "llm" : "top_down",
+          effects_preset: "standard",
+          speed: 1.0,
+          structure_params: structureParams,
+        },
+      }));
+      setPipelineActive(true);
+      setPipelineProgress(0);
+      setPipelinePhase(scenario.title[isZh ? "zh" : "en"]);
+    } else {
+      setDemoStatus(t("demo.ws_failed", langRef.current));
+      setTimeout(() => { setDemoRunning(false); demoRef.current.running = false; }, 3000);
+    }
+  }, []);
+
   const handleRoundClick = useCallback((roundIdx: number) => {
     setActiveRoundIdx(roundIdx);
     setAutoPlaying(false);
@@ -1169,12 +1390,14 @@ export default function Home() {
     setAnimRequest(prev => ({key: (prev?.key ?? 0) + 1, targets: round.elementIds}));
     setAnimPlaying(true);
     setAnimatingRound(roundIdx);
+    playCollapseSound("concrete", 0.7 + roundIdx * 0.05);
   }, [demolitionRounds]);
 
   // Called when collapse animation finishes
   const handleAnimComplete = useCallback(() => {
     setAnimPlaying(false);
     setAnimatingRound(-1);
+    stopAll();
     // Clear animRequest → CollapseAnimation shows static state, no replay on tab switch.
     // The targets from the last animation persist in the child's animActiveSet memo
     // so previously collapsed elements stay hidden.
@@ -1204,6 +1427,7 @@ export default function Home() {
       setAnimPlaying(false);
       setAnimatingRound(-1);
       setActiveRoundIdx(-1);
+      stopAll();
       return;
     }
     // Start: queue all rounds and play first one
@@ -1211,6 +1435,7 @@ export default function Home() {
     const queue = demolitionRounds.map(r => r.round);
     autoPlayQueueRef.current = queue.slice(1); // remaining after first
     setAutoPlaying(true);
+    playRumbleSound(0.4, 3);
     handleRoundAnimate(queue[0]); // start first round
   }, [autoPlaying, demolitionRounds, handleRoundAnimate]);
 
@@ -1486,6 +1711,7 @@ export default function Home() {
     <div className="flex h-screen w-full overflow-hidden">
       {/* Sidebar */}
       <Sidebar
+        lang={lang}
         conversations={conversations}
         activeId={activeConvId}
         collapsed={sidebarCollapsed}
@@ -1500,6 +1726,7 @@ export default function Home() {
         onOpenTools={() => setToolsDialogOpen(true)}
         onOpenMemory={() => setMemoryDialogOpen(true)}
         toolsCount={tools.length}
+        scenariosCount={scenariosCount}
       />
 
       {/* Panels container */}
@@ -1634,16 +1861,113 @@ export default function Home() {
           </div>
         )}
 
-        {/* Demolish button */}
-        {demolishReady && (
+        {/* Visual Demolish — compound control (shown whenever structure exists) */}
+        {frameStructure && !pipelineActive && (
           <div className="px-4 pb-2">
-            <button
-              onClick={() => setDemolishDialogOpen(true)}
-              className="w-full flex items-center justify-center gap-2 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2.5 text-sm font-medium text-red-400 hover:bg-red-500/20 hover:border-red-500/60 transition-all cursor-pointer animate-pulse"
-            >
-              <Zap className="h-4 w-4" />
-              {t("chat.demolish", lang)}
-            </button>
+            {pipelineActive ? (
+              <div className="w-full rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
+                  <span className="text-sm font-medium text-primary">{t("vd.pipeline_running", lang)}</span>
+                </div>
+                <div className="h-1 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${Math.round(pipelineProgress * 100)}%` }} />
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">{pipelinePhase}</p>
+              </div>
+            ) : (
+              <div>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={launchVisualDemolition}
+                    disabled={!frameStructure}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-4 py-2.5 text-sm font-medium text-primary hover:bg-primary/20 hover:border-primary/60 transition-all cursor-pointer"
+                  >
+                    <Zap className="h-4 w-4" />
+                    {t("vd.button", lang)}
+                  </button>
+                  <button
+                    onClick={() => setVdConfigOpen(!vdConfigOpen)}
+                    className={`shrink-0 flex items-center justify-center w-9 rounded-lg border transition-all cursor-pointer ${vdConfigOpen ? 'border-primary/50 bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:border-primary/30 hover:text-foreground'}`}
+                    title={t("vd.config", lang)}
+                  >
+                    <Settings className="h-4 w-4" />
+                  </button>
+                  {demolishReady && (
+                    <button
+                      onClick={() => setDemolishDialogOpen(true)}
+                      className="shrink-0 flex items-center justify-center gap-1 rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2.5 text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                      title={t("confirm.title", lang)}
+                    >
+                      <Zap className="h-3.5 w-3.5" />
+                      x1
+                    </button>
+                  )}
+                </div>
+                {vdConfigOpen && (
+                  <div className="mt-2 rounded-lg border border-border bg-muted/30 p-3 space-y-3">
+                    <div>
+                      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 block">{t("vd.strategy", lang)}</label>
+                      <div className="grid grid-cols-2 gap-1">
+                        {DEMOLISH_STRATEGIES.map((s) => {
+                          const active = vdStrategy === s.key;
+                          const needsAnalysis = s.category === "mechanics";
+                          return (
+                            <button
+                              key={s.key}
+                              onClick={() => setVdStrategy(s.key)}
+                              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium transition-all cursor-pointer border ${active ? "bg-primary/15 border-primary/40 text-primary" : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                            >
+                              {active && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                              <span>{t(`vd.strategy.${s.key}`, lang)}</span>
+                              {needsAnalysis && <span className="text-[9px] text-amber-400/70 ml-auto" title={t("vd.needs_analysis", lang)}>⚡</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {DEMOLISH_STRATEGIES.find(s => s.key === vdStrategy)?.category === "mechanics" && (
+                        <p className="text-[9px] text-amber-400/70 mt-1">{t("vd.needs_analysis", lang)}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">{t("vd.effects", lang)}</label>
+                        <div className="flex rounded-md border border-border bg-background overflow-hidden">
+                          {(["minimal", "standard", "cinematic"] as const).map((p) => (
+                            <button
+                              key={p}
+                              onClick={() => {
+                                setVdEffectsPreset(p);
+                                if (p === "minimal") setAnimEffects({ cascade: true, explosion: false, dust: false, shake: false, buckling: false, fracture: false, flash: false, trail: false, bounce: false });
+                                else if (p === "standard") setAnimEffects({ cascade: true, explosion: true, dust: true, shake: true, buckling: false, fracture: false, flash: false, trail: false, bounce: false });
+                                else setAnimEffects({ cascade: true, explosion: true, dust: true, shake: true, buckling: true, fracture: true, flash: true, trail: true, bounce: true });
+                              }}
+                              className={`flex-1 px-2 py-1 text-[10px] font-medium transition-colors cursor-pointer ${vdEffectsPreset === p ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                            >
+                              {t(`vd.effects.${p}`, lang)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">{t("vd.speed", lang)}</label>
+                        <div className="flex rounded-md border border-border bg-background overflow-hidden">
+                          {[0.5, 1, 2].map((s) => (
+                            <button
+                              key={s}
+                              onClick={() => setAnimSpeed(s)}
+                              className={`px-2 py-1 text-[10px] font-medium transition-colors cursor-pointer ${animSpeed === s ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                            >
+                              {s}x
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -1686,7 +2010,7 @@ export default function Home() {
         {/* Visualization mode toggle */}
         <div className="flex items-center justify-between border-b border-border px-4 py-1.5">
           <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-            {vizMode === "svg" ? "SVG 2D View" : vizMode === "webgl" ? "WebGL 3D View" : "Unity 3D View"}
+            {vizMode === "svg" ? "SVG 2D View" : vizMode === "webgl" ? "WebGL 3D View" : vizMode === "ifc" ? "IFC / BIM View" : "Unity 3D View"}
           </span>
           <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-0.5">
             <button
@@ -1719,6 +2043,24 @@ export default function Home() {
             >
               Unity
             </button>
+            <button
+              onClick={() => setVizMode("ifc")}
+              className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${
+                vizMode === "ifc"
+                  ? "bg-primary/20 text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              IFC
+            </button>
+            <div className="ml-1.5 pl-1.5 border-l border-border/60">
+              <AnimationExporter
+                lang={lang}
+                canvasRef={{ current: canvas3dRef }}
+                fileName="demolition-animation"
+                disabled={vizMode !== "webgl" || demolitionRounds.length === 0}
+              />
+            </div>
           </div>
         </div>
 
@@ -1759,6 +2101,8 @@ export default function Home() {
               animationTrigger={animRequest?.key}
               animatingElements={animRequest?.targets}
               onAnimationComplete={handleAnimComplete}
+              activeEffects={animEffects}
+              canvasCallback={setCanvas3dRef}
             />
           </div>
 
@@ -1766,7 +2110,44 @@ export default function Home() {
           <div className={`absolute inset-0 ${vizMode === "unity" ? "" : "invisible pointer-events-none"}`}>
             <UnityVideoPanel onStreamConnected={handleUnityConnected} />
           </div>
+
+          {/* IFC / BIM — always mounted, invisible preserves layout + dimensions */}
+          <div className={`absolute inset-0 ${vizMode === "ifc" ? "" : "invisible pointer-events-none"}`}>
+            <IFCViewer
+              structure={frameStructure}
+              highlightedElements={structuralMetrics?.criticalElementId ? [structuralMetrics.criticalElementId] : []}
+              removedElements={displayFailedElements}
+            />
+          </div>
         </div>
+
+        {/* Demolition playback controller — visible when rounds exist */}
+        {demolitionRounds.length > 0 && (
+          <DemolitionController
+            lang={lang}
+            totalSteps={demolitionRounds.length}
+            currentStep={animatingRound >= 0 ? animatingRound + 1 : demolitionRounds.length}
+            isPlaying={autoPlaying}
+            isAnimating={animatingRound >= 0}
+            speed={animSpeed}
+            effects={animEffects}
+            onPlay={handleAutoPlay}
+            onPause={() => { setAutoPlaying(false); autoPlayQueueRef.current = []; stopAll(); }}
+            onStep={(dir) => {
+              const target = dir === "forward"
+                ? Math.min(demolitionRounds.length - 1, (animatingRound >= 0 ? animatingRound : 0) + 1)
+                : Math.max(0, animatingRound - 1);
+              if (target >= 0 && target < demolitionRounds.length) {
+                setAutoPlaying(false);
+                handleRoundAnimate(target);
+              }
+            }}
+            onReset={() => { setAnimatingRound(-1); setAutoPlaying(false); setAnimRequest(null); setActiveRoundIdx(-1); stopAll(); }}
+            onSpeedChange={setAnimSpeed}
+            onEffectToggle={(key) => setAnimEffects(prev => ({ ...prev, [key]: !prev[key] }))}
+            stepLabels={demolitionRounds.map(r => `Round ${r.round + 1}: ${r.elementIds.length} elements`)}
+          />
+        )}
 
         {/* Log Stream at bottom of center panel */}
         <div className="border-t border-border bg-[#060a12]">
@@ -1879,6 +2260,30 @@ export default function Home() {
             autoPlaying={autoPlaying}
             animatingRound={animatingRound}
           />
+
+          {demolitionMode && timelineSteps.length > 0 && (
+            <div className="mt-4">
+              <TimelineEditor
+                lang={lang}
+                steps={timelineSteps}
+                onReorder={setTimelineSteps}
+                onStepClick={() => {}}
+                selectedStep={-1}
+                isPlaying={autoPlaying}
+                onPlayPause={() => demolitionRounds.length > 0 && (autoPlaying ? setAutoPlaying(false) : handleAutoPlay())}
+                onStepForward={() => {}}
+                onStepBackward={() => {}}
+                onSkipElement={() => {}}
+              />
+            </div>
+          )}
+          {demolitionMode && timelineSteps.length === 0 && (
+            <div className="mt-4 rounded-lg border border-border bg-muted/20 p-4 text-center">
+              <p className="text-xs text-muted-foreground">
+                {lang === "zh" ? "拆除模式已启用。生成结构并启动拆除以填充时间线。" : "Demolition mode active. Generate a structure and launch demolition to populate the timeline."}
+              </p>
+            </div>
+          )}
 
         </div>
       </div>
@@ -2173,8 +2578,9 @@ export default function Home() {
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto min-h-0 space-y-3 py-2">
-            {/* Unity Full Flow Demo */}
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 hover:border-primary/40 transition-colors">
+            <ScenarioPicker lang={lang} scenarios={scenarios} loading={scenariosLoading} disabled={demoRunning} hasWebSocket={wsRef.current?.readyState === WebSocket.OPEN} runningKey={runningDemoKey} onLaunch={launchScenarioFromDemo} onStop={handleStopDemo} />
+            {/* OLD_CARDS_PLACEHOLDER */}
+            <div className="hidden">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -2341,40 +2747,8 @@ export default function Home() {
         </div>
       )}
 
-      {/* Tools Dialog */}
-      <Dialog open={toolsDialogOpen} onOpenChange={setToolsDialogOpen}>
-        <DialogContent className="border-border max-w-lg max-h-[60vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Wrench className="h-4 w-4 text-primary" />
-              {t("tools.title", lang)} ({tools.length})
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-2 px-1">
-            {tools.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">{t("tools.loading", lang)}</p>
-            ) : (
-              tools.map((tool) => (
-                <div
-                  key={tool.name}
-                  className="rounded-lg border border-border bg-card p-3 transition-colors hover:border-primary/30"
-                >
-                  <div className="flex items-center gap-2">
-                    <Calculator className="h-3.5 w-3.5 text-primary" />
-                    <span className="text-sm font-medium">{tool.name}</span>
-                  </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
-                    {tool.description}
-                  </p>
-                  <Badge variant="outline" className="mt-2 text-[10px]">
-                    {tool.server}
-                  </Badge>
-                </div>
-              ))
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Server Manager */}
+      {toolsDialogOpen && <ServerManager lang={lang} onClose={() => setToolsDialogOpen(false)} />}
 
       {/* Memory Dialog */}
       <Dialog open={memoryDialogOpen} onOpenChange={setMemoryDialogOpen}>
@@ -2404,10 +2778,13 @@ export default function Home() {
 
       {/* Floating Toolbar */}
       <FloatingToolbar
+        lang={lang}
         wsConnected={wsConnected}
         toolsCount={tools.length}
+        demolitionMode={demolitionMode}
         onOpenSettings={() => setSettingsOpen(true)}
         onClearChat={handleClearChat}
+        onToggleDemolitionMode={() => setDemolitionMode(!demolitionMode)}
         quickActions={quickActions}
         onQuickAction={sendQuickAction}
       />
