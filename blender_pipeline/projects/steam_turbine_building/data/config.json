@@ -1,0 +1,25 @@
+{
+  "project_name": "汽轮机厂房",
+  "description": "24榀×3轴(A/B/C)，AB跨24m钢屋架(脊高27m)，BC跨9m平梁，柱高25m，白模示意",
+  "fps": 24,
+  "render_enabled": false,
+  "render_comment": "白模核查阶段，不渲染",
+  "resolution_x": 960,
+  "resolution_y": 540,
+  "building": {
+    "frame_count": 24,
+    "column_spacing": 8.0,
+    "bay_ab": 24.0,
+    "bay_bc": 9.0,
+    "column_height": 25.0,
+    "roof_ridge_height": 27.0,
+    "column_size": 0.8,
+    "beam_width": 0.4,
+    "beam_height": 0.8,
+    "truss_member_size": 0.15,
+    "slab_thickness": 0.2,
+    "wall_thickness": 0.2,
+    "bc_floors": [8.0, 15.0],
+    "comment": "A轴(y=0), B轴(y=24), C轴(y=33)。AB跨钢屋架双坡(脊高27m@y=12), BC跨平梁平屋面@25m。BC跨内楼板@8m/15m。柱顶通长纵梁A/B/C三轴。区隔内加屋面板/楼板/墙板。"
+  }
+}

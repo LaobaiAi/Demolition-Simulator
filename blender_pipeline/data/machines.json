@@ -1,0 +1,30 @@
+[
+  {
+    "id": "excavator_01",
+    "type": "履带式挖掘机",
+    "description": "长臂挖掘机带破碎锤，用于拆除混凝土构件",
+    "entry_frame": 0,
+    "exit_frame": 480,
+    "location": [8.0, -5.0, 0.0],
+    "actions": [
+      {"frame": 0, "target": "slab_3F", "action": "move_to", "position": [9.0, 9.0, 10.0]},
+      {"frame": 48, "target": "beam_x_3F", "action": "move_to", "position": [9.0, 9.0, 9.0]},
+      {"frame": 96, "target": "column_3F", "action": "move_to", "position": [9.0, 9.0, 6.6]},
+      {"frame": 144, "target": "slab_2F", "action": "move_to", "position": [9.0, 9.0, 6.6]},
+      {"frame": 192, "target": "beam_x_2F", "action": "move_to", "position": [9.0, 9.0, 5.7]},
+      {"frame": 240, "target": "column_2F", "action": "move_to", "position": [9.0, 9.0, 3.3]},
+      {"frame": 288, "target": "slab_1F", "action": "move_to", "position": [9.0, 9.0, 3.3]},
+      {"frame": 336, "target": "beam_x_1F", "action": "move_to", "position": [9.0, 9.0, 2.4]},
+      {"frame": 384, "target": "column_1F", "action": "move_to", "position": [9.0, 9.0, 0.0]}
+    ]
+  },
+  {
+    "id": "truck_01",
+    "type": "渣土运输车",
+    "description": "停在场边等待装载建筑废料",
+    "entry_frame": 100,
+    "exit_frame": 480,
+    "location": [-10.0, -5.0, 0.0],
+    "actions": []
+  }
+]

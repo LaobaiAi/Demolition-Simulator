@@ -1,0 +1,48 @@
+{
+  "project_name": "钢筋混凝土框架拆除动画",
+  "description": "AB跨24m双坡屋面 + BC跨9m三层梁板，24轴×7.5m柱距，柱高25m，白模动画",
+  "fps": 24,
+  "render_enabled": false,
+  "render_comment": "默认false不渲染，加--render启用",
+  "resolution_x": 960,
+  "resolution_y": 540,
+  "building": {
+    "bay_north": 24.0,
+    "bay_south": 9.0,
+    "columns_east_west": 24,
+    "column_spacing": 7.5,
+    "column_height": 25.0,
+    "roof_peak_height": 27.0,
+    "column_size": 0.8,
+    "beam_width": 0.4,
+    "beam_height": 0.8,
+    "slab_thickness": 0.2,
+    "wall_thickness": 0.2,
+    "bc_floors": [8.0, 15.0, 25.0],
+    "comment": "A轴在北(24m双坡屋面), B轴在中, C轴在南(9m三层BC跨)。AB间钢屋架+双坡板, BC间混凝土梁+平板@8m/15m/25m。"
+  },
+  "demolition_strategy": {
+    "order": "top_down",
+    "demolition_mode": "by_floor_type",
+    "within_floor_sort": "importance_desc",
+    "importance_map": {
+      "roof_slab": 4,
+      "wall_panel": 3,
+      "steel_truss": 2,
+      "bc_beam": 1,
+      "bc_beam_long": 1,
+      "bc_beam_sec": 1,
+      "bc_slab": 1,
+      "frame_beam": 1,
+      "column": 0
+    },
+    "importance_comment": "拆除顺序: 屋面板(4)→墙板(3)→钢屋架(2)→BC梁板(1)→柱(0)。同层按importance降序。",
+    "frame_per_step": 96,
+    "transition_frames": 16,
+    "overlap_frames": 12,
+    "frame_comment": "每步96帧(4秒),过渡16帧。10组≈10×84+16=856帧≈36秒。"
+  },
+  "machinery": {
+    "enabled": false
+  }
+}
