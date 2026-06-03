@@ -70,3 +70,10 @@ dev-notes/
 NOTES*.md
 *.notes.md
 TODO.local.md
+
+# Blender pipeline
+blender_pipeline/output/
+blender_pipeline/blender_portable/
+*.blend
+*.blend1
+*.mp4

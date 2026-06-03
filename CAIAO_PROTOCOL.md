@@ -273,6 +273,11 @@ If `frame_generator.core` has a breaking change, `quick_analysis_server` needs t
 | `comparison_server` | Atomic | `compare_demolition_strategies`, `get_comparison_summary`, `recommend_strategy` | Active (lazy) | 2026-05-31 |
 | `run_full_analysis` | Composite | (pipeline) | Legacy | — |
 | `manager_server` | Atomic | 24 tools: create/list/validate servers, health/metrics, search, dependency analysis, merge detection | Active | 2026-05-31 |
+| `blender_build_server` | Atomic | `build_frame_model` | Active (lazy) | 2026-06-03 |
+| `blender_animate_server` | Atomic | `apply_demolition_sequence` | Active (lazy) | 2026-06-03 |
+| `blender_machinery_server` | Atomic | `add_construction_machinery` | Active (lazy) | 2026-06-03 |
+| `blender_render_server` | Atomic | `render_animation`, `render_preview` | Active (lazy) | 2026-06-03 |
+| `blender_pipeline_server` | Atomic | `run_full_pipeline`, `run_pipeline_stage`, `check_blender_environment` | Active (lazy) | 2026-06-03 |
 
 ### Server Details
 
@@ -425,6 +430,54 @@ If `frame_generator.core` has a breaking change, `quick_analysis_server` needs t
 - **Architecture:** The manager is itself a CAIAO server (dogfooding). It operates through `caiao.yaml` manifest files — the manager writes manifests, the gateway auto-discovers them via `caiao_config.py`. Health/metrics data comes from hub REST endpoints.
 - **Creation:** 2026-05-31
 - **Significance:** The highest-dimension CAIAO server — it manages the ecosystem that manages it. Enables self-service server creation, health monitoring, semantic search, and automated merge detection.
+
+#### `blender_build_server` — Procedural Frame Modeling (Blender)
+
+- **Engine:** Blender 4.2+ (bpy)
+- **Lazy:** Yes
+- **Tool:** `build_frame_model`
+- **Output:** `scene_base.blend` with 139 individual elements, each carrying 8 metadata properties (element_type, floor, grid_x/y, bay_x/y, importance, label_cn)
+- **Config:** `blender_pipeline/data/project_config.json`
+- **Creation:** 2026-06-03
+
+#### `blender_animate_server` — Demolition Animation Keyframing (Blender)
+
+- **Engine:** Blender 4.2+ (bpy)
+- **Lazy:** Yes
+- **Tool:** `apply_demolition_sequence`
+- **Input:** `scene_base.blend`
+- **Output:** `scene_animated.blend` + `computed_demolition_schedule.csv`
+- **Logic:** Metadata-driven sorting (floor→importance→type→position) → grouping → visibility/scale/location keyframes
+- **Creation:** 2026-06-03
+
+#### `blender_machinery_server` — Construction Machinery Addition (Blender)
+
+- **Engine:** Blender 4.2+ (bpy)
+- **Lazy:** Yes
+- **Tool:** `add_construction_machinery`
+- **Input:** `scene_animated.blend`
+- **Output:** `scene_final.blend` (with excavator + dump truck models)
+- **Creation:** 2026-06-03
+
+#### `blender_render_server` — Animation Rendering (Blender)
+
+- **Engine:** Blender 4.2+ (OpenGL viewport + Workbench)
+- **Lazy:** Yes
+- **Tools:** `render_animation` (MP4 via OpenGL viewport), `render_preview` (fast white-model via Workbench)
+- **Input:** `scene_final.blend` (or any animated .blend)
+- **Output:** MP4 video (H.264, 1280×720, 24fps)
+- **Creation:** 2026-06-03
+
+#### `blender_pipeline_server` — Full Pipeline Orchestrator
+
+- **Purpose:** Chains build → animate → machinery → render into a single end-to-end workflow
+- **Lazy:** Yes
+- **Tools:**
+  - `run_full_pipeline` — Complete end-to-end pipeline with configurable stages (machinery on/off, render on/off)
+  - `run_pipeline_stage` — Execute a single stage independently (build/animate/machinery/render/preview)
+  - `check_blender_environment` — Verify Blender installation and pipeline file availability
+- **Pipeline flow:** generate_building.py → apply_demolition.py → add_machinery.py → render.py
+- **Creation:** 2026-06-03
 
 ---
 
