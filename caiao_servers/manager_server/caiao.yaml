@@ -1,0 +1,103 @@
+name: manager_server
+version: 0.1.0
+kind: atomic-mcp
+description: "Meta-server: manage all CAIAO servers — creation, extension, enhancement, migration, retrieval, orchestration"
+status: active
+since: "2026-05-31"
+start_mode: eager
+command:
+  python: auto
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+health:
+  timeout_ms: 5000
+  restart_on_crash: true
+  max_restarts: 3
+  health_check_interval_s: 0
+tools:
+  - name: create_server
+    description: "Scaffold a new CAIAO server from an archetype"
+    tags: [creation, scaffolding]
+  - name: list_archetypes
+    description: "List all available server archetypes with descriptions"
+    tags: [creation, discovery]
+  - name: generate_manifest
+    description: "Generate a caiao.yaml manifest from an existing server.py or SERVER_CONFIGS entry"
+    tags: [creation, migration]
+  - name: validate_server
+    description: "Validate a server against the CAIAO contract (static analysis, no execution)"
+    tags: [creation, validation]
+  - name: add_tool
+    description: "Add a tool definition to an existing server's manifest"
+    tags: [extension]
+  - name: update_tool
+    description: "Update a tool's description or tags in the manifest"
+    tags: [extension]
+  - name: remove_tool
+    description: "Remove a tool from a server's manifest"
+    tags: [extension]
+  - name: add_import
+    description: "Add an import dependency to a merged server's manifest"
+    tags: [extension]
+  - name: health_check
+    description: "Run health check on one or all servers"
+    tags: [enhancement, monitoring]
+  - name: get_metrics
+    description: "Get runtime metrics for one or all servers"
+    tags: [enhancement, monitoring]
+  - name: restart_server
+    description: "Request a server restart through the gateway"
+    tags: [enhancement, lifecycle]
+  - name: configure_health
+    description: "Update health monitoring policy for a server"
+    tags: [enhancement, configuration]
+  - name: rename_server
+    description: "Rename a server (directory + manifest + reference warnings)"
+    tags: [migration]
+  - name: bump_version
+    description: "Bump server semantic version (patch/minor/major)"
+    tags: [migration, versioning]
+  - name: archive_server
+    description: "Deprecate/archive a server (marks status=deprecated)"
+    tags: [migration]
+  - name: migrate_to_manifest
+    description: "Generate caiao.yaml from SERVER_CONFIGS for servers missing a manifest"
+    tags: [migration, manifest]
+  - name: search_capabilities
+    description: "Semantic search across all registered tools and capabilities"
+    tags: [retrieval, search]
+  - name: list_servers
+    description: "List all servers with metadata, status, and tool counts"
+    tags: [retrieval, discovery]
+  - name: get_server
+    description: "Get detailed information about a specific server"
+    tags: [retrieval, discovery]
+  - name: find_tool_owner
+    description: "Find which server provides a given tool"
+    tags: [retrieval, discovery]
+  - name: detect_merge_opportunities
+    description: "Analyze tool call patterns and server structure to suggest merges"
+    tags: [orchestration, analysis]
+  - name: analyze_dependency_graph
+    description: "Build and analyze the cross-server dependency graph"
+    tags: [orchestration, analysis]
+  - name: validate_pipeline
+    description: "Validate a declarative pipeline configuration"
+    tags: [orchestration, validation]
+  - name: suggest_pipeline
+    description: "Given a capability goal, suggest a server pipeline"
+    tags: [orchestration, discovery]
+capabilities:
+  - server_management
+  - scaffolding
+  - health_monitoring
+  - semantic_search
+  - dependency_analysis
+  - pipeline_orchestration
+dependencies:
+  python: [pyyaml]
+  system: []
+testing:
+  test_file: test_manager.py
+  test_command: ["python", "-m", "pytest", "test_manager.py", "-v"]

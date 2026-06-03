@@ -1,0 +1,45 @@
+# caiao.yaml — Animation Control Server manifest
+
+name: animation_control_server
+version: 0.1.0
+kind: atomic-mcp
+description: "Manages demolition animation timelines — converts multi-round demolition plans into keyframe-based timelines, provides state queries, and generates effects config for frontend collapse animation"
+status: active
+since: "2026-06-01"
+
+start_mode: lazy
+
+command:
+  python: auto
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+
+health:
+  timeout_ms: 5000
+  restart_on_crash: false
+  max_restarts: 3
+  health_check_interval_s: 0
+
+tools:
+  - name: create_timeline
+    description: "Create a new animation timeline from a demolition plan"
+    tags: [animation, timeline]
+  - name: get_timeline_state
+    description: "Get the state of a timeline at a given timestamp"
+    tags: [animation, state]
+  - name: sequence_to_animation_data
+    description: "Convert a demolition sequence into frontend animation data"
+    tags: [animation, conversion]
+  - name: generate_effects_config
+    description: "Generate visual effects configuration based on intensity preset and strategy"
+    tags: [animation, effects]
+
+capabilities:
+  - animation_timeline
+  - effects_generation
+  - keyframe_management
+
+dependencies:
+  python: []
+  system: []

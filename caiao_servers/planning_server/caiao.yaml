@@ -1,0 +1,43 @@
+# caiao.yaml — Planning Server manifest
+
+name: planning_server
+version: 0.1.0
+kind: atomic-mcp
+description: "Demolition sequence planning and structural topology analysis — rule-based and LLM-guided strategies with collapse propagation modeling"
+status: active
+since: "2026-06-01"
+
+start_mode: lazy
+
+command:
+  python: auto
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+
+health:
+  timeout_ms: 5000
+  restart_on_crash: false
+  max_restarts: 3
+  health_check_interval_s: 0
+
+tools:
+  - name: plan_demolition_sequence
+    description: "Generate demolition step sequence for a structure by strategy (top_down, bottom_up, sequential, llm)"
+    tags: [planning, demolition]
+  - name: analyze_structure_topology
+    description: "Analyze structural topology — identify load paths, dependencies, and critical regions"
+    tags: [planning, topology]
+  - name: get_demolition_plan_summary
+    description: "Get a human-readable summary of a demolition plan with step details"
+    tags: [planning, summary]
+
+capabilities:
+  - demolition_planning
+  - topology_analysis
+  - collapse_propagation
+  - strategy_selection
+
+dependencies:
+  python: []
+  system: []
