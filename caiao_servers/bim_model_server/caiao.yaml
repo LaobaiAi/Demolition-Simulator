@@ -34,6 +34,15 @@ tools:
   - name: export_ifc
     description: "Export a generated structure model to IFC format"
     tags: [bim, export, ifc]
+  - name: generate_truss
+    description: "Generate a truss structure (Pratt/Howe/Warren types, tubular sections)"
+    tags: [bim, truss, generation]
+  - name: generate_portal_frame
+    description: "Generate a portal frame structure (pitched roof industrial building, UB sections)"
+    tags: [bim, portal_frame, generation]
+  - name: generate_beam
+    description: "Generate a beam structure (simply supported/cantilever/continuous/fixed)"
+    tags: [bim, beam, generation]
 
 capabilities:
   - structural_geometry

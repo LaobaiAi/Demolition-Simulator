@@ -31,6 +31,9 @@ tools:
   - name: get_demolition_plan_summary
     description: "Get a human-readable summary of a demolition plan with step details"
     tags: [planning, summary]
+  - name: compute_collapse_chain
+    description: "Compute chain reaction propagation after element removal using topology analysis"
+    tags: [planning, collapse, propagation]
 
 capabilities:
   - demolition_planning
