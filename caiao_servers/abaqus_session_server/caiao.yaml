@@ -1,0 +1,57 @@
+name: abaqus_session_server
+description: "Single Abaqus CAE session server exposing all modeling, analysis, and result extraction tools. Maintains one shared Abaqus model database across all tool calls."
+start_mode: lazy
+
+health:
+  timeout_ms: 300000
+
+depends_on:
+  servers:
+    - abaqus_environment_server
+
+tools:
+  - name: create_rectangular_column
+    description: "Create rectangular RC column part in Abaqus (concrete solid + rebar wireframe)"
+    tags: [abaqus, modeling, column]
+  - name: create_truss
+    description: "Create triangular steel truss wireframe in Abaqus"
+    tags: [abaqus, modeling, truss]
+  - name: create_slab
+    description: "Create precast concrete roof slab in Abaqus"
+    tags: [abaqus, modeling, slab]
+  - name: assign_concrete_cdp
+    description: "Assign Concrete Damaged Plasticity (CDP) model to a part with C30 material"
+    tags: [abaqus, material, cdp]
+  - name: mesh_part
+    description: "Seed and mesh a part with C3D8R explicit elements"
+    tags: [abaqus, mesh]
+  - name: create_explicit_step
+    description: "Create Explicit Dynamics analysis step with field output requests"
+    tags: [abaqus, analysis, step]
+  - name: apply_gravity
+    description: "Apply gravity load to the model"
+    tags: [abaqus, load, gravity]
+  - name: create_rigid_ground
+    description: "Create horizontal rigid ground part with boundary condition and general contact"
+    tags: [abaqus, boundary, ground]
+  - name: submit_job
+    description: "Submit Abaqus job and wait for completion"
+    tags: [abaqus, job, solver]
+  - name: get_max_displacement
+    description: "Extract maximum displacement magnitude from ODB results"
+    tags: [abaqus, results, odb]
+  - name: plot_displacement_curve
+    description: "Plot displacement-time curve as PNG image"
+    tags: [abaqus, results, plot]
+  - name: create_cut_zone
+    description: "Identify elements at cut height in columns and create part-level element sets for demolition"
+    tags: [abaqus, demolition, cut-zone]
+  - name: inject_cut_zone_inp
+    description: "Inject WEAK_C30 material, SECTION CONTROLS with element deletion, and STATUS/SDEG output into INP file"
+    tags: [abaqus, inp, injection]
+  - name: build_factory
+    description: "Build complete factory model — columns, trusses, roof slab, with mesh, materials, and assembly"
+    tags: [abaqus, pipeline, build]
+  - name: setup_collapse
+    description: "Full collapse simulation pipeline — build model, create step, setup ground/contact, apply gravity, create cut zone, submit job"
+    tags: [abaqus, pipeline, collapse]

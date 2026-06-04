@@ -1,0 +1,27 @@
+{
+  "_description": "本机 Abaqus 2026 环境信息，请根据实际安装路径修改",
+  "product": {
+    "name": "SIMULIA Established Products 2026",
+    "version": "2026 (6.26-1)"
+  },
+  "paths": {
+    "commands": "D:\\Program Files\\SIMULIA\\Commands",
+    "product_root": "D:\\Program Files\\SIMULIA\\EstProducts\\2026",
+    "win_b64": "D:\\Program Files\\SIMULIA\\EstProducts\\2026\\win_b64",
+    "bin": "D:\\Program Files\\SIMULIA\\EstProducts\\2026\\win_b64\\code\\bin",
+    "python": "D:\\Program Files\\SIMULIA\\EstProducts\\2026\\win_b64\\code\\python3.10",
+    "license_file": "C:\\License\\ABAQUSLM.lic"
+  },
+  "license": {
+    "server": "27800@localhost",
+    "features": ["cae", "explicit", "standard", "viewer"]
+  },
+  "hardware": {
+    "cpu_cores": 6,
+    "ram_gb": 15.4
+  },
+  "software": {
+    "mpi_path": "C:\\Program Files\\Microsoft MPI\\bin\\mpiexec.exe",
+    "python_version": "3.10.5"
+  }
+}
