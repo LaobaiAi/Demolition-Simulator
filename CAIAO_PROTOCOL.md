@@ -304,7 +304,10 @@ If `frame_generator.core` has a breaking change, `quick_analysis_server` needs t
 | `animation_control_server` | Atomic | `create_timeline`, `get_timeline_state`, `sequence_to_animation_data`, `generate_effects_config` | Active | 2026-05-31 |
 | `planning_server` | Atomic | `plan_demolition_sequence`, `analyze_structure_topology`, `get_demolition_plan_summary`, `compute_collapse_chain` | Active | 2026-05-31 |
 | `comparison_server` | Atomic | `compare_demolition_strategies`, `get_comparison_summary`, `recommend_strategy` | Active (lazy) | 2026-05-31 |
-| `run_full_analysis` | Composite | (pipeline) | Legacy | — |
+| `run_full_analysis` | Composite | `run_full_analysis` | Active | 2026-06-05 |
+| `full_bim_demolition` | Composite | `run_full_bim_demolition` | Active | 2026-06-05 |
+| `visual_demolition_topology` | Composite | `run_visual_demolition_topology` | Active | 2026-06-05 |
+| `visual_demolition_mechanics` | Composite | `run_visual_demolition_mechanics` | Active | 2026-06-05 |
 | `manager_server` | Atomic | 24 tools: create/list/validate servers, health/metrics, search, dependency analysis, merge detection | Active | 2026-05-31 |
 | `blender_environment_server` | Infrastructure | `resolve_blender_path`, `validate_environment`, `provide_pipeline_paths`, `provide_config` | Active (eager) | 2026-06-03 |
 | `blender_build_server` | Atomic | `build_frame_model` | Active (lazy) | 2026-06-03 |
@@ -446,11 +449,29 @@ If `frame_generator.core` has a breaking change, `quick_analysis_server` needs t
 - **Importing from:** `planning_server.rule_planner`, `planning_server.llm_planner` (pure functions, no process dependency)
 - **Scoring:** safety_score (0-100), efficiency_score (0-100), visual_score (0-100), weighted recommendation_score (safety=0.5, efficiency=0.3, visual=0.2)
 
-#### `run_full_analysis` — Composite Pipeline (Legacy)
+#### `run_full_analysis` — Composite Pipeline
 
 - **Type:** Gateway-level orchestration (no subprocess)
 - **Pipeline:** `generate_frame → analyze_frame → select_critical_element`
-- **Status:** Legacy — replaced by `quick_analysis_server` for new work
+- **Status:** Active — has caiao.yaml manifest in `caiao_servers/run_full_analysis/`
+
+#### `full_bim_demolition` — Composite Pipeline
+
+- **Type:** Gateway-level orchestration (no subprocess)
+- **Pipeline:** `generate_steel_frame → plan_demolition_sequence → create_timeline`
+- **Status:** Active — has caiao.yaml manifest in `caiao_servers/full_bim_demolition/`
+
+#### `visual_demolition_topology` — Composite Pipeline
+
+- **Type:** Gateway-level orchestration (no subprocess)
+- **Pipeline:** `generate_frame → plan_demolition_sequence → create_timeline → sequence_to_animation_data → generate_effects_config → init_physics_scene`
+- **Status:** Active — has caiao.yaml manifest in `caiao_servers/visual_demolition_topology/`
+
+#### `visual_demolition_mechanics` — Composite Pipeline
+
+- **Type:** Gateway-level orchestration (no subprocess)
+- **Pipeline:** `generate_frame → analyze_frame → select_critical_element → plan_demolition_sequence → create_timeline → sequence_to_animation_data → generate_effects_config → init_physics_scene`
+- **Status:** Active — has caiao.yaml manifest in `caiao_servers/visual_demolition_mechanics/`
 
 #### `manager_server` — CAIAO Server Manager (Meta-Server)
 
@@ -645,6 +666,7 @@ convert_to_unified_frame (embedded in the merged server):
 | 2026-06-03 | Simplify review Phase 1-3: Created `blender_environment_server` (infrastructure, eager) — shared Blender discovery, env validation, path/config provision. Extracted `blender_pipeline/common.py` (system Python) and `scripts/_common.py` (Blender Python) — unified Blender discovery, subprocess runner, low-level mesh API (`add_cube`/`add_cylinder`/`make_material`/`clear_scene`/`compute_scene_bounds`), mesh cache for shared-dimension objects. Refactored all 5 Blender functional servers to import from common.py. Replaced all `bpy.ops` geometry operators with low-level data API in pipeline scripts — eliminated ~695 depsgraph evaluations per animation. Deleted `main_pipeline.py` CLI entry point per user decision (CLI serves development only, not LLM-driven workflows) | Claude |
 | 2026-06-04 | **Abaqus_Collapse project absorption**: Created `abaqus_environment_server` (infrastructure, eager), `abaqus_session_server` (merged, 15 tools in persistent Abaqus CAE session via JSON-RPC stdio bridge), `abaqus_collapse_pipeline` (composite). Preserved v1→v2→v3 validated INP injection logic (WEAK_C30 + SECTION CONTROLS element deletion + STATUS/SDEG). Added `@abaqus_python@` sentinel support to `caiao_config.py`. Migrated knowledge docs from original project to `dev-notes/reference/abaqus/`. Architecture: system Python MCP wrapper manages single Abaqus subprocess — all tools share one Abaqus model database | Claude |
 | 2026-06-04 | Simplify review Phase 4-6 + architecture redesign: **Blender Daemon Architecture** — agreed to add `blender_daemon_server` (infrastructure, eager) as single persistent Blender process shared by all functional servers, eliminating per-server subprocess cold starts. **Standard file format** — each structure type defined by two standard files (geometry manifest + demolition sequence), not by code; `build_server`/`animate_server` read files → validate → forward to daemon, containing zero geometry or demolition algorithms. **Three-mechanism parameter extension** — namespace isolation + schema registry + three-tier classification (base/extension/transient) applied to all four parameter files. **caiao.yaml template compression** — `_manifest_to_config()` now fills command/kind/health/dependencies defaults; 6 Blender server manifests stripped of ~120 lines boilerplate. Full architecture decision documented in `dev-notes/decisions/2026-06-04-blender-daemon-architecture.md` | Claude |
+| 2026-06-05 | **Thorough CAIAO-ification**: Removed 175-line legacy `_legacy_server_configs()` fallback from `caiao_config.py` — all 30 servers now have `caiao.yaml` manifests. Created composite manifests for `run_full_analysis`, `full_bim_demolition`, `visual_demolition_topology`, `visual_demolition_mechanics`. Replaced hardcoded `PIPELINE_VISUAL_DEMOLITION_*` constants in `main.py` with runtime reads from hub config (`get_pipeline_config()`). Split monolithic `main.py` (1298→470 lines) into `routers/` (5 files: tools, verify, servers, settings, unity) and `services/pipeline_service.py`. All REST endpoints now defined in routers; WebSocket handler + lifespan remain in main.py. Added `app.state` pattern for shared state between lifespan and routers. Architecture redesign documented in `dev-notes/architecture/2026-06-05-architecture-redesign.md` | Claude |
 
 ---
 
