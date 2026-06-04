@@ -1,4 +1,5 @@
 name: blender_render_server
+kind: atomic-mcp
 description: "Animation rendering and preview via Blender — OpenGL viewport rendering to MP4, plus fast Workbench white-model preview"
 start_mode: lazy
 

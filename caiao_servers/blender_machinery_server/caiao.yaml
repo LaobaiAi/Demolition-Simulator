@@ -1,4 +1,5 @@
 name: blender_machinery_server
+kind: atomic-mcp
 description: "Construction machinery addition via Blender — adds excavator and dump truck models to demolition scenes with animation keyframes"
 start_mode: lazy
 

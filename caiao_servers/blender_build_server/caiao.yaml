@@ -1,4 +1,5 @@
 name: blender_build_server
+kind: atomic-mcp
 description: "Procedural reinforced concrete frame structure generation via Blender — creates elements with full metadata, outputs scene_base.blend"
 start_mode: lazy
 

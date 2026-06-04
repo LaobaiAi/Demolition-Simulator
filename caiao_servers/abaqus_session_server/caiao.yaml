@@ -1,4 +1,5 @@
 name: abaqus_session_server
+kind: merged
 description: "Single Abaqus CAE session server exposing all modeling, analysis, and result extraction tools. Maintains one shared Abaqus model database across all tool calls."
 start_mode: lazy
 
