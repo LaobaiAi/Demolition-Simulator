@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agent_loop import AgentLoop
 from llm_engine import LLMEngine
-from caiao_hub import CAIAOClientHub
+from caiao import CAIAOClientHub
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -206,14 +206,13 @@ async def test_agent_tool_error_handling(mock_hub, mock_llm):
 @pytest.mark.asyncio
 async def test_agent_max_iterations(mock_hub, mock_llm):
     """Agent hits max iterations, falls back to chat() for summary."""
-    # 5 iterations of tool calls → max reached → chat() summary
+    from agent_loop import MAX_TOOL_ITERATIONS
     mock_llm.chat_stream.side_effect = [
         _stream(_complete(f"Step {i + 1}", tool_calls=[
             {"id": f"c{i}", "name": "add", "arguments": {"a": i, "b": 1}},
         ]))
-        for i in range(5)
+        for i in range(MAX_TOOL_ITERATIONS)
     ]
-    # The fallback at max iterations uses chat(), not chat_stream()
     mock_llm.chat = AsyncMock(return_value={
         "content": "Summary of results.",
     })
@@ -222,7 +221,7 @@ async def test_agent_max_iterations(mock_hub, mock_llm):
     steps = [s async for s in agent.run("Do many calculations")]
 
     tool_calls = [s for s in steps if s["type"] == "tool_call"]
-    assert len(tool_calls) == 5  # max iterations
+    assert len(tool_calls) == MAX_TOOL_ITERATIONS
 
     responses = [s for s in steps if s["type"] == "response"]
     assert len(responses) >= 1

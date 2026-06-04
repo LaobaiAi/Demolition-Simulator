@@ -1,0 +1,41 @@
+# caiao.yaml — CAIAO Server manifest
+# Every CAIAO Server MUST have a caiao.yaml manifest.
+
+# ── Identity ─────────────────────────────────────────────────────────────
+name: pynite_server
+version: 0.1.0
+kind: atomic-mcp
+description: "3D finite element analysis via PyNiteFEA — supports linear and P-Delta analysis"
+status: active
+since: "2026-05-25"
+
+# ── Lifecycle ─────────────────────────────────────────────────────────────
+start_mode: lazy
+
+# ── Command ───────────────────────────────────────────────────────────────
+command:
+  python: auto
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+
+# ── Health ────────────────────────────────────────────────────────────────
+health:
+  timeout_ms: 5000
+  restart_on_crash: false
+  max_restarts: 3
+  health_check_interval_s: 0
+
+# ── Tools ─────────────────────────────────────────────────────────────────
+tools:
+  - name: pynite_analysis
+    description: "Run 3D finite element analysis on a frame structure using PyNiteFEA. Supports linear and P-Delta analysis. Returns node displacements and element forces"
+    tags: [analysis, 3d, pynite, fem, p-delta]
+
+# ── Capabilities ────────────────────────────────────────────────────────
+capabilities: [3d-analysis, fem, pynite, p-delta, linear]
+
+# ── Dependencies ─────────────────────────────────────────────────────────
+dependencies:
+  python: [Pynite]
+  system: []

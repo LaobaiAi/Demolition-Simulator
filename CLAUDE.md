@@ -67,7 +67,6 @@ gateway/          ← FastAPI 后端，LLM 引擎 + Agent Loop
   llm_engine.py   ← SYSTEM_PROMPT + OpenAI SDK 封装
   agent_loop.py   ← ReAct agent (think → act → observe)
   memory.py       ← mem0 + local JSON fallback
-  caiao_hub.py      ← CAIAO 多服务器管理
   caiao_config.py   ← caiao.yaml 自动发现（替代硬编码 SERVER_CONFIGS）
 caiao_servers/
   manager_server/         ← 🔧 CAIAO Server 管理器（元 Server：创建/扩展/健康/迁移/检索/编排）
@@ -79,6 +78,9 @@ caiao_servers/
   frame_generator/        ← 参数化框架生成 (2D + 3D)
   quick_analysis_server/  ← ⚡ Pipeline A: 第一个 CAIAOServerizer server merge
   full_analysis_3d_server/  ← ⚡ Pipeline B: 第二个 server merge (3D 全分析)
+  abaqus_environment_server/  ← Abaqus 环境发现 + 校验 (infrastructure)
+  abaqus_session_server/      ← Abaqus CAE 持久会话，15 个建模/分析/拆除工具 (merged)
+  abaqus_collapse_pipeline/   ← Abaqus 倒塌全流程编排 (composite)
 unity_project/
   Assets/Scripts/
     SimulationController.cs  ← TCP 监听 :5005, 物理拆除
@@ -133,7 +135,7 @@ frontend/
 |---------|-----------|---------|
 | Class name | `CAIAO` + PascalCase | `CAIAOClientHub` |
 | Constant | `CAIAO_` + UPPER_SNAKE | `CAIAO_SERVERS_DIR` |
-| Filename | `caiao_` + lowercase | `caiao_hub.py` |
+| Filename | `caiao_` + lowercase | `caiao_config.py` |
 | Directory | `caiao_servers/` | `caiao_servers/anastruct_server/` |
 | SDK imports | keep `from mcp.server import Server` | external package, not our naming |
 

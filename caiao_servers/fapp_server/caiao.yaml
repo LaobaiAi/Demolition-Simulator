@@ -1,0 +1,41 @@
+# caiao.yaml — CAIAO Server manifest
+# Every CAIAO Server MUST have a caiao.yaml manifest.
+
+# ── Identity ─────────────────────────────────────────────────────────────
+name: fapp_server
+version: 0.1.0
+kind: atomic-mcp
+description: "Lightweight 3D frame analysis via FAPP direct stiffness method — extremely fast, pure Python"
+status: active
+since: "2026-05-25"
+
+# ── Lifecycle ─────────────────────────────────────────────────────────────
+start_mode: lazy
+
+# ── Command ───────────────────────────────────────────────────────────────
+command:
+  python: auto
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+
+# ── Health ────────────────────────────────────────────────────────────────
+health:
+  timeout_ms: 5000
+  restart_on_crash: false
+  max_restarts: 3
+  health_check_interval_s: 0
+
+# ── Tools ─────────────────────────────────────────────────────────────────
+tools:
+  - name: fapp_analysis
+    description: "Run lightweight 3D frame analysis using FAPP (direct stiffness method). Extremely fast, pure Python. Ideal for quick verification. Returns node displacements and element forces"
+    tags: [analysis, 3d, fapp, direct-stiffness, lightweight]
+
+# ── Capabilities ────────────────────────────────────────────────────────
+capabilities: [3d-analysis, direct-stiffness, lightweight, quick-verification]
+
+# ── Dependencies ─────────────────────────────────────────────────────────
+dependencies:
+  python: [fapp]
+  system: []

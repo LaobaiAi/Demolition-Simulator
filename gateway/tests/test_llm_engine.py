@@ -133,7 +133,7 @@ class TestLLMEngine:
         engine.client.chat.completions.create = mock_create
 
         result = await engine.chat(messages=[{"role": "user", "content": "Hi"}])
-        assert "rate limited" in result["content"].lower()
+        assert "rate limit" in result["content"].lower()
         assert result["tool_calls"] is None
 
     def test_system_prompt_contains_key_directives(self):

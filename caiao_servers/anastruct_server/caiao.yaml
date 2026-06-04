@@ -1,0 +1,49 @@
+# caiao.yaml — CAIAO Server manifest
+# Every CAIAO Server MUST have a caiao.yaml manifest.
+
+# ── Identity ─────────────────────────────────────────────────────────────
+name: anastruct_server
+version: 0.1.0
+kind: atomic-mcp
+description: "2D frame generation, linear elastic analysis via anaStruct, and critical element selection"
+status: active
+since: "2026-05-25"
+
+# ── Lifecycle ─────────────────────────────────────────────────────────────
+start_mode: eager
+
+# ── Command ───────────────────────────────────────────────────────────────
+command:
+  python: auto
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+
+# ── Health ────────────────────────────────────────────────────────────────
+health:
+  timeout_ms: 5000
+  restart_on_crash: false
+  max_restarts: 3
+  health_check_interval_s: 0
+
+# ── Tools ─────────────────────────────────────────────────────────────────
+tools:
+  - name: generate_simple_frame
+    description: "Generate a simple 2D rectangular frame structure with nodes, elements, supports, and loads"
+    tags: [generation, 2d, frame, parametric]
+
+  - name: analyze_frame
+    description: "Analyze a 2D frame structure and return node displacements and element forces"
+    tags: [analysis, 2d, linear-elastic, anastruct]
+
+  - name: select_critical_element
+    description: "Identify the most critical column for demolition based on analysis results — returns the column element ID with the highest absolute axial force"
+    tags: [postprocess, critical-element, column, selection]
+
+# ── Capabilities ────────────────────────────────────────────────────────
+capabilities: [2d-analysis, frame-generation, linear-elastic, critical-element-identification, steel, concrete]
+
+# ── Dependencies ─────────────────────────────────────────────────────────
+dependencies:
+  python: [anastruct]
+  system: []

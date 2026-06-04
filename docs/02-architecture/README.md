@@ -19,7 +19,7 @@ LLM 不直接调用任何工具，而是通过 AgentLoop → CAIAOClientHub 分�
 | Agent Loop | `gateway/agent_loop.py` | ReAct (think→act→observe) | 业务编排 |
 | LLM Engine | `gateway/llm_engine.py` | OpenAI SDK | LLM 封装 |
 | Memory | `gateway/memory.py` | mem0 + local JSON fallback | 记忆管理 |
-| CAIAO Hub | `gateway/caiao_hub.py` | MCP Client | 服务器管理 |
+| CAIAO Hub | `caiao` pip package | MCP Client | 服务器管理 |
 | anaStruct Server | `caiao_servers/anastruct_server/` | anaStruct | 快速线性分析 |
 | OpenSees Server | `caiao_servers/opensees_server/` | OpenSeesPy | 高精度验证 |
 | Frame Generator | `caiao_servers/frame_generator/` | 算法生成 | 框架结构生成 |

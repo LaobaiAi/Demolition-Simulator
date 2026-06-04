@@ -1,0 +1,45 @@
+# caiao.yaml — CAIAO Server manifest
+# Every CAIAO Server MUST have a caiao.yaml manifest.
+
+# ── Identity ─────────────────────────────────────────────────────────────
+name: unity_simulator
+version: 0.1.0
+kind: atomic-mcp
+description: "Sends demolition commands to Unity 3D physics engine via TCP socket and tracks collapse state"
+status: active
+since: "2026-05-25"
+
+# ── Lifecycle ─────────────────────────────────────────────────────────────
+start_mode: lazy
+
+# ── Command ───────────────────────────────────────────────────────────────
+command:
+  python: auto
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+
+# ── Health ────────────────────────────────────────────────────────────────
+health:
+  timeout_ms: 5000
+  restart_on_crash: false
+  max_restarts: 3
+  health_check_interval_s: 0
+
+# ── Tools ─────────────────────────────────────────────────────────────────
+tools:
+  - name: apply_demolition_action
+    description: "Remove structural elements and trigger collapse animation. Returns a modified structure (without failed elements) for progressive re-analysis. Tracks remaining columns and detects structural collapse"
+    tags: [demolition, unity, physics, collapse, progressive, structure-modification]
+
+  - name: reset_simulation
+    description: "Reset the Unity simulation scene to its initial state"
+    tags: [reset, unity, simulation]
+
+# ── Capabilities ────────────────────────────────────────────────────────
+capabilities: [demolition, unity, physics-simulation, progressive-collapse, tcp-communication]
+
+# ── Dependencies ─────────────────────────────────────────────────────────
+dependencies:
+  python: []
+  system: [unity-editor]

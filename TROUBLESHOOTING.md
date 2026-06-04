@@ -86,7 +86,7 @@ def _normalize_content(content):
     return str(content)
 ```
 
-4. **CAIAO Hub 去除非序列化字段** (`gateway/caiao_hub.py`):
+4. **CAIAO Hub 去除非序列化字段** (`caiao` pip package, `CAIAOClientHub._trim_pipeline_result`):
 ```python
 # 不返回 result.content (包含 TextContent 对象)
 return {"result": texts[0] if len(texts) == 1 else texts}

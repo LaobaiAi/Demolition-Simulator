@@ -1,0 +1,15 @@
+name: abaqus_environment_server
+kind: infrastructure
+description: "Shared Abaqus environment provider — discovers Abaqus installation paths, validates license and environment health, provides project configuration"
+start_mode: eager
+
+tools:
+  - name: resolve_abaqus_path
+    description: "Find and return the Abaqus commands directory, Python executable, and product root from abaqus_env.json"
+    tags: [abaqus, environment, discovery]
+  - name: validate_environment
+    description: "Comprehensive environment check — Abaqus commands, license server, Python interpreter, project config files"
+    tags: [abaqus, diagnostics, validation]
+  - name: get_abaqus_config
+    description: "Return the loaded abaqus_env.json content (paths, license, hardware specs)"
+    tags: [abaqus, config, hardware]

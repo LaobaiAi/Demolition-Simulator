@@ -1,0 +1,25 @@
+{
+  "building": {
+    "num_bays": 7,
+    "span": 20.0,
+    "bay_length": 6.0,
+    "total_height": 15.0,
+    "column_width": 0.5,
+    "column_depth": 0.5
+  },
+  "collapse": {
+    "time_period": 1.0,
+    "cut_zone_height": 5.0,
+    "gravity": 9.8
+  },
+  "job": {
+    "cpus": 4,
+    "precision": "double",
+    "memory": 80
+  },
+  "materials": {
+    "concrete": "C30",
+    "rebar": "HRB400",
+    "steel": "Q235"
+  }
+}

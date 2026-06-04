@@ -11,7 +11,7 @@ import logging
 from typing import Any, AsyncGenerator
 
 from llm_engine import LLMEngine, SYSTEM_PROMPT
-from caiao_hub import CAIAOClientHub
+from caiao import CAIAOClientHub
 
 logger = logging.getLogger(__name__)
 

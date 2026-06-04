@@ -1,13 +1,14 @@
-"""CAIAO config discovery — read caiao.yaml manifests and build SERVER_CONFIGS.
+"""CAIAO config discovery — project-specific wrapper around the caiao package.
 
-Replaces the hardcoded SERVER_CONFIGS list in main.py.
-Auto-discovers servers from caiao_servers/*/caiao.yaml manifests.
-Falls back to legacy hardcoded configs when no manifests are found.
+Delegates manifest discovery to caiao.discovery.discover_server_configs.
+Keeps only project-specific parts: venv path, Abaqus sentinel, legacy fallback configs.
 """
 
 import os
 import sys
 import logging
+
+from caiao.discovery import discover_server_configs as _caiao_discover
 
 logger = logging.getLogger(__name__)
 
@@ -23,109 +24,33 @@ _VENV_CANDIDATES = [
 VENV_PYTHON = next((p for p in _VENV_CANDIDATES if os.path.exists(p)), sys.executable)
 
 
-def discover_server_configs() -> list[dict]:
-    """Walk caiao_servers/*/caiao.yaml and return SERVER_CONFIGS entries.
-
-    Skips directories starting with '_' or '.'.
-    Falls back to legacy configs if no manifests are found.
-    """
-    configs = []
-
-    if not os.path.isdir(CAIAO_SERVERS_DIR):
-        logger.warning(f"CAIAO servers dir not found: {CAIAO_SERVERS_DIR}")
-        return _legacy_server_configs()
-
+def _resolve_abaqus_python() -> str:
+    env_json_path = os.path.join(
+        PROJECT_DIR, "caiao_servers", "abaqus_environment_server", "abaqus_env.json"
+    )
     try:
-        import yaml
-    except ImportError:
-        logger.warning("PyYAML not available, using legacy configs")
-        return _legacy_server_configs()
-
-    for entry in os.scandir(CAIAO_SERVERS_DIR):
-        if not entry.is_dir():
-            continue
-        if entry.name.startswith("_") or entry.name.startswith("."):
-            continue
-
-        manifest_path = os.path.join(entry.path, "caiao.yaml")
-        if not os.path.exists(manifest_path):
-            continue
-
-        try:
-            with open(manifest_path, "r", encoding="utf-8") as f:
-                data = yaml.safe_load(f)
-        except Exception as e:
-            logger.warning(f"Failed to read manifest {manifest_path}: {e}")
-            continue
-
-        if not isinstance(data, dict):
-            logger.warning(f"Invalid manifest (not a dict): {manifest_path}")
-            continue
-
-        try:
-            config = _manifest_to_config(data, entry.path)
-            configs.append(config)
-            logger.info(f"Discovered server from manifest: {data.get('name')} ({data.get('kind')})")
-        except Exception as e:
-            logger.warning(f"Failed to convert manifest {manifest_path}: {e}")
-
-    if not configs:
-        logger.info("No manifests found, using legacy hardcoded configs")
-        return _legacy_server_configs()
-
-    manifest_names = {c["name"] for c in configs}
-    for legacy in _legacy_server_configs():
-        if legacy["name"] not in manifest_names:
-            configs.append(legacy)
-            logger.info(f"Added legacy config for '{legacy['name']}' (no manifest yet)")
-
-    return configs
+        import json
+        with open(env_json_path, "r", encoding="utf-8") as f:
+            env_data = json.load(f)
+        python_dir = env_data.get("paths", {}).get("python")
+        if python_dir:
+            python_exe = os.path.join(python_dir, "python.exe")
+            if os.path.exists(python_exe):
+                return python_exe
+            return python_exe
+        logger.warning(f"@abaqus_python@ sentinel used but paths.python not found in {env_json_path}")
+    except Exception as e:
+        logger.warning(f"Failed to resolve @abaqus_python@ from {env_json_path}: {e}")
+    return sys.executable
 
 
-def _manifest_to_config(data: dict, server_dir: str) -> dict:
-    """Convert a caiao.yaml manifest dict to a SERVER_CONFIGS entry."""
-    name = data["name"]
-    kind = data.get("kind", "atomic-mcp")
-
-    if kind == "composite":
-        return {
-            "name": name,
-            "composite": True,
-            "description": data.get("description", ""),
-            "input_schema": data.get("input_schema", {}),
-            "pipeline": data.get("pipeline", []),
-            "tools": [t["name"] for t in data.get("tools", [])],
-        }
-
-    cmd = data.get("command", {})
-    python_spec = cmd.get("python", "auto")
-    if python_spec == "auto" or python_spec == "python":
-        python_path = VENV_PYTHON
-    else:
-        python_path = python_spec
-
-    args = cmd.get("args", ["server.py"])
-    cwd = os.path.join(server_dir, cmd.get("cwd", "."))
-
-    description = data.get("description", "")
-
-    config = {
-        "name": name,
-        "description": description,
-        "command": python_path,
-        "args": args,
-        "cwd": os.path.normpath(cwd),
-        "tools": [t["name"] for t in data.get("tools", [])],
-    }
-
-    if data.get("start_mode") == "lazy":
-        config["lazy"] = True
-
-    env = cmd.get("env")
-    if env and isinstance(env, dict) and env:
-        config["env"] = env
-
-    return config
+def discover_server_configs() -> list[dict]:
+    return _caiao_discover(
+        servers_dir=CAIAO_SERVERS_DIR,
+        sentinel_resolvers={"@abaqus_python@": _resolve_abaqus_python},
+        legacy_configs=_legacy_server_configs(),
+        venv_python=VENV_PYTHON,
+    )
 
 
 def _legacy_server_configs() -> list[dict]:
