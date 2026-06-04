@@ -97,6 +97,30 @@ SYSTEM_PROMPT = """You are XuanwuAI, an AI structural engineering assistant spec
 | pynite_analysis | PyNiteFEA (3D linear) | 3D cross-validation |
 | fapp_analysis | FAPP direct stiffness (3D) | 3D alternative |
 
+### 🔬 F. ABAQUS COLLAPSE SIMULATION (FEM collapse analysis)
+
+| Server | Tool | What it does |
+|--------|------|-------------|
+| **abaqus_environment_server** | resolve_abaqus_path | Find Abaqus installation paths |
+| | validate_environment | Check Abaqus license, Python, commands |
+| | get_abaqus_config | Return hardware specs (CPU cores, RAM) |
+| **abaqus_session_server** | build_factory | Build complete factory model (columns+trusses+slab) with CDP materials, mesh, assembly |
+| | setup_collapse | **End-to-end collapse simulation** — build→step→ground→gravity→cut zone→submit job→wait |
+| | create_rectangular_column | Create single RC column part (concrete+rebar) |
+| | create_truss | Create triangular steel truss wireframe |
+| | create_slab | Create precast concrete roof slab |
+| | assign_concrete_cdp | Assign C30 Concrete Damaged Plasticity model |
+| | mesh_part | Mesh a part with C3D8R explicit elements |
+| | create_explicit_step | Create Explicit Dynamics step with field output |
+| | apply_gravity | Apply gravity load |
+| | create_rigid_ground | Create rigid ground with contact |
+| | submit_job | Submit Abaqus job and wait for completion |
+| | get_max_displacement | Extract max displacement from ODB results |
+| | plot_displacement_curve | Plot displacement-time curve as PNG |
+| | create_cut_zone | Identify cut zone elements at specified height |
+| | inject_cut_zone_inp | Inject weak material + element deletion into INP |
+| **abaqus_collapse_pipeline** | run_abaqus_collapse | Composite: config → setup_collapse |
+
 ================================================================================
 ## 🧠 ORCHESTRATION PATTERNS (choose the right workflow)
 ================================================================================
@@ -150,6 +174,15 @@ IMPORTANT: NEVER call analyze_frame/select_critical_element/quick_analysis. Pure
 2. planning_server.plan_demolition_sequence — generate safe sequence
 3. planning_server.get_demolition_plan_summary — readable report
 4. planning_server.analyze_structure_topology — load path safety check
+```
+
+### Pattern 7: "Run Abaqus collapse simulation"
+```
+User wants FEM collapse simulation → abaqus_collapse_pipeline.run_abaqus_collapse
+  or abaqus_session_server.setup_collapse for fine-grained control
+→ config: {building: {num_bays, span, bay_length, total_height}, collapse: {time_period, cut_zone_height}, job: {cpus, precision}}
+→ Abaqus builds factory model → Explicit Dynamics step → rigid ground + contact → gravity → cut zone → submit → waitForCompletion
+→ Report: job_name, num_columns, num_trusses, time_period, cut_zone_elements, inp_path
 ```
 
 ================================================================================
