@@ -10,7 +10,7 @@ import pytest
 # Add gateway dir to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from caiao_hub import CAIAOClientHub
+from caiao import CAIAOClientHub
 
 
 def make_server_config(name: str) -> dict:

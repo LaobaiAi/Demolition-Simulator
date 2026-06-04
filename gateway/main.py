@@ -41,7 +41,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from caiao_hub import CAIAOClientHub, _get_parallel_limit
+from caiao import CAIAOClientHub, get_parallel_limit
 from llm_engine import LLMEngine
 from agent_loop import AgentLoop
 from memory import SessionMemory
@@ -88,233 +88,9 @@ def _sanitize_for_json(obj: Any) -> Any:
         pass
     return str(obj)
 
-# --- CAIAO Server configurations ---
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_DIR = os.path.dirname(BASE_DIR)
-CAIAO_SERVERS_DIR = os.path.join(PROJECT_DIR, "caiao_servers")
-_VENV_CANDIDATES = [
-    os.path.join(BASE_DIR, "venv", "Scripts", "python.exe"),
-    os.path.join(PROJECT_DIR, ".venv", "Scripts", "python.exe"),
-    os.path.join(BASE_DIR, ".venv", "Scripts", "python.exe"),
-]
-VENV_PYTHON = next((p for p in _VENV_CANDIDATES if os.path.exists(p)), "python")
-
-from caiao_config import discover_server_configs
+from caiao_config import discover_server_configs, PROJECT_DIR
 
 SERVER_CONFIGS = discover_server_configs()
-
-_LEGACY_CONFIGS = [
-    {
-        "name": "anastruct_server",
-        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
-        "args": [os.path.join(CAIAO_SERVERS_DIR, "anastruct_server", "server.py")],
-        "cwd": os.path.join(CAIAO_SERVERS_DIR, "anastruct_server"),
-        "tools": ["generate_simple_frame", "analyze_frame", "select_critical_element"],
-    },
-    {
-        "name": "opensees_server",
-        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
-        "args": ["server.py"],
-        "cwd": os.path.join(CAIAO_SERVERS_DIR, "opensees_server"),
-        "lazy": True,
-        "tools": ["high_fidelity_analysis"],
-    },
-    {
-        "name": "pynite_server",
-        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
-        "args": ["server.py"],
-        "cwd": os.path.join(CAIAO_SERVERS_DIR, "pynite_server"),
-        "lazy": True,
-        "tools": ["pynite_analysis"],
-    },
-    {
-        "name": "fapp_server",
-        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
-        "args": ["server.py"],
-        "cwd": os.path.join(CAIAO_SERVERS_DIR, "fapp_server"),
-        "lazy": True,
-        "tools": ["fapp_analysis"],
-    },
-    {
-        "name": "unity_simulator",
-        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
-        "args": ["server.py"],
-        "cwd": os.path.join(CAIAO_SERVERS_DIR, "unity_simulator"),
-        "lazy": True,
-        "tools": [
-            "apply_demolition_action",
-            "modify_structure",
-            "get_structure_status",
-            "get_removed_elements",
-        ],
-    },
-    {
-        "name": "frame_generator",
-        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
-        "args": ["server.py"],
-        "cwd": os.path.join(CAIAO_SERVERS_DIR, "frame_generator"),
-        "tools": ["generate_frame", "generate_frame_3d", "generate_from_text", "list_materials"],
-    },
-    {
-        "name": "quick_analysis_server",
-        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
-        "args": ["server.py"],
-        "cwd": os.path.join(CAIAO_SERVERS_DIR, "quick_analysis_server"),
-        "tools": ["quick_analysis"],
-    },
-    {
-        "name": "full_analysis_3d_server",
-        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
-        "args": ["server.py"],
-        "cwd": os.path.join(CAIAO_SERVERS_DIR, "full_analysis_3d_server"),
-        "lazy": True,
-        "tools": ["full_analysis_3d"],
-    },
-    # P1: Declarative composite pipeline — auto-registered by _build_composite_handlers
-    {
-        "name": "run_full_analysis",
-        "composite": True,
-        "description": "Pipeline: generate frame → analyze → find critical element in ONE call. Accepts the same parameters as generate_frame. Returns the complete structure, analysis results, and critical element.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "num_bays_x": {"type": "integer", "description": "Number of bays in X direction (default 3)"},
-                "num_bays_y": {"type": "integer", "description": "Number of bays in Y direction (default 3)"},
-                "num_stories": {"type": "integer", "description": "Number of stories (default 4)"},
-                "span_x_m": {"type": "number", "description": "Span length in X direction in meters (default 6.0)"},
-                "span_y_m": {"type": "number", "description": "Span length in Y direction in meters (default 6.0)"},
-                "story_height_m": {"type": "number", "description": "Story height in meters (default 3.5)"},
-                "steel_grade": {"type": "string", "description": "Steel grade, e.g. Q235, Q345, Q355, Q420 (default Q355)"},
-                "base_support": {"type": "string", "description": "Support type: fixed or hinged (default fixed)"},
-            },
-        },
-        "pipeline": [
-            {
-                "server": "frame_generator",
-                "tool": "generate_frame",
-                "map_result": "structure",
-            },
-            {
-                "server": "anastruct_server",
-                "tool": "analyze_frame",
-                "input_map": {"structure": "structure"},
-                "map_result": "analysis",
-            },
-            {
-                "server": "anastruct_server",
-                "tool": "select_critical_element",
-                "input_map": {"structure": "structure", "analysis_result": "analysis"},
-                "map_result": "critical_element",
-            },
-        ],
-    },
-    # === Visual Demolition Animation Servers (Phase 1-3) ===
-    {
-        "name": "bim_model_server",
-        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
-        "args": ["server.py"],
-        "cwd": os.path.join(CAIAO_SERVERS_DIR, "bim_model_server"),
-        "lazy": True,
-        "tools": [
-            "generate_steel_frame",
-            "generate_concrete_structure",
-            "generate_hybrid_structure",
-            "export_ifc",
-            "generate_truss",
-            "generate_portal_frame",
-            "generate_beam",
-        ],
-    },
-    {
-        "name": "planning_server",
-        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
-        "args": ["server.py"],
-        "cwd": os.path.join(CAIAO_SERVERS_DIR, "planning_server"),
-        "lazy": True,
-        "tools": [
-            "plan_demolition_sequence",
-            "analyze_structure_topology",
-            "get_demolition_plan_summary",
-            "compute_collapse_chain",
-        ],
-    },
-    {
-        "name": "animation_control_server",
-        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
-        "args": ["server.py"],
-        "cwd": os.path.join(CAIAO_SERVERS_DIR, "animation_control_server"),
-        "lazy": True,
-        "tools": [
-            "create_timeline",
-            "get_timeline_state",
-            "sequence_to_animation_data",
-            "generate_effects_config",
-        ],
-    },
-    {
-        "name": "physics_server",
-        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
-        "args": ["server.py"],
-        "cwd": os.path.join(CAIAO_SERVERS_DIR, "physics_server"),
-        "lazy": True,
-        "tools": [
-            "init_physics_scene",
-            "apply_demolition_action",
-            "step_physics",
-            "get_physics_state",
-            "reset_physics",
-        ],
-    },
-    {
-        "name": "comparison_server",
-        "command": VENV_PYTHON if os.path.exists(VENV_PYTHON) else "python",
-        "args": ["server.py"],
-        "cwd": os.path.join(CAIAO_SERVERS_DIR, "comparison_server"),
-        "lazy": True,
-        "tools": [
-            "compare_demolition_strategies",
-            "get_comparison_summary",
-            "recommend_strategy",
-        ],
-    },
-    # Composite pipeline: Full BIM + Demolition workflow (Phase 4 Merge)
-    {
-        "name": "full_bim_demolition",
-        "composite": True,
-        "description": "Pipeline: generate BIM model → plan demolition → create animation timeline in ONE call. Accepts the same parameters as generate_steel_frame. Returns the complete structure, demolition plan, and animation data.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "num_bays_x": {"type": "integer", "description": "Number of bays in X direction (default 3)"},
-                "num_bays_y": {"type": "integer", "description": "Number of bays in Y direction (default 3)"},
-                "num_stories": {"type": "integer", "description": "Number of stories (default 4)"},
-                "span_x_m": {"type": "number", "description": "Span length in X in meters (default 6.0)"},
-                "story_height_m": {"type": "number", "description": "Story height in meters (default 3.5)"},
-                "steel_grade": {"type": "string", "description": "Steel grade (default Q355)"},
-                "demolition_strategy": {"type": "string", "description": "top_down, bottom_up, sequential, or llm (default top_down)"},
-            },
-        },
-        "pipeline": [
-            {
-                "server": "bim_model_server",
-                "tool": "generate_steel_frame",
-                "map_result": "structure",
-            },
-            {
-                "server": "planning_server",
-                "tool": "plan_demolition_sequence",
-                "input_map": {"structure": "structure", "strategy": "demolition_strategy"},
-                "map_result": "demolition_plan",
-            },
-            {
-                "server": "animation_control_server",
-                "tool": "create_timeline",
-                "input_map": {"demolition_plan": "demolition_plan", "structure": "structure"},
-                "map_result": "timeline",
-            },
-        ],
-    },
-]
 
 hub: CAIAOClientHub | None = None
 agent: AgentLoop | None = None
@@ -323,7 +99,7 @@ llm_engine: LLMEngine | None = None
 
 
 # --- No local tool handlers needed — composite pipelines are auto-registered
-# via SERVER_CONFIGS composite entries. See caiao_hub._build_composite_handlers.
+# via SERVER_CONFIGS composite entries. See caiao.CAIAOClientHub.
 
 
 @asynccontextmanager
@@ -512,7 +288,7 @@ async def _run_solvers(
         return None, None
 
     total = len(solver_order)
-    limit = _get_parallel_limit(total)
+    limit = get_parallel_limit(total)
 
     if limit >= 2:
         # Parallel: run all at once, pick first success
@@ -673,7 +449,7 @@ async def verify_multi(req: MultiVerifyRequest):
     ]
 
     total = len(solver_map)
-    limit = _get_parallel_limit(total)
+    limit = get_parallel_limit(total)
     logger.info(f"Multi-verify: {total} solvers, parallel_limit={limit}")
 
     if limit >= 2:
@@ -897,7 +673,7 @@ import subprocess
 import platform
 import glob as _glob
 
-UNITY_PROJECT_DIR = os.path.join(os.path.dirname(BASE_DIR), "unity_project")
+UNITY_PROJECT_DIR = os.path.join(PROJECT_DIR, "unity_project")
 _unity_process: subprocess.Popen | None = None
 
 
