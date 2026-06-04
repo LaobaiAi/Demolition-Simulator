@@ -1,0 +1,34 @@
+name: full_bim_demolition
+kind: composite
+description: "Pipeline: BIM model → plan demolition → create animation timeline"
+status: active
+since: "2026-06-05"
+
+input_schema:
+  type: object
+  required: [structure_type, strategy]
+  properties:
+    structure_type:
+      type: string
+      description: "steel / concrete / hybrid"
+    strategy:
+      type: string
+      description: "top_down / bottom_up / sequential"
+
+tools:
+  - name: run_full_bim_demolition
+    description: "Generate BIM model, plan demolition sequence, and create animation timeline in one call"
+    tags: [pipeline, bim, demolition, animation]
+
+pipeline:
+  - server: bim_model_server
+    tool: generate_steel_frame
+    map_result: bim_model
+  - server: planning_server
+    tool: plan_demolition_sequence
+    input_map: {structure: bim_model}
+    map_result: demolition_plan
+  - server: animation_control_server
+    tool: create_timeline
+    input_map: {demolition_plan: demolition_plan}
+    map_result: animation_timeline

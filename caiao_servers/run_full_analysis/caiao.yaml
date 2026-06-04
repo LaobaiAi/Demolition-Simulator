@@ -1,0 +1,40 @@
+name: run_full_analysis
+kind: composite
+description: "Pipeline: generate frame → analyze → find critical element"
+status: active
+since: "2026-06-05"
+
+input_schema:
+  type: object
+  required: [num_bays_x, num_stories, span_x_m, story_height_m]
+  properties:
+    num_bays_x:
+      type: integer
+      description: "Number of bays in X"
+    num_stories:
+      type: integer
+      description: "Number of stories"
+    span_x_m:
+      type: number
+      description: "Span length in X in meters"
+    story_height_m:
+      type: number
+      description: "Story height in meters"
+
+tools:
+  - name: run_full_analysis
+    description: "Generate frame, run structural analysis, and identify critical elements in one call"
+    tags: [pipeline, analysis, critical-element]
+
+pipeline:
+  - server: frame_generator
+    tool: generate_frame
+    map_result: structure
+  - server: anastruct_server
+    tool: analyze_frame
+    input_map: {structure: structure}
+    map_result: analysis
+  - server: anastruct_server
+    tool: select_critical_element
+    input_map: {structure: structure, analysis_result: analysis}
+    map_result: critical_element

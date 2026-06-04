@@ -1,0 +1,64 @@
+name: visual_demolition_topology
+kind: composite
+description: "Topology-based visual demolition pipeline — generate structure, plan demolition, create animation"
+status: active
+since: "2026-06-05"
+
+input_schema:
+  type: object
+  required: [num_bays_x, num_stories, span_x_m, story_height_m]
+  properties:
+    num_bays_x:
+      type: integer
+      description: "Number of bays in X direction"
+    num_stories:
+      type: integer
+      description: "Number of stories"
+    span_x_m:
+      type: number
+      description: "Span length in meters"
+    story_height_m:
+      type: number
+      description: "Story height in meters"
+    steel_grade:
+      type: string
+      description: "Steel grade (Q235, Q355, etc.)"
+    strategy:
+      type: string
+      description: "Demolition strategy (top_down / bottom_up / sequential)"
+    effects_preset:
+      type: string
+      description: "Visual effects preset (standard / dramatic / minimal)"
+    speed:
+      type: number
+      description: "Animation speed multiplier"
+
+tools:
+  - name: run_visual_demolition_topology
+    description: "Full topology-based visual demolition pipeline — structure generation, demolition planning, animation creation, physics init"
+    tags: [pipeline, demolition, animation, topology]
+
+pipeline:
+  - server: frame_generator
+    tool: generate_frame
+    map_result: structure
+  - server: planning_server
+    tool: plan_demolition_sequence
+    input_map: {structure: structure, strategy: strategy}
+    map_result: demolition_plan
+  - server: animation_control_server
+    tool: create_timeline
+    input_map: {demolition_plan: demolition_plan, effects_preset: effects_preset}
+    map_result: timeline
+  - server: animation_control_server
+    tool: sequence_to_animation_data
+    input_map: {demolition_sequence: timeline, speed: speed}
+    map_result: animation_data
+  - server: animation_control_server
+    tool: generate_effects_config
+    input_map: {preset: effects_preset, structure: structure}
+    map_result: effects_config
+  - server: physics_server
+    tool: init_physics_scene
+    input_map: {structure: structure, animation_data: animation_data}
+    map_result: physics_scene
