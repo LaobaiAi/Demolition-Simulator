@@ -239,7 +239,7 @@ curl -X POST http://localhost:8000/tools/call \
 
 | 模块 | 测试文件 | 测试数 | 状态 |
 |------|---------|--------|------|
-| gateway/caiao_hub | tests/test_caiao_hub.py | 7 | ✅ 全部通过 |
+| gateway/caiao (pip package) | tests/test_caiao_hub.py | 7 | ✅ 全部通过 |
 | gateway/llm_engine | tests/test_llm_engine.py | 9 | ✅ 全部通过 |
 | gateway/agent_loop | tests/test_agent_loop.py | 6 | ✅ 全部通过 |
 | gateway/api | tests/test_api.py | 5 | ✅ 全部通过（需 gateway 运行中） |

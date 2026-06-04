@@ -74,7 +74,7 @@ Don't create shared abstractions "just in case."
 | **MCP SDK** | Python package `mcp>=1.0.0` | `from mcp.server import Server` in server.py |
 | **MCP stdio transport** | JSON-RPC over stdin/stdout | `stdio_server()` handles serialization |
 | **CAIAO Server** | Our project's concept of a tool server | Every `caiao_servers/<name>/server.py` |
-| **CAIAO Client Hub** | Our multi-server lifecycle manager | `gateway/caiao_hub.py` → `CAIAOClientHub` |
+| **CAIAO Client Hub** | Our multi-server lifecycle manager | `caiao` pip package → `CAIAOClientHub` |
 
 The MCP SDK is an **implementation detail** — developers only need to follow the CAIAO contract below.
 
@@ -312,6 +312,9 @@ If `frame_generator.core` has a breaking change, `quick_analysis_server` needs t
 | `blender_machinery_server` | Atomic | `add_construction_machinery` | Active (lazy) | 2026-06-03 |
 | `blender_render_server` | Atomic | `render_animation`, `render_preview` | Active (lazy) | 2026-06-03 |
 | `blender_pipeline_server` | Atomic | `run_full_pipeline`, `run_pipeline_stage`, `check_blender_environment` | Active (lazy) | 2026-06-03 |
+| `abaqus_environment_server` | Infrastructure | `resolve_abaqus_path`, `validate_environment`, `get_abaqus_config` | Active (eager) | 2026-06-04 |
+| `abaqus_session_server` | Merged | `create_rectangular_column`, `create_truss`, `create_slab`, `assign_concrete_cdp`, `mesh_part`, `create_explicit_step`, `apply_gravity`, `create_rigid_ground`, `submit_job`, `get_max_displacement`, `plot_displacement_curve`, `create_cut_zone`, `inject_cut_zone_inp`, `build_factory`, `setup_collapse` | Active (lazy) | 2026-06-04 |
+| `abaqus_collapse_pipeline` | Composite | `run_abaqus_collapse` | Active | 2026-06-04 |
 
 ### Server Details
 
@@ -526,6 +529,37 @@ If `frame_generator.core` has a breaking change, `quick_analysis_server` needs t
 - **Pipeline flow:** generate_building.py → apply_demolition.py → add_machinery.py → render.py
 - **Creation:** 2026-06-03
 
+#### `abaqus_environment_server` — Abaqus Infrastructure Provider
+
+- **Purpose:** Provides Abaqus installation path discovery, license validation, and environment health checks. All Abaqus functional servers depend on it.
+- **Kind:** Infrastructure (eager start)
+- **Tools:**
+  - `resolve_abaqus_path` — Find Abaqus commands directory, Python executable path, product root
+  - `validate_environment` — Comprehensive checks for Abaqus commands, Python, license, hardware
+  - `get_abaqus_config` — Return loaded abaqus_env.json content
+- **Creation:** 2026-06-04 (absorbed from Abaqus_Collapse project)
+
+#### `abaqus_session_server` — Persistent Abaqus CAE Session
+
+- **Purpose:** Maintains a single long-lived Abaqus Python subprocess exposing 15 modeling, analysis, and result extraction tools. All tools share one `mdb.models['Model-1']` session.
+- **Kind:** Merged (lazy)
+- **Architecture:** System Python MCP server → spawns `abaqus python abaqus_session.py` → JSON-RPC over stdio. Avoids requiring `mcp` package in Abaqus Python.
+- **Tools (15):**
+  - Modeling: `create_rectangular_column`, `create_truss`, `create_slab`, `assign_concrete_cdp`, `mesh_part`
+  - Analysis: `create_explicit_step`, `apply_gravity`, `create_rigid_ground`, `submit_job`
+  - Results: `get_max_displacement`, `plot_displacement_curve`
+  - Demolition: `create_cut_zone`, `inject_cut_zone_inp`
+  - Pipeline: `build_factory`, `setup_collapse`
+- **INP Injection Logic:** Preserves v1→v2→v3 validated WEAK_C30 material, SECTION CONTROLS element deletion, and STATUS/SDEG field output injection from original pipeline_run_collapse.py
+- **Creation:** 2026-06-04 (absorbed from Abaqus_Collapse project — 12 atomic servers + 2 orchestration servers merged into one session server)
+
+#### `abaqus_collapse_pipeline` — Composite Collapse Pipeline
+
+- **Purpose:** High-level entry point — receives a config dict and calls `abaqus_session_server.setup_collapse` for end-to-end collapse simulation.
+- **Kind:** Composite (hub-internal, no subprocess)
+- **Tools:** `run_abaqus_collapse`
+- **Creation:** 2026-06-04
+
 ---
 
 ## 9. Merge Roadmap
@@ -569,7 +603,7 @@ convert_to_unified_frame (embedded in the merged server):
 |---------|-----------|---------|
 | Class name | `CAIAO` + PascalCase | `CAIAOClientHub` |
 | Constant | `CAIAO_` + UPPER_SNAKE | `CAIAO_SERVERS_DIR` |
-| Filename | `caiao_` + lowercase | `caiao_hub.py` |
+| Filename | `caiao_` + lowercase | `caiao_config.py` |
 | Directory | `caiao_servers/` | `caiao_servers/anastruct_server/` |
 | Config server name | lowercase | commit scope `caiao` |
 | SDK imports | keep `from mcp.server import Server` | external package, not our naming |
@@ -609,6 +643,7 @@ convert_to_unified_frame (embedded in the merged server):
 | 2026-05-31 | Added `comparison_server` — multi-strategy demolition plan comparison, scoring (safety/efficiency/visual), ranking, and rule-based strategy recommendation (low-stress->sequential, high-stress->top_down, irregular->llm, low-rise->bottom_up) | Claude |
 | 2026-05-31 | Added `manager_server` — meta-server managing all 15 CAIAO servers with 24 tools across 6 groups (creation, extension, enhancement, migration, retrieval, orchestration). Introduced `caiao.yaml` manifest format, `caiao_config.py` auto-discovery, hub state machine, and frontend management dashboard | Claude |
 | 2026-06-03 | Simplify review Phase 1-3: Created `blender_environment_server` (infrastructure, eager) — shared Blender discovery, env validation, path/config provision. Extracted `blender_pipeline/common.py` (system Python) and `scripts/_common.py` (Blender Python) — unified Blender discovery, subprocess runner, low-level mesh API (`add_cube`/`add_cylinder`/`make_material`/`clear_scene`/`compute_scene_bounds`), mesh cache for shared-dimension objects. Refactored all 5 Blender functional servers to import from common.py. Replaced all `bpy.ops` geometry operators with low-level data API in pipeline scripts — eliminated ~695 depsgraph evaluations per animation. Deleted `main_pipeline.py` CLI entry point per user decision (CLI serves development only, not LLM-driven workflows) | Claude |
+| 2026-06-04 | **Abaqus_Collapse project absorption**: Created `abaqus_environment_server` (infrastructure, eager), `abaqus_session_server` (merged, 15 tools in persistent Abaqus CAE session via JSON-RPC stdio bridge), `abaqus_collapse_pipeline` (composite). Preserved v1→v2→v3 validated INP injection logic (WEAK_C30 + SECTION CONTROLS element deletion + STATUS/SDEG). Added `@abaqus_python@` sentinel support to `caiao_config.py`. Migrated knowledge docs from original project to `dev-notes/reference/abaqus/`. Architecture: system Python MCP wrapper manages single Abaqus subprocess — all tools share one Abaqus model database | Claude |
 | 2026-06-04 | Simplify review Phase 4-6 + architecture redesign: **Blender Daemon Architecture** — agreed to add `blender_daemon_server` (infrastructure, eager) as single persistent Blender process shared by all functional servers, eliminating per-server subprocess cold starts. **Standard file format** — each structure type defined by two standard files (geometry manifest + demolition sequence), not by code; `build_server`/`animate_server` read files → validate → forward to daemon, containing zero geometry or demolition algorithms. **Three-mechanism parameter extension** — namespace isolation + schema registry + three-tier classification (base/extension/transient) applied to all four parameter files. **caiao.yaml template compression** — `_manifest_to_config()` now fills command/kind/health/dependencies defaults; 6 Blender server manifests stripped of ~120 lines boilerplate. Full architecture decision documented in `dev-notes/decisions/2026-06-04-blender-daemon-architecture.md` | Claude |
 
 ---

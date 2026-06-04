@@ -79,20 +79,20 @@ The system follows a **multi-round progressive demolition** workflow: after each
 ## Architecture
 
 ```
-┌──────────┐    WebSocket    ┌───────────────────────────────────────┐
-│          │◄──────────────►│          Gateway (FastAPI)              │
+┌──────────┐    WebSocket   ┌────────────────────────────────────────┐
+│          │◄──────────────►│          Gateway (FastAPI)             │
 │ Frontend │                │                                        │
-│ (Next.js)│                │  ┌──────────┐  ┌──────┐  ┌─────────┐  │
-│          │                │  │LLM Engine│  │Agent │  │ Memory  │  │
-│  • Chat  │                │  │(OpenAI   │  │Loop  │  │(mem0 +  │  │
-│  • 2D SVG│                │  │ SDK)     │  │(ReAct)│  │local)   │  │
-│  • Unity │                │  └──────────┘  └──────┘  └─────────┘  │
+│ (Next.js)│                │  ┌──────────┐  ┌───────┐  ┌─────────┐  │
+│          │                │  │LLM Engine│  │Agent  │  │ Memory  │  │
+│ • Chat   │                │  │(OpenAI   │  │Loop   │  │ (mem0 + │  │
+│ • 2D SVG │                │  │ SDK)     │  │(ReAct)│  │ local)  │  │
+│ • Unity  │                │  └──────────┘  └───────┘  └─────────┘  │
 │   WebRTC │                │         │                              │
-│          │                │    CAIAO Hub (stdio subprocesses)         │
+│          │                │    CAIAO Hub (stdio subprocesses)      │
 │          │                │         │                              │
 └──────────┘                └─────────┼──────────────────────────────┘
                                       │
-                    ┌─────────────────┼─────────────────┐
+                    ┌─────────────────┼──────────────────┐
                     ▼                 ▼                  ▼
             ┌──────────────┐ ┌──────────────┐ ┌────────────────┐
             │anaStruct     │ │OpenSees      │ │Unity Simulator │
@@ -287,7 +287,7 @@ curl http://localhost:8000/tools    # list of registered CAIAO tools
 │   ├── llm_engine.py         OpenAI SDK + system prompt
 │   ├── agent_loop.py         ReAct agent (think → act → observe)
 │   ├── memory.py             mem0 + local JSON fallback
-│   ├── caiao_hub.py          Multi-server CAIAO subprocess manager
+│   ├── caiao_config.py       Auto-discovery of CAIAO server manifests
 │   ├── llm_config.json       LLM settings (gitignored)
 │   ├── requirements.txt
 │   └── tests/                33 pytest tests

@@ -116,7 +116,7 @@ This project enforces **[Conventional Commits 1.0.0](https://www.conventionalcom
 | `gateway` | FastAPI backend (`gateway/`) |
 | `agent` | Agent loop logic (`gateway/agent_loop.py`) |
 | `llm` | LLM engine (`gateway/llm_engine.py`) |
-| `caiao` | CAIAO hub or any CAIAO server (`gateway/caiao_hub.py`, `caiao_servers/`) |
+| `caiao` | CAIAO hub or any CAIAO server (`caiao_config.py`, `caiao_servers/`) |
 | `anastruct` | anaStruct CAIAO server (`caiao_servers/anastruct_server/`) |
 | `opensees` | OpenSees CAIAO server (`caiao_servers/opensees_server/`) |
 | `unity` | Unity simulator CAIAO server or Unity C# scripts |
@@ -283,7 +283,7 @@ if __name__ == "__main__":
 |---------|-----------|---------|
 | Class name | `CAIAO` + PascalCase | `CAIAOClientHub` |
 | Constant | `CAIAO_` + UPPER_SNAKE | `CAIAO_SERVERS_DIR` |
-| Filename | `caiao_` + lowercase | `caiao_hub.py` |
+| Filename | `caiao_` + lowercase | `caiao_config.py` |
 | Directory | `caiao_servers/` | `caiao_servers/anastruct_server/` |
 | Git scope | `caiao` (lowercase) | `feat(caiao): add ...` |
 | SDK imports | keep `from mcp.server import Server` | external package, not renamed |
@@ -348,7 +348,7 @@ pytest -k "tool_call"              # filter by name
 - Use `pytest-asyncio` for async tests
 - Mock LLM calls with `unittest.mock` or `pytest-mock`
 - Tool server tests use real CAIAO session fixtures
-- Aim for > 80% coverage on gateway core (agent_loop, llm_engine, caiao_hub)
+- Aim for > 80% coverage on gateway core (agent_loop, llm_engine, test_caiao_hub)
 
 ### Frontend Tests (`frontend/__tests__/`)
 

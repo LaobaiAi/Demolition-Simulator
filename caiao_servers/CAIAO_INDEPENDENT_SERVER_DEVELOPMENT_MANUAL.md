@@ -523,7 +523,8 @@ subprocess：独立子进程，Hub 通过 stdin/stdout JSON 通信
 # 3. _caiao_subprocess = False (默认)
 
 # hub 端无需额外代码
-from caiao_hub import Hub
+# 轻量路径: from caiao_lightweight import Hub  或复制 server.py/hub.py/subprocess.py 到项目
+# MCP SDK 路径: from caiao import CAIAOClientHub
 hub = Hub()  # 自动扫描 servers/ 目录
 result = hub.call_tool("my_tool", {...})  # 自动路由到你的 Server
 ```
@@ -533,7 +534,8 @@ result = hub.call_tool("my_tool", {...})  # 自动路由到你的 Server
 需要自定义构造参数（如传入 hub 引用）时使用：
 
 ```python
-from caiao_hub import Hub
+# 轻量路径: from caiao_lightweight import Hub
+# MCP SDK 路径: from caiao import CAIAOClientHub
 from servers.my_server import MyServer
 
 hub = Hub()
@@ -664,7 +666,7 @@ def run_stdio_loop(self):
 
 ### 9.3 SubprocessManager 生命周期管理
 
-`caiao_hub.py` 中的 `SubprocessManager` 管理子进程的完整生命周期：
+轻量路径的 `subprocess.py`（`caiao` pip 包中 `caiao_lightweight/subprocess.py`）管理子进程的完整生命周期：
 
 ```python
 mgr = SubprocessManager(
@@ -1098,10 +1100,11 @@ hub.register(extractor)
 
 ```
 my-caiao-project/
-├── caiao_hub.py                  # Hub 调度中心（只需一个，项目级别）
+├── caiao_lightweight/            # 轻量路径（3 个文件，复制即用，或 pip install caiao）
+│   ├── server.py                 # CAIAOServer 基类 + @tool 装饰器
+│   ├── hub.py                    # Hub 调度中心
+│   └── subprocess.py             # 子进程管理器
 ├── servers/
-│   ├── __init__.py               # 包标记
-│   ├── base.py                   # CAIAOServer 基类 + @tool 装饰器
 │   ├── my_server_a.py            # 原子 Server A
 │   ├── my_server_b.py            # 原子 Server B
 │   └── my_pipeline.py            # 合并 Server (可选)
@@ -1114,7 +1117,7 @@ my-caiao-project/
 └── README.md
 ```
 
-移植到新项目时，至少需要拷贝 `servers/base.py` 和 `caiao_hub.py` 两个文件。
+移植到新项目时，使用 `pip install caiao`（MCP SDK 路径）或复制 `caiao_lightweight/` 下三个文件（轻量路径）。
 
 ## 附录 B：与 MCP 协议的关系
 

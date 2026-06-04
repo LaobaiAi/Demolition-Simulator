@@ -8,7 +8,7 @@
 **CAIAO** is the project-specific naming layer built on top of the standard [MCP (Model Context Protocol)](https://modelcontextprotocol.io) SDK. Every CAIAO Server is technically an MCP Server under the hood — the Python `mcp` package handles stdio transport, JSON-RPC messaging, and tool lifecycle. CAIAO is our project's abstraction that defines:
 
 - **Naming convention**: all our servers are called `CAIAO Server` (not MCP Server)
-- **File/dir convention**: `caiao_servers/`, `caiao_hub.py`, `CAIAOClientHub`
+- **File/dir convention**: `caiao_servers/`, `caiao_config.py`, `CAIAOClientHub`
 - **Case rule**: `CAIAO` (uppercase) for concepts, classes, constants; `caiao` (lowercase) for file paths, directory names
 - **Architecture pattern**: every solver/tool is an independent subprocess, never inline logic in Gateway
 
@@ -19,7 +19,7 @@
 | **MCP SDK** | Python package `mcp>=1.0.0` | `from mcp.server import Server` in server.py |
 | **MCP stdio transport** | JSON-RPC over stdin/stdout | `stdio_server()` handles serialization |
 | **CAIAO Server** | Our project's concept of a tool server | Every `caiao_servers/<name>/server.py` |
-| **CAIAO Client Hub** | Our multi-server lifecycle manager | `gateway/caiao_hub.py` → `CAIAOClientHub` |
+| **CAIAO Client Hub** | Our multi-server lifecycle manager | `caiao` pip package → `CAIAOClientHub` |
 
 The MCP SDK is an **implementation detail** — developers only need to follow the CAIAO contract below.
 
@@ -34,14 +34,19 @@ The MCP SDK is an **implementation detail** — developers only need to follow t
                          │  └───────────┘  └────────┬─────────┘  │
                          └──────────────────────────┼─────────────┘
                                                      │
-                    ┌────────────────────────────────┼────────────┐
-                    │         CAIAO stdio bus        │            │
-                    ▼                                ▼            ▼
-          ┌─────────────────┐              ┌─────────────────┐
-          │ anaStruct (2D)  │              │ OpenSees (HiFi) │  ...
-          │ server.py       │              │ server.py        │
-          └─────────────────┘              └─────────────────┘
+              ┌──────────────────────────────────────┼──────────────┐
+              │              CAIAO stdio bus         │              │
+              ▼                ▼                     ▼              ▼
+    ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  ┌──────────┐
+    │ anaStruct    │  │ OpenSees     │  │ Abaqus Session   │  │ Blender  │
+    │ (2D 分析)    │  │ (高精度 2D)  │  │ (FEM 倒塌)       │  │ (可视化) │
+    └──────────────┘  └──────────────┘  └──────────────────┘  └──────────┘
+              │                │                     │              │
+              ▼                ▼                     ▼              ▼
+       [更多 Server: PyNite, FAPP, Unity, frame_generator, BIM, planning,
+        animation, physics, manager, 4× Blender pipeline, 2× Abaqus pipeline]
 ```
+完整 Server 清单及详情见 `CAIAO_PROTOCOL.md §8 Server Registry`（当前 22 台）。
 
 1. **Isolation** — each solver runs as its own subprocess. A crash in OpenSees doesn't take down pyNite.
 2. **Language agnostic** — any language that can do stdio JSON-RPC can be a CAIAO Server. C++, Rust, Julia — doesn't matter.
@@ -109,7 +114,7 @@ if __name__ == "__main__":
 |---------|-----------|----------|
 | Class names | `CAIAO` (uppercase) + PascalCase | `CAIAOClientHub` |
 | Constants | `CAIAO_` prefix + UPPER_SNAKE | `CAIAO_SERVERS_DIR` |
-| File names | `caiao_` prefix + lowercase | `caiao_hub.py` |
+| File names | `caiao_` prefix + lowercase | `caiao_config.py` |
 | Directory name | `caiao_servers/` | `caiao_servers/anastruct_server/` |
 | Config server name | `caiao` (lowercase, scope) | commit scope `caiao` |
 | SDK imports (external) | `from mcp.server import Server` | unchanged, not our naming |
