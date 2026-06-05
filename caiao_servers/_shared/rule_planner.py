@@ -2,7 +2,7 @@
 
 from collections import defaultdict
 
-from demolition_schemas import (
+from .demolition_schemas import (
     DEFAULT_DURATIONS,
     EFFECT_MAP,
     DemolitionStep,

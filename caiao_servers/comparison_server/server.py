@@ -27,8 +27,8 @@ _parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _parent not in sys.path:
     sys.path.insert(0, _parent)
 
-from planning_server.rule_planner import plan_top_down, plan_bottom_up, plan_sequential, plan_center_out, plan_alternating_floors
-from planning_server.llm_planner import plan_with_llm
+from _shared.rule_planner import plan_top_down, plan_bottom_up, plan_sequential, plan_center_out, plan_alternating_floors
+from _shared.llm_planner import plan_with_llm
 from recommendation import recommend_strategy
 
 _STRATEGIES = ["top_down", "bottom_up", "sequential", "center_out", "alternating_floors", "llm"]

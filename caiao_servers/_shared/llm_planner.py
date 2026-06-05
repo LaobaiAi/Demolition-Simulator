@@ -6,14 +6,14 @@ by the Gateway agent loop; this module focuses on structural common sense
 to produce reasonable sequences from a high-level strategy description.
 """
 
-from demolition_schemas import (
+from .demolition_schemas import (
     DEFAULT_DURATIONS,
     EFFECT_MAP,
     DemolitionPlan,
     DemolitionStep,
     VisualEffects,
 )
-from rule_planner import _get_floor_map, _element_type_label
+from .rule_planner import _get_floor_map, _element_type_label
 
 
 def plan_with_llm(structure: dict, user_prompt: str = "") -> DemolitionPlan:

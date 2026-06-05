@@ -19,9 +19,13 @@ _self_dir = os.path.dirname(os.path.abspath(__file__))
 if _self_dir not in sys.path:
     sys.path.insert(0, _self_dir)
 
-from demolition_schemas import DemolitionPlan
-from rule_planner import plan_top_down, plan_bottom_up, plan_sequential, plan_center_out, plan_alternating_floors, analyze_topology
-from llm_planner import plan_with_llm
+_caiao_dir = os.path.dirname(_self_dir)
+if _caiao_dir not in sys.path:
+    sys.path.insert(0, _caiao_dir)
+
+from _shared.demolition_schemas import DemolitionPlan
+from _shared.rule_planner import plan_top_down, plan_bottom_up, plan_sequential, plan_center_out, plan_alternating_floors, analyze_topology
+from _shared.llm_planner import plan_with_llm
 from collapse_propagation import compute_collapse_chain, create_propagation_timeline
 
 logging.basicConfig(level=logging.INFO)
