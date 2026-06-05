@@ -95,8 +95,8 @@
 
 19. **CAIAOServerizer 复合 Server**: quick_analysis_server（frame_generator + anastruct + select_critical 合并为单次调用）、full_analysis_3d_server（3D 生成 → UnifiedFrame 转换 → PyNite 3D 分析 → 选关键柱）
 20. **30 个 CAIAO Server 全部 caiao.yaml 化**: 覆盖率 100%，legacy 硬编码 SERVER_CONFIGS（175 行）已删除
-21. **5 个 Composite Pipeline**: abaqus_collapse_pipeline、full_bim_demolition、run_full_analysis、visual_demolition_mechanics、visual_demolition_topology（纯 YAML 声明式编排，零 Python 代码）
-22. **Abaqus 倒塌仿真集成**: abaqus_environment_server（环境发现 + 校验）、abaqus_session_server（CAE 持久会话，15 个建模/分析/拆除工具）、abaqus_collapse_pipeline（倒塌全流程编排）
+21. **4 个 Composite Pipeline**: full_bim_demolition、run_full_analysis（已废弃）、visual_demolition（mechanics/topology 合并）、abaqus_collapse_pipeline（已删除，单步骤透传无编排价值）
+22. **Abaqus 倒塌仿真集成**: abaqus_environment_server（环境发现 + 校验）、abaqus_session_server（CAE 持久会话，15 个建模/分析/拆除工具）
 23. **Blender 可视化管线**: 6 个 Blender CAIAO server（environment、build、animate、machinery、render、pipeline）+ animation_control_server + physics_server
 24. **Unity 3D 集成完善**: WebRTC 视频流面板、前端一键 Launch Unity（自动启动 Editor + Setup Scene + Play 模式）、SVG 2D 降级方案自动 fallback
 25. **BIM 模型 Server**: bim_model_server（2087 行，7 个工具）支持 IFC 格式

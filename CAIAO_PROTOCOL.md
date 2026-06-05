@@ -318,8 +318,6 @@ If `frame_generator.core` has a breaking change, `quick_analysis_server` needs t
 | `blender_pipeline_server` | Atomic | `run_full_pipeline`, `run_pipeline_stage`, `check_blender_environment` | Active (lazy) | 2026-06-03 |
 | `abaqus_environment_server` | Infrastructure | `resolve_abaqus_path`, `validate_environment`, `get_abaqus_config` | Active (eager) | 2026-06-04 |
 | `abaqus_session_server` | Merged | `create_rectangular_column`, `create_truss`, `create_slab`, `assign_concrete_cdp`, `mesh_part`, `create_explicit_step`, `apply_gravity`, `create_rigid_ground`, `submit_job`, `get_max_displacement`, `plot_displacement_curve`, `create_cut_zone`, `inject_cut_zone_inp`, `build_factory`, `setup_collapse` | Active (lazy) | 2026-06-04 |
-| `abaqus_collapse_pipeline` | Composite | `run_abaqus_collapse` | Active | 2026-06-04 |
-
 ### Server Details
 
 #### ⚡ `quick_analysis_server` — Pipeline A (First Merge)
@@ -572,13 +570,6 @@ If `frame_generator.core` has a breaking change, `quick_analysis_server` needs t
 - **INP Injection Logic:** Preserves v1→v2→v3 validated WEAK_C30 material, SECTION CONTROLS element deletion, and STATUS/SDEG field output injection from original pipeline_run_collapse.py
 - **Creation:** 2026-06-04 (absorbed from Abaqus_Collapse project — 12 atomic servers + 2 orchestration servers merged into one session server)
 
-#### `abaqus_collapse_pipeline` — Composite Collapse Pipeline
-
-- **Purpose:** High-level entry point — receives a config dict and calls `abaqus_session_server.setup_collapse` for end-to-end collapse simulation.
-- **Kind:** Composite (hub-internal, no subprocess)
-- **Tools:** `run_abaqus_collapse`
-- **Creation:** 2026-06-04
-
 ---
 
 ## 9. Merge Roadmap
@@ -665,6 +656,8 @@ convert_to_unified_frame (embedded in the merged server):
 | 2026-06-04 | **Abaqus_Collapse project absorption**: Created `abaqus_environment_server` (infrastructure, eager), `abaqus_session_server` (merged, 15 tools in persistent Abaqus CAE session via JSON-RPC stdio bridge), `abaqus_collapse_pipeline` (composite). Preserved v1→v2→v3 validated INP injection logic (WEAK_C30 + SECTION CONTROLS element deletion + STATUS/SDEG). Added `@abaqus_python@` sentinel support to `caiao_config.py`. Migrated knowledge docs from original project to `dev-notes/reference/abaqus/`. Architecture: system Python MCP wrapper manages single Abaqus subprocess — all tools share one Abaqus model database | Claude |
 | 2026-06-05 | **Merge visual_demolition**: Combined `visual_demolition_mechanics` + `visual_demolition_topology` into single `visual_demolition` composite with `mode` parameter (mechanics|topology). Added `modes` tag to pipeline steps for conditional filtering. Updated `pipeline_service.py` `get_pipeline_config()` to accept mode param. Deleted topology directory, renamed mechanics→visual_demolition. Updated frontend to send mode instead of selecting between two pipelines. | Claude |
 | 2026-06-05 | **Deprecate run_full_analysis**: Marked as deprecated in favor of `quick_analysis_server`. The composite pipeline `frame_generator→anastruct×2` is functionally identical to `quick_analysis_server`'s single merged tool. SYSTEM_PROMPT already labeled it "Legacy". Manifest status changed to deprecated with `replaced_by` field. | Claude |
+| 2026-06-05 | **Remove abaqus_collapse_pipeline**: Deleted single-step composite (only called `setup_collapse`). Direct `abaqus_session_server.setup_collapse` call is equivalent. Will be re-created as a multi-step pipeline when Abaqus workflow grows beyond one step. | Claude |
+| 2026-06-05 | **Extract _shared/ planning modules**: Moved `rule_planner`, `llm_planner`, `demolition_schemas` from `planning_server/` to `caiao_servers/_shared/` (underscore prefix ensures caiao discovery skips). Fixed Server Independence Principle violation where `comparison_server` directly imported from `planning_server`. Both servers now import from `_shared` package using relative imports internally. | Claude |
 | 2026-06-04 | Simplify review Phase 4-6 + architecture redesign: **Blender Daemon Architecture** — agreed to add `blender_daemon_server` (infrastructure, eager) as single persistent Blender process shared by all functional servers, eliminating per-server subprocess cold starts. **Standard file format** — each structure type defined by two standard files (geometry manifest + demolition sequence), not by code; `build_server`/`animate_server` read files → validate → forward to daemon, containing zero geometry or demolition algorithms. **Three-mechanism parameter extension** — namespace isolation + schema registry + three-tier classification (base/extension/transient) applied to all four parameter files. **caiao.yaml template compression** — `_manifest_to_config()` now fills command/kind/health/dependencies defaults; 6 Blender server manifests stripped of ~120 lines boilerplate. Full architecture decision documented in `dev-notes/decisions/2026-06-04-blender-daemon-architecture.md` | Claude |
 | 2026-06-05 | **Thorough CAIAO-ification**: Removed 175-line legacy `_legacy_server_configs()` fallback from `caiao_config.py` — all 30 servers now have `caiao.yaml` manifests. Created composite manifests for `run_full_analysis`, `full_bim_demolition`, `visual_demolition_topology`, `visual_demolition_mechanics`. Replaced hardcoded `PIPELINE_VISUAL_DEMOLITION_*` constants in `main.py` with runtime reads from hub config (`get_pipeline_config()`). Split monolithic `main.py` (1298→470 lines) into `routers/` (5 files: tools, verify, servers, settings, unity) and `services/pipeline_service.py`. All REST endpoints now defined in routers; WebSocket handler + lifespan remain in main.py. Added `app.state` pattern for shared state between lifespan and routers. Architecture redesign documented in `dev-notes/architecture/2026-06-05-architecture-redesign.md` | Claude |
 

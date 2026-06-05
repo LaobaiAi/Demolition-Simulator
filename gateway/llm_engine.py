@@ -119,8 +119,6 @@ SYSTEM_PROMPT = """You are XuanwuAI, an AI structural engineering assistant spec
 | | plot_displacement_curve | Plot displacement-time curve as PNG |
 | | create_cut_zone | Identify cut zone elements at specified height |
 | | inject_cut_zone_inp | Inject weak material + element deletion into INP |
-| **abaqus_collapse_pipeline** | run_abaqus_collapse | Composite: config → setup_collapse |
-
 ================================================================================
 ## 🧠 ORCHESTRATION PATTERNS (choose the right workflow)
 ================================================================================
@@ -178,8 +176,7 @@ IMPORTANT: NEVER call analyze_frame/select_critical_element/quick_analysis. Pure
 
 ### Pattern 7: "Run Abaqus collapse simulation"
 ```
-User wants FEM collapse simulation → abaqus_collapse_pipeline.run_abaqus_collapse
-  or abaqus_session_server.setup_collapse for fine-grained control
+User wants FEM collapse simulation → abaqus_session_server.setup_collapse
 → config: {building: {num_bays, span, bay_length, total_height}, collapse: {time_period, cut_zone_height}, job: {cpus, precision}}
 → Abaqus builds factory model → Explicit Dynamics step → rigid ground + contact → gravity → cut zone → submit → waitForCompletion
 → Report: job_name, num_columns, num_trusses, time_period, cut_zone_elements, inp_path

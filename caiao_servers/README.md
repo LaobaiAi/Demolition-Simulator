@@ -23,7 +23,6 @@
 | `blender_pipeline_server` | 3 个工具 | Blender 全流程编排 | ✓ |
 | `abaqus_environment_server` | 3 个工具 | 🔧 Abaqus 环境发现 + 校验 (infrastructure) | -- |
 | `abaqus_session_server` | 15 个工具 | ⚡ Abaqus CAE 持久会话: 建模+分析+拆除 (merged) | ✓ |
-| `abaqus_collapse_pipeline` | `run_abaqus_collapse` | Abaqus 倒塌全流程编排 (composite) | -- |
 
 ## 添加新 Server
 

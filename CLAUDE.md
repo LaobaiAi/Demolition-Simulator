@@ -80,7 +80,6 @@ caiao_servers/
   full_analysis_3d_server/  ← ⚡ Pipeline B: 第二个 server merge (3D 全分析)
   abaqus_environment_server/  ← Abaqus 环境发现 + 校验 (infrastructure)
   abaqus_session_server/      ← Abaqus CAE 持久会话，15 个建模/分析/拆除工具 (merged)
-  abaqus_collapse_pipeline/   ← Abaqus 倒塌全流程编排 (composite)
 unity_project/
   Assets/Scripts/
     SimulationController.cs  ← TCP 监听 :5005, 物理拆除
