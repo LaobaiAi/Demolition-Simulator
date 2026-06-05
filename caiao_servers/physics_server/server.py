@@ -52,7 +52,7 @@ TOOLS = [
         },
     ),
     Tool(
-        name="apply_demolition_action",
+        name="physics_apply_demolition",
         description="Apply demolition force or removal to specified elements in a physics scene.",
         inputSchema={
             "type": "object",
@@ -210,7 +210,7 @@ def _handle_init_physics_scene(arguments: dict) -> dict:
     }
 
 
-def _handle_apply_demolition_action(arguments: dict) -> dict:
+def _handle_physics_apply_demolition(arguments: dict) -> dict:
     scene_id = arguments.get("scene_id", "")
     element_ids = arguments.get("element_ids", [])
     action_type = arguments.get("action_type", "remove")
@@ -322,8 +322,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         if name == "init_physics_scene":
             result = await asyncio.to_thread(_handle_init_physics_scene, arguments)
 
-        elif name == "apply_demolition_action":
-            result = await asyncio.to_thread(_handle_apply_demolition_action, arguments)
+        elif name == "physics_apply_demolition":
+            result = await asyncio.to_thread(_handle_physics_apply_demolition, arguments)
 
         elif name == "step_physics":
             result = await asyncio.to_thread(_handle_step_physics, arguments)

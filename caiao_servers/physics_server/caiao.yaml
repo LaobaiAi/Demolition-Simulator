@@ -25,7 +25,7 @@ tools:
   - name: init_physics_scene
     description: "Initialize a physics scene with structural elements as rigid bodies"
     tags: [physics, initialization]
-  - name: apply_demolition_action
+  - name: physics_apply_demolition
     description: "Apply a demolition action (remove/explode/push) to elements in the physics scene"
     tags: [physics, demolition]
   - name: step_physics

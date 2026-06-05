@@ -428,7 +428,7 @@ If `frame_generator.core` has a breaking change, `quick_analysis_server` needs t
 - **Lazy:** Yes
 - **Tools:**
   - `init_physics_scene` — Create physics world from structure nodes/elements
-  - `apply_demolition_action` — Apply force or remove bodies from simulation
+  - `physics_apply_demolition` — Apply force or remove bodies from simulation
   - `step_physics` — Step simulation by dt_seconds with substeps
   - `get_physics_state` — Get position, rotation, velocity of bodies
   - `reset_physics` — Reset scene to initial state
