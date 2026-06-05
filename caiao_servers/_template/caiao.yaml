@@ -5,7 +5,7 @@
 # ── Identity ─────────────────────────────────────────────────────────────
 name: __SERVER_NAME__                 # Unique server name (matches directory)
 version: 0.1.0                        # SemVer
-kind: atomic-mcp                      # atomic-mcp | atomic-class | merged | composite | bridge
+kind: atomic-mcp                      # atomic-mcp | merged | composite | infrastructure
 description: ""                       # One-line purpose statement
 status: active                        # active | deprecated | experimental | maintenance
 since: "__DATE__"                     # ISO date of creation
