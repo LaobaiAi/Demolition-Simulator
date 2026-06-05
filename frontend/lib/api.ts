@@ -272,3 +272,36 @@ export async function callManagerTool(
     return data;
   }
 }
+
+// ── Orphan Tools API ────────────────────────────────────────────────────────
+
+export interface OrphanTool {
+  name: string
+  server: string
+  description: string
+  input_schema: Record<string, unknown>
+  reachability: {
+    llm_path: boolean
+    frontend_path: boolean
+    pipeline_path: boolean
+  }
+  paths: number
+}
+
+export interface OrphanToolsResponse {
+  orphans: OrphanTool[]
+  fragile: OrphanTool[]
+  robust: OrphanTool[]
+  summary: {
+    total_tools: number
+    orphan_count: number
+    fragile_count: number
+    robust_count: number
+  }
+}
+
+export async function fetchOrphanTools(): Promise<OrphanToolsResponse> {
+  const res = await fetch(`${API_BASE}/tools/orphans`)
+  if (!res.ok) throw new Error(`Failed to fetch orphan tools: ${res.status}`)
+  return res.json()
+}

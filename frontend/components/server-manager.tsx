@@ -6,15 +6,18 @@ import {
   fetchServerStatus,
   fetchServerMetrics,
   fetchTools,
+  fetchOrphanTools,
   callManagerTool,
   pauseServer,
   resumeServer,
   stopServer,
   type ServerStatus,
   type Tool,
+  type OrphanTool,
+  type OrphanToolsResponse,
 } from "@/lib/api";
 
-type TabId = "overview" | "create" | "health" | "search" | "orchestrate" | "logs" | "tools";
+type TabId = "overview" | "tools" | "orphans" | "create" | "health" | "search" | "orchestrate" | "logs";
 
 interface Props {
   lang: Lang;
@@ -72,6 +75,15 @@ export default function ServerManager({ lang, onClose }: Props) {
   const [allTools, setAllTools] = useState<Tool[]>([]);
   const [toolsLoading, setToolsLoading] = useState(false);
 
+  // Orphan tools state
+  const [orphanData, setOrphanData] = useState<OrphanToolsResponse | null>(null);
+  const [orphanLoading, setOrphanLoading] = useState(false);
+  const [expandedOrphanServers, setExpandedOrphanServers] = useState<Set<string>>(new Set());
+  const [expandedOrphanSchemas, setExpandedOrphanSchemas] = useState<Set<string>>(new Set());
+
+  // Overview search filter
+  const [overviewSearch, setOverviewSearch] = useState("");
+
   const loadServers = useCallback(async () => {
     try {
       setError(null);
@@ -103,11 +115,30 @@ export default function ServerManager({ lang, onClose }: Props) {
     }
   }, []);
 
+  const loadOrphans = useCallback(async () => {
+    setOrphanLoading(true);
+    try {
+      const data = await fetchOrphanTools();
+      setOrphanData(data);
+      const serverNames = new Set(data.orphans.map((o) => o.server));
+      setExpandedOrphanServers(serverNames);
+    } catch {
+      setOrphanData(null);
+    } finally {
+      setOrphanLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     const t = setTimeout(() => { loadServers(); loadMetrics(); }, 0);
     const interval = setInterval(loadServers, 5000);
     return () => { clearTimeout(t); clearInterval(interval); };
   }, [loadServers, loadMetrics]);
+
+  const toolsPerServer: Record<string, number> = {};
+  for (const t of allTools) {
+    toolsPerServer[t.server] = (toolsPerServer[t.server] || 0) + 1;
+  }
 
   const stats = {
     total: servers.length,
@@ -155,15 +186,38 @@ export default function ServerManager({ lang, onClose }: Props) {
     setMergeCandidates((merge.merge_candidates as Record<string, unknown>[]) || []);
   }
 
+  const filteredServers = overviewSearch
+    ? servers.filter((s) => s.name.toLowerCase().includes(overviewSearch.toLowerCase()))
+    : servers;
+
   const tabs: { id: TabId; labelKey: string }[] = [
     { id: "overview", labelKey: "srv.tab_overview" },
     { id: "tools", labelKey: "srv.tab_tools" },
+    { id: "orphans", labelKey: "srv.tab_orphans" },
     { id: "create", labelKey: "srv.tab_create" },
     { id: "health", labelKey: "srv.tab_health" },
     { id: "search", labelKey: "srv.tab_search" },
     { id: "orchestrate", labelKey: "srv.tab_orchestrate" },
     { id: "logs", labelKey: "srv.tab_logs" },
   ];
+
+  function toggleOrphanServer(name: string) {
+    setExpandedOrphanServers((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }
+
+  function toggleOrphanSchema(key: string) {
+    setExpandedOrphanSchemas((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   return (
     <div style={styles.overlay}>
@@ -177,7 +231,13 @@ export default function ServerManager({ lang, onClose }: Props) {
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => { setActiveTab(tab.id); if (tab.id === "orchestrate") handleAnalyzeDeps(); if (tab.id === "health") loadMetrics(); if (tab.id === "tools") loadTools(); }}
+              onClick={() => {
+                setActiveTab(tab.id);
+                if (tab.id === "orchestrate") handleAnalyzeDeps();
+                if (tab.id === "health") loadMetrics();
+                if (tab.id === "tools") loadTools();
+                if (tab.id === "orphans") loadOrphans();
+              }}
               style={{
                 ...styles.tab,
                 ...(activeTab === tab.id ? styles.tabActive : {}),
@@ -191,20 +251,42 @@ export default function ServerManager({ lang, onClose }: Props) {
         <div style={styles.content}>
           {activeTab === "overview" && (
             <div>
-              <div style={styles.statsBar}>
-                <StatBadge label={t("srv.total", lang)} value={stats.total} color="#94a3b8" />
-                <StatBadge label={t("srv.running", lang)} value={stats.running} color={STATE_COLORS.running} />
-                <StatBadge label={t("srv.hibernating", lang)} value={stats.hibernating} color={STATE_COLORS.hibernating} />
-                <StatBadge label={t("srv.crashed", lang)} value={stats.crashed} color={STATE_COLORS.crashed} />
-                <StatBadge label={t("srv.composite", lang)} value={stats.composite} color={STATE_COLORS.composite} />
+              {/* Marketplace-style search bar */}
+              <div style={styles.marketSearchWrap}>
+                <span style={styles.marketSearchIcon}>🔍</span>
+                <input
+                  style={styles.marketSearchInput}
+                  value={overviewSearch}
+                  onChange={(e) => setOverviewSearch(e.target.value)}
+                  placeholder={t("srv.search_placeholder", lang)}
+                />
               </div>
+
+              {/* Compact stat pills */}
+              <div style={styles.statsBar}>
+                <StatPill label={t("srv.total", lang)} value={stats.total} color="#94a3b8" />
+                <StatPill label={t("srv.running", lang)} value={stats.running} color={STATE_COLORS.running} />
+                <StatPill label={t("srv.hibernating", lang)} value={stats.hibernating} color={STATE_COLORS.hibernating} />
+                <StatPill label={t("srv.crashed", lang)} value={stats.crashed} color={STATE_COLORS.crashed} />
+                <StatPill label={t("srv.composite", lang)} value={stats.composite} color={STATE_COLORS.composite} />
+              </div>
+
               {error && <p style={styles.error}>{error}</p>}
               {loading ? (
                 <p style={styles.loading}>Loading...</p>
+              ) : filteredServers.length === 0 ? (
+                <p style={styles.hint}>No servers match your search.</p>
               ) : (
                 <div style={styles.grid}>
-                  {servers.map((s) => (
-                    <ServerCard key={s.name} server={s} lang={lang} onRefresh={loadServers} />
+                  {filteredServers.map((s) => (
+                    <MarketServerCard
+                      key={s.name}
+                      server={s}
+                      lang={lang}
+                      toolCount={toolsPerServer[s.name] || 0}
+                      metric={metrics[s.name]}
+                      onRefresh={loadServers}
+                    />
                   ))}
                 </div>
               )}
@@ -237,6 +319,18 @@ export default function ServerManager({ lang, onClose }: Props) {
                 </div>
               )}
             </div>
+          )}
+
+          {activeTab === "orphans" && (
+            <OrphansTab
+              data={orphanData}
+              loading={orphanLoading}
+              lang={lang}
+              expandedServers={expandedOrphanServers}
+              expandedSchemas={expandedOrphanSchemas}
+              onToggleServer={toggleOrphanServer}
+              onToggleSchema={toggleOrphanSchema}
+            />
           )}
 
           {activeTab === "create" && (
@@ -451,65 +545,240 @@ export default function ServerManager({ lang, onClose }: Props) {
   );
 }
 
-function ServerCard({ server: s, lang, onRefresh }: { server: ServerStatus; lang: Lang; onRefresh: () => void }) {
+// ══════════════════════════════════════════════════════════════════════════════
+// Marketplace-style Server Card
+// ══════════════════════════════════════════════════════════════════════════════
+
+function MarketServerCard({ server: s, lang, toolCount, metric, onRefresh }: {
+  server: ServerStatus;
+  lang: Lang;
+  toolCount: number;
+  metric: { total_calls?: number; error_count?: number; avg_latency_ms?: number; last_called?: number | null } | undefined;
+  onRefresh: () => void;
+}) {
   const isComposite = s.state === "composite";
   const isHibernating = s.state === "hibernating";
+  const stateColor = STATE_COLORS[s.state] || "#94a3b8";
+  const avatar = s.name.charAt(0).toUpperCase();
+
   return (
-    <div style={styles.card}>
-      <div style={styles.cardHeader}>
-        <span style={{ ...styles.dot, backgroundColor: STATE_COLORS[s.state] || "#94a3b8" }} />
-        <strong style={styles.cardName}>{s.name}</strong>
+    <div style={styles.mktCard}>
+      <div style={styles.mktCardTop}>
+        {/* Status dot + Avatar */}
+        <div style={styles.mktAvatarRow}>
+          <span style={{ ...styles.dot, backgroundColor: stateColor }} />
+          <div style={{ ...styles.mktAvatar, borderColor: stateColor }}>{avatar}</div>
+          <div style={styles.mktNameBlock}>
+            <span style={styles.mktCardName}>{s.name}</span>
+            <span style={{ ...styles.mktStateBadge, color: stateColor, borderColor: stateColor }}>
+              {s.state}
+            </span>
+          </div>
+        </div>
+
+        {/* Stats row */}
+        <div style={styles.mktStatsRow}>
+          <span style={styles.mktStat}>
+            <span style={styles.mktStatValue}>{toolCount}</span>
+            <span style={styles.mktStatLabel}>{t("srv.tool_count", lang).replace("{n}", String(toolCount))}</span>
+          </span>
+          <span style={styles.mktStat}>
+            <span style={styles.mktStatValue}>{s.total_calls}</span>
+            <span style={styles.mktStatLabel}>calls</span>
+          </span>
+          <span style={styles.mktStat}>
+            <span style={styles.mktStatValue}>{s.avg_latency_ms > 0 ? s.avg_latency_ms : "—"}</span>
+            <span style={styles.mktStatLabel}>ms</span>
+          </span>
+        </div>
+
+        {/* Sub-metrics line */}
+        <div style={styles.mktSubMetrics}>
+          <span>PID {s.pid || "—"}</span>
+          <span>·</span>
+          <span>err {s.error_count}</span>
+          {metric?.last_called && (
+            <>
+              <span>·</span>
+              <span>last {new Date(metric.last_called * 1000).toLocaleTimeString()}</span>
+            </>
+          )}
+        </div>
       </div>
-      <div style={styles.cardBody}>
-        <p style={styles.cardInfo}>State: {s.state}</p>
-        <p style={styles.cardInfo}>{t("srv.tools", lang)}: {s.total_calls}</p>
-        {s.avg_latency_ms > 0 && <p style={styles.cardInfo}>Latency: {s.avg_latency_ms}ms</p>}
-      </div>
-      <div style={styles.cardActions}>
-        <button style={styles.smallBtn} onClick={async () => { await callManagerTool("get_server", { server_name: s.name }); }}>
+
+      {/* Actions row — always visible, compact */}
+      <div style={styles.mktActions}>
+        <button
+          style={styles.mktActionBtn}
+          onClick={async () => { await callManagerTool("get_server", { server_name: s.name }); }}
+        >
           {t("srv.view", lang)}
         </button>
         {!isComposite && (
-          <button style={styles.smallBtn} onClick={async () => { await callManagerTool("restart_server", { server_name: s.name }); onRefresh(); }}>
+          <button
+            style={styles.mktActionBtn}
+            onClick={async () => { await callManagerTool("restart_server", { server_name: s.name }); onRefresh(); }}
+          >
             {t("srv.restart", lang)}
           </button>
         )}
-      </div>
-      {!isComposite && (
-        <div style={styles.cardActions}>
+        {!isComposite && (
           <button
-            style={{ ...styles.actionBtn, ...(isHibernating ? styles.resumeBtn : styles.pauseBtn) }}
+            style={{ ...styles.mktActionBtn, color: isHibernating ? "#4ade80" : "#a78bfa" }}
             onClick={async () => {
-              if (isHibernating) {
-                await resumeServer(s.name);
-              } else {
-                await pauseServer(s.name);
-              }
+              if (isHibernating) await resumeServer(s.name);
+              else await pauseServer(s.name);
               onRefresh();
             }}
           >
             {isHibernating ? t("srv.resume", lang) : t("srv.pause", lang)}
           </button>
+        )}
+        {!isComposite && (
           <button
-            style={{ ...styles.actionBtn, ...styles.stopBtn }}
-            onClick={async () => {
-              await stopServer(s.name);
-              onRefresh();
-            }}
+            style={{ ...styles.mktActionBtn, color: "#ef4444" }}
+            onClick={async () => { await stopServer(s.name); onRefresh(); }}
           >
             {t("srv.stop", lang)}
           </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Orphans Tab
+// ══════════════════════════════════════════════════════════════════════════════
+
+function OrphansTab({ data, loading, lang, expandedServers, expandedSchemas, onToggleServer, onToggleSchema }: {
+  data: OrphanToolsResponse | null;
+  loading: boolean;
+  lang: Lang;
+  expandedServers: Set<string>;
+  expandedSchemas: Set<string>;
+  onToggleServer: (name: string) => void;
+  onToggleSchema: (key: string) => void;
+}) {
+  if (loading) return <p style={styles.loading}>{t("srv.orphan_loading", lang)}</p>;
+  if (!data) return <p style={styles.hint}>Failed to load orphan data.</p>;
+
+  const { orphans, fragile, robust, summary } = data;
+
+  // Group orphans by server
+  const grouped: Record<string, OrphanTool[]> = {};
+  for (const o of orphans) {
+    if (!grouped[o.server]) grouped[o.server] = [];
+    grouped[o.server].push(o);
+  }
+
+  const serverNames = Object.keys(grouped).sort();
+
+  return (
+    <div>
+      {/* Summary bar */}
+      <div style={styles.orphanSummaryBar}>
+        <span style={styles.orphanSummaryText}>
+          {t("srv.orphan_count", lang)
+            .replace("{n}", String(summary.orphan_count))
+            .replace("{m}", String(serverNames.length))}
+        </span>
+        <div style={styles.orphanSummaryTags}>
+          <span style={styles.orphanTagDanger}>
+            {t("srv.orphan_fragile", lang).replace("{n}", String(summary.fragile_count))}
+          </span>
+          <span style={styles.orphanTagOk}>
+            {t("srv.orphan_robust", lang).replace("{n}", String(summary.robust_count))}
+          </span>
+          <span style={styles.orphanTagMuted}>Total: {summary.total_tools}</span>
+        </div>
+      </div>
+
+      {orphans.length === 0 ? (
+        <p style={styles.ok}>{t("srv.orphan_empty", lang)}</p>
+      ) : (
+        <div style={styles.orphanServerList}>
+          {serverNames.map((serverName) => {
+            const serverOrphans = grouped[serverName];
+            const isExpanded = expandedServers.has(serverName);
+            return (
+              <div key={serverName} style={styles.orphanServerGroup}>
+                <button
+                  style={styles.orphanServerHeader}
+                  onClick={() => onToggleServer(serverName)}
+                >
+                  <span style={styles.orphanChevron}>{isExpanded ? "▾" : "▸"}</span>
+                  <span style={styles.orphanServerName}>{serverName}</span>
+                  <span style={styles.orphanServerCount}>{serverOrphans.length} tools</span>
+                </button>
+
+                {isExpanded && (
+                  <div style={styles.orphanToolList}>
+                    {serverOrphans.map((tool) => {
+                      const schemaKey = `${tool.server}::${tool.name}`;
+                      const schemaOpen = expandedSchemas.has(schemaKey);
+                      return (
+                        <div key={tool.name} style={styles.orphanToolCard}>
+                          <div style={styles.orphanToolHeader}>
+                            <span style={styles.orphanToolName}>{tool.name}</span>
+                            <span style={styles.orphanToolServer}>{tool.server}</span>
+                          </div>
+                          <p style={styles.orphanToolDesc}>{tool.description}</p>
+
+                          {/* Reachability indicators */}
+                          <div style={styles.orphanPaths}>
+                            <span style={styles.orphanPathLabel}>{t("srv.orphan_paths", lang)}:</span>
+                            <span style={styles.orphanPathChip} title={t("srv.orphan_llm", lang)}>
+                              {tool.reachability.llm_path ? "✅" : "❌"} {t("srv.orphan_llm", lang)}
+                            </span>
+                            <span style={styles.orphanPathChip} title={t("srv.orphan_frontend", lang)}>
+                              {tool.reachability.frontend_path ? "✅" : "❌"} {t("srv.orphan_frontend", lang)}
+                            </span>
+                            <span style={styles.orphanPathChip} title={t("srv.orphan_pipeline", lang)}>
+                              {tool.reachability.pipeline_path ? "✅" : "❌"} {t("srv.orphan_pipeline", lang)}
+                            </span>
+                          </div>
+
+                          {/* Why orphaned hint */}
+                          {tool.paths === 0 && (
+                            <p style={styles.orphanWhy}>{t("srv.orphan_why", lang)}</p>
+                          )}
+
+                          {/* View Schema toggle */}
+                          <button
+                            style={styles.orphanSchemaToggle}
+                            onClick={() => onToggleSchema(schemaKey)}
+                          >
+                            {schemaOpen ? t("srv.orphan_hide_schema", lang) : t("srv.orphan_view_schema", lang)}
+                          </button>
+                          {schemaOpen && (
+                            <pre style={styles.orphanSchemaPre}>
+                              {JSON.stringify(tool.input_schema, null, 2)}
+                            </pre>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-function StatBadge({ label, value, color }: { label: string; value: number; color: string }) {
+// ══════════════════════════════════════════════════════════════════════════════
+// Shared sub-components
+// ══════════════════════════════════════════════════════════════════════════════
+
+function StatPill({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div style={{ ...styles.statBadge, borderColor: color }}>
-      <span style={{ ...styles.statValue, color }}>{value}</span>
-      <span style={styles.statLabel}>{label}</span>
+    <div style={{ ...styles.statPill, borderColor: color }}>
+      <span style={{ ...styles.statPillValue, color }}>{value}</span>
+      <span style={styles.statPillLabel}>{label}</span>
     </div>
   );
 }
@@ -539,6 +808,10 @@ function DepsList({ edges }: { edges: Array<{ from: string; to: string; type: st
   );
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// Styles
+// ══════════════════════════════════════════════════════════════════════════════
+
 const styles: Record<string, React.CSSProperties> = {
   overlay: {
     position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
@@ -561,40 +834,94 @@ const styles: Record<string, React.CSSProperties> = {
   tab: {
     padding: "10px 16px", background: "none", border: "none",
     color: "#94a3b8", cursor: "pointer", fontSize: 13, fontWeight: 500,
-    borderBottom: "2px solid transparent",
+    borderBottom: "2px solid transparent", transition: "all 0.2s ease",
   },
   tabActive: { color: "#60a5fa", borderBottom: "2px solid #60a5fa" },
   content: { flex: 1, overflow: "auto", padding: 20 },
-  statsBar: { display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" as const },
-  statBadge: {
+
+  // ── Marketplace search bar ──────────────────────────────────────────
+  marketSearchWrap: {
+    display: "flex", alignItems: "center", gap: 8,
+    backgroundColor: "#0f172a", borderRadius: 10,
+    border: "1px solid #334155", padding: "0 14px",
+    marginBottom: 14, height: 44,
+    transition: "border-color 0.2s ease",
+  },
+  marketSearchIcon: { fontSize: 16, flexShrink: 0, opacity: 0.6 },
+  marketSearchInput: {
+    flex: 1, border: "none", background: "none",
+    color: "#f1f5f9", fontSize: 14, outline: "none",
+    fontFamily: "inherit",
+  },
+
+  // ── Stats bar ───────────────────────────────────────────────────────
+  statsBar: { display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" as const },
+
+  statPill: {
     display: "flex", alignItems: "center", gap: 6,
-    padding: "6px 12px", borderRadius: 8, border: "1px solid",
-    backgroundColor: "rgba(30,41,59,0.8)",
+    padding: "6px 14px", borderRadius: 20, border: "1px solid",
+    backgroundColor: "#0f172a",
   },
-  statValue: { fontSize: 20, fontWeight: 700 },
-  statLabel: { fontSize: 11, color: "#94a3b8", textTransform: "uppercase" as const },
-  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 },
-  card: {
-    backgroundColor: "#0f172a", borderRadius: 8, padding: 14,
-    border: "1px solid #334155",
+  statPillValue: { fontSize: 18, fontWeight: 700, lineHeight: 1 },
+  statPillLabel: { fontSize: 11, color: "#64748b", textTransform: "uppercase" as const, fontWeight: 500 },
+
+  // ── Server card grid ────────────────────────────────────────────────
+  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 },
+
+  // ── Marketplace card ────────────────────────────────────────────────
+  mktCard: {
+    backgroundColor: "#0f172a", borderRadius: 10,
+    border: "1px solid #334155", padding: 14,
+    display: "flex", flexDirection: "column", gap: 10,
+    transition: "all 0.2s ease",
+    cursor: "default",
   },
-  cardHeader: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 },
+  mktCardTop: { display: "flex", flexDirection: "column", gap: 8 },
+  mktAvatarRow: { display: "flex", alignItems: "center", gap: 8 },
+  mktAvatar: {
+    width: 32, height: 32, borderRadius: 8,
+    backgroundColor: "#1e293b", border: "2px solid",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    fontSize: 14, fontWeight: 700, color: "#f1f5f9", flexShrink: 0,
+  },
+  mktNameBlock: { display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 },
+  mktCardName: {
+    color: "#f1f5f9", fontSize: 13, fontWeight: 600,
+    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const,
+  },
+  mktStateBadge: {
+    fontSize: 10, padding: "2px 7px", borderRadius: 10,
+    border: "1px solid", textTransform: "uppercase" as const,
+    fontWeight: 500, flexShrink: 0,
+  },
+  mktStatsRow: { display: "flex", gap: 16 },
+  mktStat: { display: "flex", alignItems: "baseline", gap: 3 },
+  mktStatValue: { fontSize: 15, fontWeight: 700, color: "#e2e8f0", fontFamily: "monospace" },
+  mktStatLabel: { fontSize: 10, color: "#64748b" },
+  mktSubMetrics: {
+    display: "flex", gap: 6, fontSize: 10, color: "#475569",
+    flexWrap: "wrap" as const,
+  },
+  mktActions: {
+    display: "flex", gap: 6, flexWrap: "wrap" as const,
+    borderTop: "1px solid #1e293b", paddingTop: 8,
+  },
+  mktActionBtn: {
+    padding: "4px 10px", fontSize: 11, borderRadius: 5,
+    backgroundColor: "#1e293b", color: "#94a3b8", border: "1px solid #334155",
+    cursor: "pointer", transition: "all 0.15s ease",
+    fontWeight: 500,
+  },
+
+  // ── General ─────────────────────────────────────────────────────────
   dot: { width: 8, height: 8, borderRadius: "50%", flexShrink: 0 },
-  cardName: { color: "#e2e8f0", fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const },
-  cardBody: { marginBottom: 8 },
-  cardInfo: { color: "#94a3b8", fontSize: 11, margin: "2px 0" },
-  cardActions: { display: "flex", gap: 6 },
-  smallBtn: {
-    padding: "3px 8px", fontSize: 11, borderRadius: 4,
-    backgroundColor: "#334155", color: "#cbd5e1", border: "none", cursor: "pointer",
-  },
-  actionBtn: {
-    flex: 1, padding: "4px 8px", fontSize: 11, borderRadius: 4,
-    border: "none", cursor: "pointer", fontWeight: 600,
-  },
-  pauseBtn: { backgroundColor: "#a78bfa", color: "#1e1b4b" },
-  resumeBtn: { backgroundColor: "#4ade80", color: "#052e16" },
-  stopBtn: { backgroundColor: "#ef4444", color: "white" },
+  error: { color: "#ef4444", fontSize: 12 },
+  ok: { color: "#4ade80", fontSize: 12 },
+  hint: { color: "#64748b", fontSize: 12, margin: "4px 0" },
+  code: { color: "#a5f3fc", fontSize: 11, fontFamily: "monospace", margin: "2px 0" },
+  loading: { color: "#94a3b8", fontSize: 13 },
+
+  // ── Form / Create tab ───────────────────────────────────────────────
   form: { maxWidth: 600 },
   formGroup: { marginBottom: 12 },
   formRow: { display: "flex", gap: 12 },
@@ -628,6 +955,12 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: "#0f172a", color: "#a5f3fc", fontSize: 11,
     maxHeight: 300, overflow: "auto", whiteSpace: "pre-wrap",
   },
+  smallBtn: {
+    padding: "3px 8px", fontSize: 11, borderRadius: 4,
+    backgroundColor: "#334155", color: "#cbd5e1", border: "none", cursor: "pointer",
+  },
+
+  // ── Health tab ──────────────────────────────────────────────────────
   healthGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 },
   healthCard: {
     backgroundColor: "#0f172a", borderRadius: 8, padding: 14,
@@ -643,6 +976,8 @@ const styles: Record<string, React.CSSProperties> = {
   healthLabel: { color: "#64748b", fontSize: 11 },
   healthValue: { color: "#e2e8f0", fontSize: 12, fontWeight: 600, fontFamily: "monospace" },
   healthActions: { display: "flex", gap: 6 },
+
+  // ── Search tab ──────────────────────────────────────────────────────
   searchBar: { display: "flex", gap: 10, marginBottom: 16 },
   searchList: { display: "flex", flexDirection: "column", gap: 8 },
   searchItem: {
@@ -659,6 +994,8 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: "#1e293b", color: "#fbbf24", marginLeft: "auto", fontFamily: "monospace",
   },
   searchDesc: { color: "#94a3b8", fontSize: 12, margin: 0 },
+
+  // ── Orchestrate tab ─────────────────────────────────────────────────
   graphCard: {
     backgroundColor: "#0f172a", borderRadius: 8, padding: 14,
     border: "1px solid #334155", marginBottom: 12,
@@ -671,11 +1008,8 @@ const styles: Record<string, React.CSSProperties> = {
     marginLeft: "auto", fontSize: 10, padding: "1px 5px",
     borderRadius: 3, backgroundColor: "#1e293b", color: "#64748b",
   },
-  error: { color: "#ef4444", fontSize: 12 },
-  ok: { color: "#4ade80", fontSize: 12 },
-  hint: { color: "#64748b", fontSize: 12, margin: "4px 0" },
-  code: { color: "#a5f3fc", fontSize: 11, fontFamily: "monospace", margin: "2px 0" },
-  loading: { color: "#94a3b8", fontSize: 13 },
+
+  // ── Tools tab ───────────────────────────────────────────────────────
   toolsGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 10 },
   toolCard: {
     backgroundColor: "#0f172a", borderRadius: 8, padding: 12,
@@ -697,5 +1031,77 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 4, padding: 8, borderRadius: 4,
     backgroundColor: "#0a0f1a", color: "#a5f3fc", fontSize: 10,
     maxHeight: 150, overflow: "auto", whiteSpace: "pre-wrap",
+  },
+
+  // ── Orphans tab ─────────────────────────────────────────────────────
+  orphanSummaryBar: {
+    backgroundColor: "#0f172a", borderRadius: 10,
+    border: "1px solid #334155", padding: "14px 18px",
+    marginBottom: 16, display: "flex", alignItems: "center",
+    justifyContent: "space-between", flexWrap: "wrap" as const, gap: 8,
+  },
+  orphanSummaryText: { color: "#f1f5f9", fontSize: 14, fontWeight: 600 },
+  orphanSummaryTags: { display: "flex", gap: 8, flexWrap: "wrap" as const },
+  orphanTagDanger: {
+    fontSize: 11, padding: "3px 10px", borderRadius: 12,
+    backgroundColor: "rgba(239,68,68,0.15)", color: "#ef4444", fontWeight: 500,
+  },
+  orphanTagOk: {
+    fontSize: 11, padding: "3px 10px", borderRadius: 12,
+    backgroundColor: "rgba(74,222,128,0.15)", color: "#4ade80", fontWeight: 500,
+  },
+  orphanTagMuted: {
+    fontSize: 11, padding: "3px 10px", borderRadius: 12,
+    backgroundColor: "#1e293b", color: "#64748b",
+  },
+  orphanServerList: { display: "flex", flexDirection: "column", gap: 8 },
+  orphanServerGroup: {
+    backgroundColor: "#0f172a", borderRadius: 8,
+    border: "1px solid #334155", overflow: "hidden",
+  },
+  orphanServerHeader: {
+    width: "100%", display: "flex", alignItems: "center", gap: 8,
+    padding: "10px 14px", background: "none", border: "none",
+    color: "#e2e8f0", cursor: "pointer", fontSize: 13, fontWeight: 600,
+    transition: "background 0.15s ease",
+  },
+  orphanChevron: { fontSize: 10, color: "#64748b", width: 12, textAlign: "center" as const },
+  orphanServerName: { flex: 1, textAlign: "left" as const },
+  orphanServerCount: { fontSize: 11, color: "#64748b", fontWeight: 400 },
+  orphanToolList: { padding: "0 14px 10px", display: "flex", flexDirection: "column", gap: 6 },
+  orphanToolCard: {
+    backgroundColor: "#1e293b", borderRadius: 6, padding: 10,
+    border: "1px solid #334155",
+  },
+  orphanToolHeader: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 },
+  orphanToolName: {
+    color: "#e2e8f0", fontSize: 12, fontWeight: 600,
+    fontFamily: "monospace",
+  },
+  orphanToolServer: {
+    fontSize: 10, padding: "1px 6px", borderRadius: 4,
+    backgroundColor: "#1e3a5f", color: "#60a5fa", marginLeft: "auto",
+  },
+  orphanToolDesc: { color: "#94a3b8", fontSize: 11, margin: "0 0 6px 0", lineHeight: 1.4 },
+  orphanPaths: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" as const, marginBottom: 4 },
+  orphanPathLabel: { fontSize: 10, color: "#64748b", fontWeight: 500 },
+  orphanPathChip: {
+    fontSize: 10, padding: "1px 6px", borderRadius: 4,
+    backgroundColor: "#0f172a", color: "#94a3b8",
+  },
+  orphanWhy: {
+    fontSize: 10, color: "#475569", fontStyle: "italic",
+    backgroundColor: "rgba(251,191,36,0.08)", padding: "6px 10px",
+    borderRadius: 4, margin: "4px 0", lineHeight: 1.5,
+  },
+  orphanSchemaToggle: {
+    padding: "3px 10px", fontSize: 10, borderRadius: 4,
+    backgroundColor: "#334155", color: "#94a3b8", border: "none",
+    cursor: "pointer", marginTop: 2,
+  },
+  orphanSchemaPre: {
+    marginTop: 6, padding: 8, borderRadius: 4,
+    backgroundColor: "#0a0f1a", color: "#a5f3fc", fontSize: 10,
+    maxHeight: 200, overflow: "auto", whiteSpace: "pre-wrap",
   },
 };
