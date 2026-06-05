@@ -19,13 +19,16 @@ def tool_label(tool_name: str) -> str:
     return _TOOL_LABELS.get(tool_name, tool_name.replace("_", " ").title())
 
 
-def get_pipeline_config(hub, name: str) -> list[dict[str, Any]] | None:
+def get_pipeline_config(hub, name: str, mode: str = "mechanics") -> list[dict[str, Any]] | None:
     """Read pipeline steps from a composite server config (caiao.yaml manifest)."""
     for config in hub._server_configs:
         if config["name"] == name and config.get("composite"):
             pipeline = config.get("pipeline", [])
             steps: list[dict[str, Any]] = []
             for i, step in enumerate(pipeline):
+                step_modes = step.get("modes", ["mechanics", "topology"])
+                if mode not in step_modes:
+                    continue
                 tool = step["tool"]
                 s: dict[str, Any] = {
                     "server": step.get("server", ""),

@@ -1321,7 +1321,8 @@ export default function Home() {
     if (!frameStructure) return;
     const strategy = DEMOLISH_STRATEGIES.find(s => s.key === vdStrategy);
     const needsAnalysis = strategy?.category === "mechanics";
-    const pipeline = needsAnalysis ? "visual_demolition_mechanics" : "visual_demolition_topology";
+    const pipeline = "visual_demolition";
+    const mode = needsAnalysis ? "mechanics" : "topology";
     setPipelineActive(true);
     setPipelineProgress(0);
     setPipelinePhase(t("vd.button", lang));
@@ -1331,6 +1332,7 @@ export default function Home() {
       type: "launch_pipeline",
       pipeline,
       params: {
+        mode,
         structure: frameStructure,
         strategy: vdStrategy,
         effects_preset: vdEffectsPreset,
@@ -1349,7 +1351,8 @@ export default function Home() {
     setDemoStatus(scenario.description[isZh ? "zh" : "en"].slice(0, 80) + "...");
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       const needsAnalysis = scenario.category === "mechanics";
-      const pipeline = needsAnalysis ? "visual_demolition_mechanics" : "visual_demolition_topology";
+      const pipeline = "visual_demolition";
+      const mode = needsAnalysis ? "mechanics" : "topology";
       // Fetch full scenario for actual structure_params
       let structureParams = { num_bays_x: 3, num_stories: 4, span_x_m: 6.0, story_height_m: 3.0, steel_grade: "Q355" };
       try {
@@ -1362,6 +1365,7 @@ export default function Home() {
         type: "launch_pipeline",
         pipeline,
         params: {
+          mode,
           strategy: needsAnalysis ? "llm" : "top_down",
           effects_preset: "standard",
           speed: 1.0,

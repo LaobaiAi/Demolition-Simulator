@@ -50,28 +50,33 @@ class TestServerDiscovery:
 class TestPipelineConfig:
     """Verify pipeline configs are readable from hub configs."""
 
-    def test_visual_demolition_pipelines_exist(self):
+    def test_visual_demolition_pipeline_exists(self):
         configs = discover_server_configs()
         names = {c["name"] for c in configs}
-        assert "visual_demolition_topology" in names
-        assert "visual_demolition_mechanics" in names
+        assert "visual_demolition" in names
 
-    def test_visual_demolition_topology_steps(self):
+    def test_visual_demolition_all_steps(self):
         configs = discover_server_configs()
-        topo = next(c for c in configs if c["name"] == "visual_demolition_topology")
-        steps = topo["pipeline"]
-        assert len(steps) == 6, f"Expected 6 steps, got {len(steps)}"
-        tools = [s["tool"] for s in steps]
-        assert tools == [
-            "generate_frame", "plan_demolition_sequence", "create_timeline",
-            "sequence_to_animation_data", "generate_effects_config", "init_physics_scene",
-        ]
+        vd = next(c for c in configs if c["name"] == "visual_demolition")
+        steps = vd["pipeline"]
+        assert len(steps) == 8, f"Expected 8 total steps, got {len(steps)}"
 
-    def test_visual_demolition_mechanics_steps(self):
+    def test_visual_demolition_mode_filtering(self):
+        """mechanics mode includes all steps; topology filters out FEM."""
+        from services.pipeline_service import get_pipeline_config
+        import sys, os
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from caiao import CAIAOClientHub
+        # Verify the manifest has modes on each step
         configs = discover_server_configs()
-        mech = next(c for c in configs if c["name"] == "visual_demolition_mechanics")
-        steps = mech["pipeline"]
-        assert len(steps) == 8, f"Expected 8 steps, got {len(steps)}"
+        vd = next(c for c in configs if c["name"] == "visual_demolition")
+        for step in vd["pipeline"]:
+            assert "modes" in step, f"Step '{step['tool']}' missing modes field"
+        tools_with_mechanics = [s["tool"] for s in vd["pipeline"] if "mechanics" in s.get("modes", [])]
+        tools_with_topology = [s["tool"] for s in vd["pipeline"] if "topology" in s.get("modes", [])]
+        assert "analyze_frame" in tools_with_mechanics
+        assert "analyze_frame" not in tools_with_topology
+        assert "generate_frame" in tools_with_topology
 
     def test_composite_pipeline_has_input_schema(self):
         configs = discover_server_configs()

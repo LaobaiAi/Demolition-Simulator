@@ -324,10 +324,11 @@ async def ws_chat(websocket: WebSocket):
                 })
 
             elif msg_type == "launch_pipeline":
-                pipeline_name = msg.get("pipeline", "visual_demolition_topology")
+                pipeline_name = msg.get("pipeline", "visual_demolition")
+                mode = msg.get("params", {}).get("mode", "mechanics")
                 params = msg.get("params", {})
 
-                pipeline_def = get_pipeline_config(hub, pipeline_name)
+                pipeline_def = get_pipeline_config(hub, pipeline_name, mode)
                 if not pipeline_def:
                     await _safe_send({
                         "type": "pipeline_error",
