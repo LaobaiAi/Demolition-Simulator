@@ -5,6 +5,10 @@
 
 所有代码变更只通过文件编辑工具（Edit/Write）静默完成。对话中只描述要做什么、做了什么，不展示代码片段。
 
+**执行模式：静默执行，完成后汇报。** 用户给出指令后，无需在对话中逐步汇报进度，直接通过工具静默完成所有修改。全部完成后，只说三件事：完成了什么、有没有问题、下一步需要什么决策。
+
+**所有代码变更必须通过后台 Agent 执行。** 严禁直接在对话中调用 Write/Edit/Bash 等会产生大量代码内容的工具。代码内容会随 tool call 参数注入对话窗口，等同于输出代码，违反最高约束。代码编写、文件修改、测试运行等操作一律通过 Agent 工具（`run_in_background: true` 或 Workflow）在后台完成，对话窗口只接收执行结果摘要。这是宪法级约束，没有例外。
+
 ## ⚡ CORE DESIGN PRINCIPLE (read this first)
 **Everything is a CAIAO Server.** Every tool, every solver, every external capability is an independent CAIAO Server process, discovered and routed through a central CAIAO Hub. The LLM never calls anything directly — it tells the AgentLoop what it wants, the AgentLoop routes through the CAIAO Hub, and the Hub dispatches to the correct subprocess.
 
