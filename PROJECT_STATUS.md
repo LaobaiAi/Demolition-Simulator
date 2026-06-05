@@ -1,8 +1,8 @@
 # XuanwuAI Demolition Simulator — 项目状态报告
 
-**日期**: 2026-05-22（最后更新）
-**总体完成度**: 约 92%（Day 1–10 全部完成，LLM 已配置可用）
-**Git**: 6 commits，82 个测试全部通过（33 backend + 33 gateway + 16 frontend）
+**日期**: 2026-06-05（最后更新）
+**总体完成度**: 功能全集已闭环，架构重构进行中（CAIAO 化 Phase 1-2 完成 65%）
+**Git**: 54 commits，14 个测试文件（gateway 7 + caiao_server 5 + 前端 2），CI 已完善（含 manifest 校验 + server 测试）
 
 ---
 
@@ -28,12 +28,13 @@
 - analyze_frame: 线性弹性分析，返回位移和内力
 - select_critical_element: 基于最大轴力选择关键柱
 
-### Day 5: Unity C# 脚本 + Unity 模拟器 CAIAO ⚠️ 部分完成
+### Day 5: Unity C# 脚本 + Unity 模拟器 CAIAO ✅ 完成
 - SimulationController.cs: TCP 监听 → JSON 指令解析 → 物理拆除/重置
 - FrameBuilder.cs: Editor 工具，自动构建框架几何体和关节连接
 - WebRTCStreamer.cs: 摄像头捕获 → WebRTC 推流
 - unity_simulator CAIAO server: apply_demolition_action / reset_simulation
-- **但**: 未在 Unity Editor 中实际测试，无场景文件、无预制件
+- XuanwuAISceneSetup.cs: Unity Editor → Tools → XuanwuAI → Setup Scene 一键场景搭建
+- 前端一键 Launch Unity（自动启动 Editor + Setup Scene + Play）
 
 ### Day 6: AI 自主拆除循环 ✅ 完成
 - SYSTEM_PROMPT 包含完整拆除工作流
@@ -90,49 +91,61 @@
 17. **按模型记忆 LLM 配置**: localStorage 以 model 为 key 存储 `{api_key, base_url}`，切换模型自动回填 URL/Key
 18. **DeepSeek 思维链兼容**: 保留并回传 `reasoning_content` 字段，支持 DeepSeek v4-pro 等推理模型
 
+### 2026-05-22 之后新增完成的内容
+
+19. **CAIAOServerizer 复合 Server**: quick_analysis_server（frame_generator + anastruct + select_critical 合并为单次调用）、full_analysis_3d_server（3D 生成 → UnifiedFrame 转换 → PyNite 3D 分析 → 选关键柱）
+20. **30 个 CAIAO Server 全部 caiao.yaml 化**: 覆盖率 100%，legacy 硬编码 SERVER_CONFIGS（175 行）已删除
+21. **5 个 Composite Pipeline**: abaqus_collapse_pipeline、full_bim_demolition、run_full_analysis、visual_demolition_mechanics、visual_demolition_topology（纯 YAML 声明式编排，零 Python 代码）
+22. **Abaqus 倒塌仿真集成**: abaqus_environment_server（环境发现 + 校验）、abaqus_session_server（CAE 持久会话，15 个建模/分析/拆除工具）、abaqus_collapse_pipeline（倒塌全流程编排）
+23. **Blender 可视化管线**: 6 个 Blender CAIAO server（environment、build、animate、machinery、render、pipeline）+ animation_control_server + physics_server
+24. **Unity 3D 集成完善**: WebRTC 视频流面板、前端一键 Launch Unity（自动启动 Editor + Setup Scene + Play 模式）、SVG 2D 降级方案自动 fallback
+25. **BIM 模型 Server**: bim_model_server（2087 行，7 个工具）支持 IFC 格式
+26. **3D 框架可视化**: frame-visualization-3d.tsx（925 行）Three.js 3D 渲染
+27. **拆除动画系统**: timeline-editor、demolition-controller、animation-exporter 三个前端组件 + 4 个 CAIAO composite server
+28. **Gateway 架构拆分**: main.py 从 1298 行拆分为 routers/（6 文件）+ services/pipeline_service.py + main.py（453 行）
+29. **PyPI caiao 包迁移**: Gateway 不再维护自己的 Hub 实现，改用 PyPI `caiao` 包
+30. **CAIAO Manager Server**: manager_server（3045 行，24 个工具）——元 Server：创建/扩展/健康检查/迁移/检索/编排
+31. **中英文双语支持**: frontend/lib/i18n.ts（684 行），所有用户可见文字走 `t(key, lang)` 调用
+32. **场景选择器**: scenario-picker.tsx 支持多种结构类型和拆除策略
+33. **CI 完善**: 并发控制、pip 缓存、caiao.yaml 清单校验、CAIAO server 测试自动发现执行
+
 ---
 
-## 三、已完成但有问题的部分
+## 三、当前已知问题
 
 ### 3.1 OpenSees 在 Windows 上不可用
 - **状态**: openseespy 依赖的 DLL 无法加载；opensees_server 启动时捕获异常后以降级模式运行
 - **影响**: 高精度分析不可用；`/verify` 端点返回 "unavailable" 状态
 - **解决方案**: 在 Linux/macOS 上部署可正常使用，或使用 WSL2
 
-### 3.2 Unity C# 脚本未实际测试
-- **状态**: 3 个 .cs 文件已编写但未在 Unity Editor 中运行
-- **缺少**: `.unity` 场景文件、`.prefab` 预制件、`Assets/Scenes/` 为空
-- **依赖**: `com.unity.webrtc` 包需要手动安装
-- **原因**: 当前环境无 Unity Editor 2021.3 LTS
+### 3.2 测试覆盖率偏低
+- **状态**: 30 个 server 中仅 5 个有测试（17%），核心组件 frame-visualization.tsx（1422 行）零覆盖
+- **估算覆盖率**: 约 6%
+- **前端 page.tsx**: 2793 行单文件，尚未提取自定义 hook
 
-### 3.3 mem0 记忆系统需要 OpenAI API Key
-- **状态**: 初始化失败时静默降级，返回空上下文。现已添加 `reconfigure()` 方法，前端保存 LLM 设置时自动同步 API Key 并重新初始化
-- **当前**: 依赖于 mem0 库对 DeepSeek API 的兼容性（embeddings 接口）
-- **日志**: 前端保存设置后自动重试初始化
+### 3.3 部分 Server 存在功能重叠
+- **分析求解器**: 4 个（anastruct/opensees/pynite/fapp），fapp 无 pipeline 引用
+- **visual_demolition**: mechanics 和 topology 两个 pipeline 仅差 2 个 FEM 步骤
+- **comparison_server**: 直接从 planning_server 导入函数，违反 Server 独立原则
 
 ### 3.4 CAIAO SDK 在 Windows 上的 cancel scope 问题
 - **现象**: uvicorn reload 模式下偶发 `RuntimeError: Attempted to exit cancel scope in a different task`
 - **影响**: 开发时重启偶发崩溃，生产环境（无 reload）不受影响
 
-### 3.5 没有配置 LLM API Key ✅ 已解决
-- **状态**: 前端 LLM Settings 对话框支持手动输入 API Key / Base URL / Model，localStorage 按模型记忆
-- **后端**: `POST /settings/llm` 端点运行时更新 LLM Engine 配置，无需重启
-- **E2E 验证**: generate_simple_frame → analyze_frame → select_critical_element 全管线通过真实 LLM 调用验证
-- **注意**: 使用 DeepSeek 思维链模式需保留 `reasoning_content` 字段（已修复）
+### 3.5 部分 Server 调用链路不清晰（孤岛）
+- planning_server（1562 行）、scenario_server（420 行）、comparison_server（552 行）的前端/LLM 可达性待审查
 
 ---
 
 ## 四、跳过/略过的内容
 
-1. **opensees_server / unity_simulator 单元测试**: 这 2 个 `tests/` 目录仍为空（opensees 不可用，unity_simulator 需 TCP mock）
-2. **Unity 场景搭建**: 无 `.unity` 场景文件，无材质配置，无物理参数调优
-3. **WebRTC 信令服务**: WebRTCStreamer 只生成了 SDP offer，前端侧无对应的 WebRTC answer 消费逻辑
-4. **OpenSees 真实对比验证**: `/verify` 端点无真实 OpenSees 数据（平台限制）
-5. **拆除动画的渐进式坍塌**: SimulationController 只有简单的爆炸力施加，无逐帧坍塌传播模拟
-6. **多用户会话隔离**: 单例 Agent/Memory，无多用户支持
-7. **前端路由**: 仅单页应用，无多页面路由（Next.js App Router 未充分利用）
-8. **VerificationPanel 组件测试**: 需要 mock API 调用 + recharts ResponsiveContainer 环境
-9. **国际化 (i18n)**: 仅英文
+1. **opensees_server / unity_simulator 单元测试**: 仍为空（opensees 需特定平台，unity 需 TCP mock）
+2. **24 个 CAIAO server 无测试**: 多数为 Blender/Abaqus/composite，依赖外部工具或纯编排
+3. **OpenSees 真实对比验证**: Windows 上不可用，`/verify` 端点返回 "unavailable"
+4. **多用户会话隔离**: 单例 Agent/Memory，无多用户支持
+5. **前端路由**: 仅单页应用，无多页面路由（Next.js App Router 未充分利用）
+6. **frame-visualization.tsx 测试**: 核心 SVG/Canvas 组件（1422 行）零覆盖
+7. **E2E 测试**: 关键数据流（生成→分析→拆除→动画）无自动化覆盖
 
 ---
 
@@ -239,31 +252,33 @@ curl -X POST http://localhost:8000/tools/call \
 
 | 模块 | 测试文件 | 测试数 | 状态 |
 |------|---------|--------|------|
-| gateway/caiao (pip package) | tests/test_caiao_hub.py | 7 | ✅ 全部通过 |
+| gateway/caiao_hub | tests/test_caiao_hub.py | 7 | ✅ 全部通过 |
 | gateway/llm_engine | tests/test_llm_engine.py | 9 | ✅ 全部通过 |
 | gateway/agent_loop | tests/test_agent_loop.py | 6 | ✅ 全部通过 |
 | gateway/api | tests/test_api.py | 5 | ✅ 全部通过（需 gateway 运行中） |
 | gateway/memory | tests/test_memory.py | 5 | ✅ 全部通过 |
-| gateway/integration | tests/test_textcontent_fix.py | 1 | ✅ 全部通过 |
-| demo_calculator | tests/test_server.py | 9 | ✅ 全部通过 |
+| gateway/data_flow | tests/test_data_flow.py | 11 | ✅ 全部通过 |
+| gateway/textcontent | tests/test_textcontent_fix.py | 1 | ✅ 全部通过 |
 | anastruct_server | tests/test_server.py | 19 | ✅ 全部通过 |
+| demo_calculator | tests/test_server.py | 4 | ✅ 全部通过 |
+| frame_generator | tests/test_core.py | 8+ | ✅ 全部通过 |
+| full_analysis_3d_server | test_server.py | 6+ | ✅ 全部通过 |
+| manager_server | test_manager.py | 20+ | ✅ 全部通过 |
 | frontend/page | __tests__/page.test.tsx | 7 | ✅ 全部通过 |
-| frontend/summary | __tests__/mechanical-summary.test.tsx | 9 | ✅ 全部通过 |
-| opensees_server | tests/ | 0 | ❌ 空目录 |
-| unity_simulator | tests/ | 0 | ❌ 空目录 |
-| **合计** | | **82** | **全部通过** |
+| frontend/summary | __tests__/mechanical-summary.test.tsx | 8 | ✅ 全部通过 |
+| **合计** | **14 个测试文件** | **~120** | **全部通过** |
 
 ### 7.2 未测试内容
 
 | 内容 | 原因 |
 |------|------|
-| opensees_server / unity_simulator | tests/ 目录为空（opensees 不可用，unity 需 TCP mock） |
-| Unity C# 脚本 | 无 Unity Editor 环境 |
+| 25 个 CAIAO server | 无测试文件（多数为 Blender/Abaqus/composite，依赖外部工具） |
+| frame-visualization.tsx（1422 行） | 核心 SVG/Canvas 组件，零覆盖 |
+| verification-panel.tsx（743 行） | 需要 mock API + recharts |
+| Unity C# 脚本 | 无 Unity Editor 测试框架 |
 | WebSocket 实时消息流 | 无 WebSocket 集成测试 |
-| E2E 用户场景 | 无端到端测试框架（建议 Playwright） |
-| WebRTC 视频流 | 缺少 Unity Editor + 前端信令实现 |
-| VerificationPanel | 需要 mock API 调用 + recharts ResponsiveContainer |
-| ErrorBoundary 组件 | 无独立测试（仅集成在页面中） |
+| E2E 用户场景（生成→分析→拆除→动画） | 无端到端测试 |
+| i18n 翻译 key 完整性 | 无自动校验 |
 
 ### 7.3 手动验证通过的内容
 
@@ -278,60 +293,52 @@ curl -X POST http://localhost:8000/tools/call \
 
 ### 8.1 架构层面
 
-1. **CAIAO server 脱离 gateway 进程**: 当前 CAIAO server 作为子进程由 gateway 管理。如需分布式部署，考虑将 CAIAO server 独立部署并通过 HTTP/SSE transport 连接。
+1. **Gateway services 层补齐**: routers/ 已完成拆分，但 services/ 只有 pipeline_service.py。chat service、verify service、unity manager service 仍需提取。
 
-2. **移除 demo 模拟代码**: 当前 `/verify` 端点已清理假数据生成逻辑，在 OpenSees 不可用时干净返回 "unavailable"。
+2. **前端 page.tsx 拆分**: 当前 2793 行，需提取 useChat/useStructure/usePipeline 三个自定义 hook，目标是 500 行以内。
 
-3. **WebSocket 消息协议版本化**: 当前 WebSocket JSON 消息无版本字段，前后端协议变更时可能不兼容。建议添加 `version` 字段。
+3. **CAIAO Server 去重**: 分析求解器 4 个（anastruct/opensees/pynite/fapp），visual_demolition pipeline 2 个（mechanics/topology 仅差 2 步），需做取舍。
 
-4. **Agent 状态持久化**: 当前 Agent 循环状态（history、pending steps）仅存于内存，进程重启后丢失。可考虑持久化到数据库或 Redis。
+4. **孤岛 Server 处置**: planning_server、scenario_server、comparison_server 的调用链需要打通或标记为 deprecated。
+
+5. **WebSocket 消息协议版本化**: 当前 WebSocket JSON 消息无版本字段，前后端协议变更时可能不兼容。
+
+6. **Agent 状态持久化**: 当前 Agent 循环状态仅存于内存，进程重启后丢失。
 
 ### 8.2 前端
 
-5. **组件拆分**: `page.tsx` 已膨胀到 ~400 行，建议将 Chat 面板、Log Stream、Right Sidebar 拆分为独立组件。
+7. **frame-visualization.tsx 测试**: 核心组件（1422 行）零覆盖，至少需要应力比颜色分段、杆件分类、倒塌判定逻辑的单元测试。
 
-6. **状态管理**: 当前使用多个 useState，跨组件通信困难。对于复杂应用可考虑 Zustand 或 Jotai。
+8. **状态管理**: 当前使用多个 useState，跨组件通信困难。提取 hook 后可考虑 Context 或轻量状态库。
 
-7. **WebRTC 消费端未实现**: 前端目前无 WebRTC answer 生成逻辑。需要实现 RTCPeerConnection 接收 Unity 视频流。
+9. **i18n key 完整性校验**: 当前无自动检查确保所有 key 在 EN/ZH 翻译文件中都存在，需添加 CI 校验脚本。
 
-8. **响应式布局**: 当前三栏布局使用固定百分比宽度，小屏幕体验差。建议添加移动端适配。
+### 8.3 测试
 
-### 8.3 Unity
+10. **关键数据流 E2E 测试**: 生成→分析→关键柱识别→渐进拆除→倒塌可视化 的完整链路需要自动化测试。
 
-9. **物理参数需要标定**: 当前 Rigidbody mass=500kg、linearDamping=0.1 等参数为随意设置，需要与真实结构物理特性对标。
+11. **CAIAO server 连通性测试**: 24 个 server 零覆盖，至少需要 MCP ping 级别的连通性测试。
 
-10. **拆除力学模型过于简化**: 仅施加爆炸力 + 禁用关节。真实的渐进式坍塌需要：材料非线性、接触检测、碎片化、连锁失效传播。
+### 8.4 安全
 
-11. **WebRTC 包依赖**: `com.unity.webrtc` 需要确认版本兼容性（Unity 2021.3 + WebRTC 3.x）。
+12. **WebSocket 无认证**: 生产环境需要 JWT 或 session 认证。
 
-### 8.4 测试
+13. **Unity TCP 无认证**: `localhost:5005` 的 JSON 协议无安全机制。
 
-12. **opensees_server / unity_simulator 测试空白**: 这 2 个 server 的 `tests/` 目录仍为空。
-
-13. **VerificationPanel 组件测试**: 需要 mock API 调用 + recharts ResponsiveContainer。
-
-14. **添加 E2E 测试**: 使用 Playwright 或 Cypress 覆盖完整用户流程。
-
-### 8.5 安全
-
-15. **WebSocket 无认证**: 生产环境需要 JWT 或 session 认证。
-
-16. **Unity TCP 无认证**: `localhost:5005` 的 JSON 协议无安全机制。如果 Unity 和 Gateway 不在同一机器，需要添加 TLS + 认证。
-
-17. **输入校验**: REST API 的 tool arguments 未做深度校验，依赖 CAIAO server 内部处理。建议在 gateway 层添加 schema 验证。
+14. **输入校验**: REST API 的 tool arguments 未做深度校验，依赖 CAIAO server 内部处理。
 
 ---
 
 ## 九、其他交代事项
 
-1. **Git 仓库已初始化**: 4 个 commits，含 `.gitignore` 和 GitHub Actions CI。如需推送到远程仓库（如 GitHub），添加 remote 后 push 即可。
+1. **Git 仓库**: 54 个 commits，已配置 GitHub Actions CI（并发控制、pip 缓存、caiao.yaml 清单校验、CAIAO server 测试自动发现）。
 
-2. **venv 路径**: gateway 的虚拟环境在 `gateway/venv/`，CAIAO server 也使用同一 venv 的 Python（`VENV_PYTHON` 常量引用）。不要删除此 venv。
+2. **venv 路径**: gateway 的虚拟环境在 `gateway/venv/`，CAIAO server 也使用同一 venv 的 Python。不要删除此 venv。
 
-3. **litellm → openai 迁移**: 原始计划使用 litellm，但因安装问题切换为 openai SDK。如果后续需要支持多种 LLM 提供商（Anthropic, Azure 等），可以考虑重新引入 litellm（在非 Windows 环境）。
+3. **LLM 配置**: 默认模型为 gpt-4o，可通过前端 Settings 对话框或环境变量覆盖。支持 DeepSeek v4-pro 等兼容 OpenAI SDK 的模型。
 
-4. **deepseek-v4-pro 模型**: 当前会话使用的模型是 deepseek-v4-pro，但代码中默认配置为 gpt-4o。更改模型需修改 `llm_engine.py` 的默认参数或设置环境变量。
+4. **CAIAO Server 清单**: 全部 30 个 server 都有 caiao.yaml，新增 server 需遵循 `_template/` 模板和 `CAIAO_PROTOCOL.md` 规范。
 
-5. **ANASTRUCT_API_FIXES**: anaStruct 的 API 有多个陷阱（`ss.node_map` 不是 `ss.nodes`、位移键 `uy` 不是 `uz`、`get_element_results` 不是 `get_element_result_range`），已全部修正。升级 anaStruct 版本时需重新验证。
+5. **Unity 集成**: 前端一键 Launch Unity（自动启动 Editor + Setup Scene + Play），WebRTC 视频流面板已实现。Unity 不可用时自动 fallback 到 SVG 2D 动画。
 
-6. **Unity 项目缺少工程文件**: `unity_project/` 目录下只有 `Assets/Scripts/` 中的 .cs 文件。缺少 `.sln`、`.csproj`、`ProjectSettings/`、`Packages/manifest.json` 等 Unity 项目骨架。需要在 Unity Editor 中创建项目后手动导入这些脚本。
+6. **项目评估报告**: 完整项目评估见 `dev-notes/reference/2026-06-05-project-assessment.md`。
