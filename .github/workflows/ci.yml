@@ -6,27 +6,81 @@ on:
   pull_request:
     branches: [main, master]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
-    name: Backend Tests (Python)
+    name: Backend (Python 3.11)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: gateway
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install dependencies
+          cache: pip
+          cache-dependency-path: gateway/requirements.txt
+
+      - name: Install base dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
-      - name: Run tests
-        run: python -m pytest tests/ -v
+          pip install -r gateway/requirements.txt
+          pip install pyyaml
+
+      - name: Validate CAIAO manifests
+        run: |
+          python -c "
+          import yaml, glob, sys
+          manifests = sorted(glob.glob('caiao_servers/*/caiao.yaml'))
+          errors = []
+          for f in manifests:
+              try:
+                  with open(f) as fh:
+                      d = yaml.safe_load(fh)
+                  for key in ('name','version','tools'):
+                      if key not in d:
+                          errors.append(f'{f}: missing required key \"{key}\"')
+                  tools = d.get('tools')
+                  if not isinstance(tools, list) or not tools:
+                      errors.append(f'{f}: tools must be a non-empty list')
+                  for t in tools:
+                      if not isinstance(t, dict) or 'name' not in t:
+                          errors.append(f'{f}: each tool must have a name field')
+              except Exception as e:
+                  errors.append(f'{f}: {e}')
+          if errors:
+              for e in errors:
+                  print(f'ERROR: {e}')
+              sys.exit(1)
+          print(f'{len(manifests)} manifests validated')
+          "
+
+      - name: Run gateway tests
+        run: cd gateway && python -m pytest tests/ -v
+
+      - name: Install CAIAO server test dependencies
+        run: pip install anastruct pynite 2>&1 || echo "Some server deps unavailable (non-fatal)"
+
+      - name: Run CAIAO server tests
+        continue-on-error: true
+        run: |
+          failed=0
+          for d in caiao_servers/*/; do
+            name=$(basename "$d")
+            tests=$(ls "$d"test_*.py "$d"tests/test_*.py 2>/dev/null || true)
+            if [ -n "$tests" ]; then
+              echo "::group::$name"
+              PYTHONPATH=".:$d:$PYTHONPATH" python -m pytest "$d" -v --continue-on-collection-errors --rootdir="$d" || failed=$((failed+1))
+              echo "::endgroup::"
+            fi
+          done
+          if [ $failed -gt 0 ]; then
+            echo "::warning::$failed server test suite(s) had failures"
+          fi
 
   frontend:
-    name: Frontend Build + Tests
+    name: Frontend (Node 20)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -38,13 +92,18 @@ jobs:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+
       - name: Install dependencies
         run: npm ci
+
       - name: TypeScript check
         run: npx tsc --noEmit
+
       - name: Lint
         run: npm run lint -- --max-warnings 0
+
       - name: Run tests
         run: npx vitest run
+
       - name: Build
         run: npx next build
