@@ -186,6 +186,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Request body size limit (10 MB) ───────────────────────────────────────
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse as _JSONResponse
+
+
+class _BodySizeLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        cl = request.headers.get("content-length")
+        if cl and int(cl) > 10 * 1024 * 1024:
+            return _JSONResponse({"detail": "Request body too large"}, status_code=413)
+        return await call_next(request)
+
+
+app.add_middleware(_BodySizeLimitMiddleware)
+
 # ── All REST endpoints are defined in gateway/routers/ ────────────────────
 # Routers are registered in lifespan() via app.include_router().
 # Pipeline helpers are in gateway/services/pipeline_service.py.
@@ -375,5 +390,5 @@ async def ws_chat(websocket: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False,
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=False,
                 ws_ping_interval=25, ws_ping_timeout=10)

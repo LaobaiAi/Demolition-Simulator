@@ -23,10 +23,15 @@ async def get_llm_config(request: Request):
     llm = request.app.state.llm_engine
     if llm is None:
         return JSONResponse({"status": "error", "message": "LLM engine not initialized"}, status_code=503)
+    masked = ""
+    key = llm.api_key or ""
+    if key and len(key) > 4:
+        masked = "*" * (len(key) - 4) + key[-4:]
     return {
         "model": llm.model,
         "base_url": llm.base_url or "",
         "has_api_key": bool(llm.api_key),
+        "api_key_masked": masked,
     }
 
 
