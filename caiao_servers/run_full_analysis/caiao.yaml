@@ -1,8 +1,10 @@
 name: run_full_analysis
 kind: composite
 description: "Pipeline: generate frame → analyze → find critical element"
-status: active
+status: deprecated
 since: "2026-06-05"
+deprecated_since: "2026-06-05"
+replaced_by: quick_analysis_server
 
 input_schema:
   type: object

@@ -11,8 +11,9 @@ async def main():
         # Send launch_pipeline for quick_visual
         msg = {
             "type": "launch_pipeline",
-            "pipeline": "visual_demolition_topology",
+            "pipeline": "visual_demolition",
             "params": {
+                "mode": "topology",
                 "strategy": "top_down",
                 "effects_preset": "standard",
                 "speed": 1.0,

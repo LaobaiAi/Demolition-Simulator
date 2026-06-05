@@ -4,6 +4,8 @@ import asyncio
 import json
 import logging
 import os
+import platform
+import subprocess
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -105,7 +107,22 @@ def _detect_running_unity() -> bool:
     return False
 
 
-import subprocess
+
+def _system_load_checker() -> float:
+    if platform.system() == "Linux" and os.path.exists("/proc/loadavg"):
+        with open("/proc/loadavg") as f:
+            return float(f.read().split()[0])
+    try:
+        import psutil
+        return psutil.getloadavg()[0] / (os.cpu_count() or 4)
+    except Exception:
+        return 0.0
+
+
+_TRIM_BLACKLIST = {
+    "chain_rounds", "animation_sequence", "body_states", "keyframes",
+    "steps", "nodes", "elements", "element_forces",
+}
 
 
 # --- No local tool handlers needed — composite pipelines are auto-registered
@@ -116,7 +133,11 @@ import subprocess
 async def lifespan(app: FastAPI):
     global hub, agent, memory, llm_engine
     logger.info("Starting CAIAO servers...")
-    hub = CAIAOClientHub(SERVER_CONFIGS)
+    hub = CAIAOClientHub(
+        SERVER_CONFIGS,
+        trim_field_blacklist=_TRIM_BLACKLIST,
+        load_checker=_system_load_checker,
+    )
     await hub.start_all()
     saved = _load_llm_config()
     llm_engine = LLMEngine(
