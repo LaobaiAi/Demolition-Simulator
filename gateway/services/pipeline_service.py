@@ -12,6 +12,7 @@ _TOOL_LABELS: dict[str, str] = {
     "sequence_to_animation_data": "Building animation data",
     "generate_effects_config": "Configuring visual effects",
     "init_physics_scene": "Initializing physics engine",
+    "build_frame_model": "Building structural model in Blender",
 }
 
 
@@ -55,6 +56,7 @@ def parse_step_result(raw: dict[str, Any]) -> dict[str, Any]:
     return raw
 
 
+# TODO: read input_map from caiao.yaml instead of hardcoding arg mappings per tool
 def resolve_pipeline_args(
     tool_name: str,
     structure: dict[str, Any] | None,
@@ -105,6 +107,12 @@ def resolve_pipeline_args(
             "structure": effective_structure or structure_params,
             "analysis_result": analysis,
         }
+    if tool_name == "build_frame_model":
+        args: dict[str, Any] = {"building_type": structure_params.get("building_type", "standard")}
+        od = structure_params.get("output_dir")
+        if od:
+            args["output_dir"] = od
+        return args
     return {}
 
 

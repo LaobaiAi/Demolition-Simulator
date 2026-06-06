@@ -3,10 +3,12 @@
 import json
 import logging
 import os
+from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+import httpx
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -60,6 +62,42 @@ async def configure_llm(req: LLMSettingsRequest, request: Request):
             "has_api_key": bool(llm.api_key),
         },
     }
+
+
+@router.post("/llm/test")
+async def test_llm_connection(req: LLMSettingsRequest, request: Request):
+    llm = request.app.state.llm_engine
+    if llm is None:
+        return JSONResponse({"status": "error", "message": "LLM engine not initialized"}, status_code=503)
+
+    key = req.api_key or llm.api_key or ""
+    base_url = (req.base_url or llm.base_url or "https://api.openai.com/v1").rstrip("/")
+    model = req.model or llm.model or "gpt-4o"
+
+    if not key:
+        return JSONResponse({"status": "error", "message": "No API key configured"}, status_code=400)
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{base_url}/chat/completions",
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {key}",
+                },
+                json={"model": model, "max_tokens": 10, "messages": [{"role": "user", "content": "hi"}]},
+            )
+            if resp.is_success:
+                return {"status": "ok", "message": "Connection successful"}
+            detail = resp.text[:200]
+            return JSONResponse(
+                {"status": "error", "message": f"HTTP {resp.status_code}: {detail}"},
+                status_code=502,
+            )
+    except httpx.TimeoutException:
+        return JSONResponse({"status": "error", "message": "Connection timed out"}, status_code=504)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)[:200]}, status_code=502)
 
 
 @router.get("/memory/status")

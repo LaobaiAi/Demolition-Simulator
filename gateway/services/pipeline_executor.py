@@ -38,7 +38,7 @@ async def execute_pipeline_streaming(
         return
 
     has_structure = structure and structure.get("nodes") and structure.get("elements")
-    has_generator = any(s.get("tool") == "generate_frame" for s in pipeline_def)
+    has_generator = any(s.get("tool") in ("generate_frame", "build_frame_model") for s in pipeline_def)
 
     if not has_structure and not has_generator:
         yield {
