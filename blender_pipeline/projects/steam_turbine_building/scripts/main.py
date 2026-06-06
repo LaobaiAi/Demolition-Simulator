@@ -26,6 +26,10 @@ SCRIPTS_DIR = os.path.join(PROJECT_DIR, "scripts")
 DATA_DIR = os.path.join(PROJECT_DIR, "data")
 OUTPUT_DIR = os.path.join(PROJECT_DIR, "output", "blend")
 
+_PIPELINE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+_BLEND_SCRIPTS_DIR = os.path.join(_PIPELINE_DIR, "scripts")
+if _BLEND_SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _BLEND_SCRIPTS_DIR)
 if SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, SCRIPTS_DIR)
 if PROJECT_DIR not in sys.path:
@@ -57,18 +61,23 @@ def main():
 
     if "--animate" in args:
         print("  [模式] 施工动画")
-        from build_steam_turbine import animate_construction
+        from animate_demolition import main as animate_main
         blend_path = os.path.join(OUTPUT_DIR, "scene_base.blend")
         if not os.path.exists(blend_path):
             print(f"  [ERROR] 缺少基础模型: {blend_path}")
             print(f"  请先运行: blender --background --python main.py")
             return
-        # 如果已经在blender中打开了文件，直接执行
-        animate_construction(config)
+        animate_main()
     else:
         print("  [模式] 建筑建模")
-        from build_steam_turbine import build_model
-        build_model(config)
+        from _common import make_material, clear_scene
+        from build_steam_turbine import build as build_model, setup_scene
+        # clear_scene first, THEN create materials (avoid zero-user material removal)
+        clear_scene()
+        white_mat = make_material("WhiteModel", (0.92, 0.92, 0.92), roughness=0.6)
+        ground_mat = make_material("Ground", (0.35, 0.28, 0.18), roughness=0.8)
+        setup_scene(config, ground_mat)
+        build_model(config, white_mat)
         # 保存基础模型
         blend_path = os.path.join(OUTPUT_DIR, "scene_base.blend")
         bpy.ops.wm.save_as_mainfile(filepath=blend_path)

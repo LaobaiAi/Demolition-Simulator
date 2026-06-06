@@ -12,7 +12,7 @@ import json
 
 import bpy
 
-_PIPELINE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_PIPELINE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 _SCRIPTS_DIR = os.path.join(_PIPELINE_DIR, "scripts")
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
@@ -125,8 +125,6 @@ TYPE_COLORS = {
 def setup_scene(config, ground_mat):
     cfg = config["building"]
     total_len = (cfg["frame_count"] - 1) * cfg["column_spacing"]
-
-    clear_scene()
 
     bpy.ops.object.light_add(type='SUN', location=(total_len / 2, -30, 40))
     sun = bpy.context.object
