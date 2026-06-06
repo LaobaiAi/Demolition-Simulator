@@ -6,7 +6,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RotateCw, ZoomIn, ZoomOut, Move, Loader2 } from "lucide-react";
 
 // ── IFC Loader (optional, with fallback) ──────────────────────────────────────
-const hasIFC = false;
+const hasIFC = true;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface StructureNode {
@@ -73,6 +73,12 @@ export function IFCViewer({
   const controlsRef = useRef<OrbitControls | null>(null);
   const modelGroupRef = useRef<THREE.Group>(null!);
   const elementMeshMap = useRef<Map<number, THREE.Mesh>>(new Map());
+
+  // Upload state
+  const [uploadedIfcName, setUploadedIfcName] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [ifcLoadedFilename, setIfcLoadedFilename] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // State
   const [loading, setLoading] = useState(false);
@@ -224,6 +230,154 @@ export function IFCViewer({
     ctrl.update();
   }, []);
 
+  // ── IFC File Upload Handlers ─────────────────────────────
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.name.toLowerCase().endsWith(".ifc")) return;
+    loadIfcFile(file);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file || !file.name.toLowerCase().endsWith(".ifc")) return;
+    loadIfcFile(file);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+  }, []);
+
+  function loadIfcFile(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (reader.result instanceof ArrayBuffer) {
+        setUploadedIfcName(file.name);
+        setIfcLoadedFilename(file.name);
+        // Trigger reload via effect by storing filename
+        loadIfcFromArrayBuffer(reader.result);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function loadIfcFromArrayBuffer(buffer: ArrayBuffer) {
+    const mg = modelGroupRef.current;
+    if (!mg) return;
+    clearGroup(mg);
+    elementMeshMap.current.clear();
+    setError(null);
+
+    const loadIFC = async () => {
+      let IfcAPI: any;
+      try {
+        const mod = await import("web-ifc");
+        IfcAPI = mod.IfcAPI;
+      } catch {
+        setError("IFC library (web-ifc) not available");
+        return;
+      }
+      if (!IfcAPI) { setError("IFC library not available"); return; }
+
+      setLoading(true);
+      setLoadProgress(0);
+
+      try {
+        const ifcApi = new IfcAPI();
+        await ifcApi.Init();
+
+        const data = new Uint8Array(buffer);
+        const modelId = ifcApi.OpenModel(data);
+
+        // Load all geometry
+        const allGeometries = ifcApi.LoadAllGeometry(modelId);
+        const size = allGeometries.size();
+        let meshCount = 0;
+
+        const sharedMat = new THREE.MeshStandardMaterial({
+          color: "#22d3ee",
+          roughness: 0.4,
+          metalness: 0.6,
+          side: THREE.DoubleSide,
+        });
+
+        for (let i = 0; i < size; i++) {
+          const geom = allGeometries.get(i);
+          const flatMesh = ifcApi.GetFlatMesh(modelId, geom.expressID);
+          if (!flatMesh) continue;
+
+          const geometries = flatMesh.geometries;
+          const geomSize = geometries.size();
+
+          for (let j = 0; j < geomSize; j++) {
+            const flatGeom = geometries.get(j);
+            const verts = ifcApi.GetVertexArray(
+              flatGeom.geometryData.flatVertices,
+              flatGeom.geometryData.flatVertices.size
+            );
+            const indices = ifcApi.GetIndexArray(
+              flatGeom.geometryData.flatIndices,
+              flatGeom.geometryData.flatIndices.size
+            );
+
+            if (!verts || !indices || verts.length === 0 || indices.length === 0) continue;
+
+            const geo = new THREE.BufferGeometry();
+            // web-ifc returns interleaved XYZ coordinates as [x,y,z,x,y,z,...]
+            const pos = new Float32Array(verts.length);
+            for (let k = 0; k < verts.length; k++) pos[k] = verts.get(k);
+            geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+
+            const idx = new Uint32Array(indices.length);
+            for (let k = 0; k < indices.length; k++) idx[k] = indices.get(k);
+            geo.setIndex(new THREE.BufferAttribute(idx, 1));
+
+            geo.computeVertexNormals();
+
+            const mesh = new THREE.Mesh(geo, sharedMat.clone());
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData = { expressID: geom.expressID };
+            mg.add(mesh);
+            elementMeshMap.current.set(geom.expressID, mesh);
+            meshCount++;
+          }
+        }
+
+        ifcApi.CloseModel(modelId);
+        setLoading(false);
+        setElementCount(meshCount);
+        setTimeout(fitCamera, 100);
+      } catch (e) {
+        setLoading(false);
+        setError(`IFC load failed: ${e instanceof Error ? e.message : "Unknown error"}`);
+      }
+    };
+    loadIFC();
+  }
+
+  const handleClear = useCallback(() => {
+    const mg = modelGroupRef.current;
+    if (!mg) return;
+    clearGroup(mg);
+    elementMeshMap.current.clear();
+    setUploadedIfcName(null);
+    setIfcLoadedFilename(null);
+    setError(null);
+    setElementCount(0);
+    // Rebuild fallback if structure data exists
+    if (structure?.nodes?.length && structure?.elements?.length) {
+      buildFallbackStructure(mg);
+    }
+  }, [structure]);
+
   // Separate function for fallback to avoid duplication
   function buildFallbackStructure(group: THREE.Group) {
     if (!structure?.nodes?.length || !structure?.elements?.length) return;
@@ -301,79 +455,92 @@ export function IFCViewer({
     // Attempt IFC loading
     const hasIfcData = hasIFC && (ifcUrl || ifcData);
     if (hasIfcData && typeof window !== "undefined") {
-      // Dynamic import to avoid require() at module scope
       const loadIFC = async () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let IFCLoaderClass: any;
+        let IfcAPI: any;
         try {
-          const mod = await import("web-ifc-three/IFCLoader");
-          IFCLoaderClass = mod.IFCLoader;
+          const mod = await import("web-ifc");
+          IfcAPI = mod.IfcAPI;
         } catch {
-          // IFC not available, fallback
           buildFallbackStructure(mg);
           return;
         }
-        if (!IFCLoaderClass) {
-          buildFallbackStructure(mg);
-          return;
-        }
-        // Defer setState out of effect to avoid react-hooks/set-state-in-effect
-        const t = setTimeout(() => {
-          setLoading(true);
-          setLoadProgress(0);
-        }, 0);
+        if (!IfcAPI) { buildFallbackStructure(mg); return; }
 
-        const loader = new IFCLoaderClass();
-
-        loader.setOnProgress((event: { loaded: number; total: number }) => {
-          const pct = event.total > 0 ? Math.round((event.loaded / event.total) * 100) : 0;
-          setLoadProgress(pct);
-        });
-
-        const onLoad = (ifcModel: THREE.Mesh & { modelID?: number }) => {
-          clearTimeout(t);
-          setLoading(false);
-          setLoadProgress(100);
-          mg.add(ifcModel);
-
-          if (ifcModel.modelID !== undefined) {
-            mg.traverse((child) => {
-              if (child instanceof THREE.Mesh && child.userData?.expressID !== undefined) {
-                const expressId = child.userData.expressID as number;
-                elementMeshMap.current.set(expressId, child);
-              }
-            });
-          }
-
-          setTimeout(fitCamera, 100);
-        };
-
-        const onError = (err: Error) => {
-          clearTimeout(t);
-          setLoading(false);
-          setError(`IFC load failed: ${err.message}`);
-          console.error("IFC load error:", err);
-          buildFallbackStructure(mg);
-        };
+        setLoading(true);
+        setLoadProgress(0);
 
         try {
+          const ifcApi = new IfcAPI();
+          await ifcApi.Init();
+
+          let data: Uint8Array;
           if (ifcUrl) {
-            loader.load(ifcUrl, onLoad, undefined, onError);
+            const resp = await fetch(ifcUrl);
+            const buf = await resp.arrayBuffer();
+            data = new Uint8Array(buf);
           } else if (ifcData) {
-            const isBase64 =
-              ifcData.length > 100 &&
-              /^[A-Za-z0-9+/=]+$/.test(ifcData.substring(0, 100));
-            if (isBase64) {
-              const binary = atob(ifcData);
-              loader.parse(binary, onLoad);
-            } else {
-              loader.parse(ifcData, onLoad);
+            const isBase64 = ifcData.length > 100 && /^[A-Za-z0-9+/=]+$/.test(ifcData.substring(0, 100));
+            const binary = isBase64 ? atob(ifcData) : ifcData;
+            data = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) data[i] = binary.charCodeAt(i);
+          } else { setLoading(false); return; }
+
+          const modelId = ifcApi.OpenModel(data);
+          const allGeometries = ifcApi.LoadAllGeometry(modelId);
+          const size = allGeometries.size();
+          let meshCount = 0;
+
+          const sharedMat = new THREE.MeshStandardMaterial({
+            color: "#22d3ee", roughness: 0.4, metalness: 0.6, side: THREE.DoubleSide,
+          });
+
+          for (let i = 0; i < size; i++) {
+            const geom = allGeometries.get(i);
+            const flatMesh = ifcApi.GetFlatMesh(modelId, geom.expressID);
+            if (!flatMesh) continue;
+
+            const geometries = flatMesh.geometries;
+            const geomSize = geometries.size();
+
+            for (let j = 0; j < geomSize; j++) {
+              const flatGeom = geometries.get(j);
+              const verts = ifcApi.GetVertexArray(
+                flatGeom.geometryData.flatVertices,
+                flatGeom.geometryData.flatVertices.size
+              );
+              const indices = ifcApi.GetIndexArray(
+                flatGeom.geometryData.flatIndices,
+                flatGeom.geometryData.flatIndices.size
+              );
+              if (!verts || !indices || verts.length === 0 || indices.length === 0) continue;
+
+              const geo = new THREE.BufferGeometry();
+              const pos = new Float32Array(verts.length);
+              for (let k = 0; k < verts.length; k++) pos[k] = verts.get(k);
+              geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+
+              const idx = new Uint32Array(indices.length);
+              for (let k = 0; k < indices.length; k++) idx[k] = indices.get(k);
+              geo.setIndex(new THREE.BufferAttribute(idx, 1));
+              geo.computeVertexNormals();
+
+              const mesh = new THREE.Mesh(geo, sharedMat.clone());
+              mesh.castShadow = true;
+              mesh.receiveShadow = true;
+              mesh.userData = { expressID: geom.expressID };
+              mg.add(mesh);
+              elementMeshMap.current.set(geom.expressID, mesh);
+              meshCount++;
             }
           }
-        } catch (e) {
-          clearTimeout(t);
+
+          ifcApi.CloseModel(modelId);
           setLoading(false);
-          setError(`IFC operation failed: ${e instanceof Error ? e.message : "Unknown error"}`);
+          setElementCount(meshCount);
+          setTimeout(fitCamera, 100);
+        } catch (e) {
+          setLoading(false);
+          setError(`IFC load failed: ${e instanceof Error ? e.message : "Unknown error"}`);
           buildFallbackStructure(mg);
         }
       };
@@ -515,8 +682,49 @@ export function IFCViewer({
           </div>
         )}
 
+        {/* Drop Zone — when no IFC data and no structure */}
+        {!loading && !uploadedIfcName && !ifcUrl && !ifcData && !structure?.nodes?.length && (
+          <div
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            className={`absolute inset-0 z-15 flex flex-col items-center justify-center gap-4 transition-colors ${
+              dragOver
+                ? "bg-primary/10 border-2 border-primary border-dashed"
+                : "bg-xuanwu-deep/60 border-2 border-border/30 border-dashed"
+            } rounded-lg m-4`}
+          >
+            <div className="flex flex-col items-center gap-2 text-muted-foreground">
+              <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+              </svg>
+              <span className="text-sm font-medium">Drop .ifc file here</span>
+              <span className="text-xs">or</span>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="px-4 py-1.5 text-xs font-medium rounded-md bg-primary/20 text-primary hover:bg-primary/30 transition-colors cursor-pointer"
+              >
+                Click to upload
+              </button>
+            </div>
+            <input ref={fileInputRef} type="file" accept=".ifc" className="hidden" onChange={handleFileSelect} />
+          </div>
+        )}
+
         {/* Toolbar */}
         <div className="absolute top-3 right-3 z-10 flex flex-col gap-1">
+          {/* Clear uploaded IFC */}
+          {uploadedIfcName && (
+            <button
+              onClick={handleClear}
+              className="p-1.5 rounded-md border border-border bg-background/90 text-muted-foreground hover:text-red-400 hover:border-red-500/50 transition-colors cursor-pointer shadow-sm"
+              title="Clear IFC model"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
           {/* Zoom controls */}
           <div className="flex items-center rounded-md border border-border bg-background/90 shadow-sm overflow-hidden">
             <button
@@ -554,7 +762,11 @@ export function IFCViewer({
 
         {/* Status bar */}
         <div className="absolute bottom-3 right-3 z-10 bg-background/80 border border-border rounded-md px-2.5 py-1 pointer-events-none flex items-center gap-2">
-          {structure?.elements?.length ? (
+          {uploadedIfcName ? (
+            <span className="text-[10px] text-emerald-400 max-w-[160px] truncate" title={uploadedIfcName}>
+              {uploadedIfcName}
+            </span>
+          ) : structure?.elements?.length ? (
             <span className="text-[10px] text-muted-foreground tabular-nums">
               {elementCount} elements
             </span>
