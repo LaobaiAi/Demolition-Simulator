@@ -1,0 +1,70 @@
+name: steam_turbine_demolition
+kind: composite
+description: "Steam turbine industrial building — build Blender model for demo/visualization"
+status: active
+since: "2026-06-06"
+
+input_schema:
+  type: object
+  required: [mode]
+  properties:
+    mode:
+      type: string
+      description: "Pipeline mode — topology only (no FEM analysis)"
+      enum: [topology]
+    strategy:
+      type: string
+      description: "Demolition strategy"
+    effects_preset:
+      type: string
+      description: "Visual effects preset"
+    speed:
+      type: number
+      description: "Animation speed multiplier"
+
+tools:
+  - name: run_steam_turbine_demolition
+    description: "Full steam turbine demolition pipeline — build model, plan demolition, create animation with effects"
+    tags: [pipeline, demolition, blender, industrial, animation]
+
+pipeline:
+  - server: blender_build_server
+    tool: build_frame_model
+    label: Building steam turbine model
+    modes: [topology]
+
+  - server: planning_server
+    tool: plan_demolition_sequence
+    input_map:
+      structure: build_frame_model
+      strategy: strategy
+    map_result: demolition_plan
+    label: Planning demolition sequence
+    modes: [topology]
+
+  - server: animation_control_server
+    tool: create_timeline
+    input_map:
+      demolition_plan: demolition_plan
+      effects_preset: effects_preset
+    map_result: timeline
+    label: Creating animation timeline
+    modes: [topology]
+
+  - server: animation_control_server
+    tool: sequence_to_animation_data
+    input_map:
+      demolition_sequence: timeline
+      speed: speed
+    map_result: animation_data
+    label: Building animation data
+    modes: [topology]
+
+  - server: animation_control_server
+    tool: generate_effects_config
+    input_map:
+      preset: effects_preset
+      structure: build_frame_model
+    map_result: effects_config
+    label: Configuring visual effects
+    modes: [topology]
