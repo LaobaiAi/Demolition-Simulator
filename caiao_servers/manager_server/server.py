@@ -116,13 +116,13 @@ async def list_tools():
            "symbols": _s("array", "List of symbol names to import")},
           ["server_name", "module", "symbols"]),
 
-        _t("health_check", "Run health check on one or all servers",
+        _t("health_check", "[REST endpoint] Run health check — use GET /servers/health for live data",
           {"server_name": _s("string", "Server name (omit for all)")}, []),
-        _t("get_metrics", "Get runtime metrics for one or all servers",
+        _t("get_metrics", "[REST endpoint] Get runtime metrics — use GET /servers/metrics for live data",
           {"server_name": _s("string", "Server name (omit for all)")}, []),
-        _t("restart_server", "Request a server restart through the gateway",
+        _t("restart_server", "[REST endpoint] Request server restart — use POST /servers/{name}/restart",
           {"server_name": _s("string", "Server to restart")}, ["server_name"]),
-        _t("configure_health", "Update health monitoring policy for a server",
+        _t("configure_health", "[WIP] Update health monitoring policy in caiao.yaml manifest",
           {"server_name": _s("string", "Target server name"),
            "restart_on_crash": _s("boolean", "Auto-restart on crash"),
            "max_restarts": _s("integer", "Max restarts before giving up"),
@@ -370,8 +370,11 @@ def _do_get_metrics(args: dict) -> dict:
 
 def _do_restart_server(args: dict) -> dict:
     sname = args["server_name"]
-    return {"status": "requested", "server": sname,
-            "note": "Restart request sent. The gateway handles the actual restart."}
+    return {
+        "status": "unavailable",
+        "server": sname,
+        "reason": "Manager runs in isolated subprocess — use POST /servers/{name}/restart REST endpoint",
+    }
 
 
 def _do_configure_health(args: dict) -> dict:
@@ -645,11 +648,17 @@ def _do_suggest_pipeline(args: dict) -> dict:
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
 def _hub_health_state(server_name: str) -> dict:
-    return {"state": "unknown", "pid": None}
+    return {
+        "state": "unavailable",
+        "reason": "Manager runs in isolated subprocess — use GET /servers/health for live data",
+    }
 
 
 def _hub_metrics(server_name: str) -> dict:
-    return {"total_calls": 0, "avg_latency_ms": 0, "error_count": 0}
+    return {
+        "error": "unavailable",
+        "reason": "Manager runs in isolated subprocess — use GET /servers/metrics for live data",
+    }
 
 
 def _format_pipeline_hint(steps: list[dict]) -> str:

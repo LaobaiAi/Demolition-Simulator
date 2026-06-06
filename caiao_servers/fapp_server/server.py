@@ -9,6 +9,12 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
+import os as _os, sys as _sys
+_p = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+if _p not in _sys.path:
+    _sys.path.insert(0, _p)
+from _shared.analysis_format import annotate_result
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("fapp_server")
 
@@ -190,6 +196,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 return [TextContent(type="text", text="Error: 'structure' argument is required")]
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(None, _run_fapp, structure)
+            result = annotate_result(result, "FAPP")
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
         else:
             return [TextContent(type="text", text=f"Error: Unknown tool '{name}'")]

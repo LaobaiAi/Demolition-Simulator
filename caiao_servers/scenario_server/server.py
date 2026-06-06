@@ -160,6 +160,30 @@ SCENARIOS: dict[str, dict] = {
         "needs_analysis": False,
         "tags": ["alternating", "progressive", "cascade", "topology"],
     },
+    "steam_turbine_building": {
+        "name": "steam_turbine_building",
+        "title": {"en": "Steam Turbine Building", "zh": "蒸汽轮机厂房"},
+        "description": {
+            "en": "Large 24-bay x 3-axis (A/B/C) industrial building. AB bay 24m steel truss (ridge 27m), BC bay 9m flat beam, column height 25m. 14-step top-down demolition via Blender.",
+            "zh": "24榀x3轴(A/B/C)大型工业厂房。AB跨24m钢屋架(脊高27m)，BC跨9m平梁，柱高25m。14步自上而下拆除，走 Blender 管线。",
+        },
+        "category": "topology",
+        "structure_params": {
+            "type": "steel",
+            "building_type": "steam_turbine",
+            "num_bays_x": 24,
+            "num_stories": 1,
+            "span_x_m": 8.0,
+            "story_height_m": 25.0,
+            "steel_grade": "Q235",
+        },
+        "strategy": "top_down",
+        "effects_preset": "standard",
+        "speed": 1.0,
+        "viz_mode": "blender",
+        "needs_analysis": False,
+        "tags": ["industrial", "steam_turbine", "blender", "large", "topology"],
+    },
 }
 
 EFFECTS_PRESETS: dict[str, dict] = {

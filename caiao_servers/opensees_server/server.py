@@ -8,6 +8,12 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
+import os as _os, sys as _sys
+_p = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+if _p not in _sys.path:
+    _sys.path.insert(0, _p)
+from _shared.analysis_format import annotate_result
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("opensees_server")
 
@@ -245,8 +251,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 return [TextContent(type="text", text="Error: 'structure' argument is required")]
             result = await asyncio.wait_for(
                 asyncio.to_thread(_run_opensees_analysis, structure),
-                timeout=15.0,  # 60→15s: faster failure when unavailable
+                timeout=15.0,
             )
+            result = annotate_result(result, "OpenSees")
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
         else:

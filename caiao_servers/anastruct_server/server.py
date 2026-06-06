@@ -15,6 +15,11 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
+_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _parent not in sys.path:
+    sys.path.insert(0, _parent)
+from _shared.analysis_format import annotate_result
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("anastruct_server")
 
@@ -300,6 +305,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 result = {"error": f"Analysis error: {e}", "node_displacements": [], "element_forces": [],
                           "max_displacement": 0, "max_axial_force": 0,
                           "warning": "Structure may be unstable after element removal."}
+            result = annotate_result(result, "anaStruct")
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
         elif name == "select_critical_element":
