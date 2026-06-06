@@ -1,21 +1,31 @@
 "use client";
 
-import { useMemo } from "react";
-import { Terminal, Pause, PlayCircle } from "lucide-react";
+import { useMemo, Suspense, lazy } from "react";
+import { Terminal, Pause, PlayCircle, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { t, type Lang } from "@/lib/i18n";
 import { getLogIcon, formatLogEntry } from "@/lib/log-format";
 import { FrameVisualization } from "@/components/frame-visualization";
-import { FrameVisualization3D } from "@/components/frame-visualization-3d";
 import { UnityVideoPanel } from "@/components/unity-video-panel";
-import { IFCViewer } from "@/components/ifc-viewer";
 import { VerificationPanel } from "@/components/verification-panel";
 import { DemolitionController } from "@/components/demolition-controller";
 import { WebGLErrorBoundary } from "@/components/webgl-error-boundary";
 import { AnimationExporter } from "@/components/animation-exporter";
 import type { FrameStructure, NodeDisp, StepEvent } from "@/lib/state-restore";
 import type { DemolitionRound } from "@/components/mechanical-summary";
+
+const FrameVisualization3D = lazy(() => import("@/components/frame-visualization-3d").then(m => ({ default: m.FrameVisualization3D })));
+const IFCViewer = lazy(() => import("@/components/ifc-viewer").then(m => ({ default: m.IFCViewer })));
+
+function LoadingFallback({ label }: { label: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
+      <Loader2 className="h-8 w-8 animate-spin text-primary/40" />
+      <p className="text-xs">Loading {label}...</p>
+    </div>
+  );
+}
 
 interface VizPanelProps {
   lang: Lang;
@@ -115,23 +125,27 @@ export function VisualizationPanel({
         )}
         <div className={`absolute inset-0 flex flex-col ${vizMode === "webgl" ? "" : "invisible pointer-events-none"}`}>
           <WebGLErrorBoundary onError={() => setVizMode("svg")}>
-            <FrameVisualization3D structure={frameStructure} displacements={nodeDisplacements}
-              criticalElementId={structuralMetrics?.criticalElementId ?? null}
-              failedElements={failedElements} displayFailedElements={displayFailedElements}
-              maxDisplacement={analysisResult?.max_displacement as number | undefined}
-              elementForces={analysisResult?.element_forces as Array<{element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number}> | undefined}
-              animationTrigger={animRequest?.key} animatingElements={animRequest?.targets}
-              onAnimationComplete={onAnimComplete} activeEffects={animEffects}
-              canvasCallback={onCanvasCallback} />
+            <Suspense fallback={<LoadingFallback label="3D engine" />}>
+              <FrameVisualization3D structure={frameStructure} displacements={nodeDisplacements}
+                criticalElementId={structuralMetrics?.criticalElementId ?? null}
+                failedElements={failedElements} displayFailedElements={displayFailedElements}
+                maxDisplacement={analysisResult?.max_displacement as number | undefined}
+                elementForces={analysisResult?.element_forces as Array<{element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number}> | undefined}
+                animationTrigger={animRequest?.key} animatingElements={animRequest?.targets}
+                onAnimationComplete={onAnimComplete} activeEffects={animEffects}
+                canvasCallback={onCanvasCallback} />
+            </Suspense>
           </WebGLErrorBoundary>
         </div>
         <div className={`absolute inset-0 ${vizMode === "unity" ? "" : "invisible pointer-events-none"}`}>
           <UnityVideoPanel onStreamConnected={onUnityConnected} />
         </div>
         <div className={`absolute inset-0 ${vizMode === "ifc" ? "" : "invisible pointer-events-none"}`}>
-          <IFCViewer structure={frameStructure}
-            highlightedElements={structuralMetrics?.criticalElementId ? [structuralMetrics.criticalElementId] : []}
-            removedElements={displayFailedElements} />
+          <Suspense fallback={<LoadingFallback label="IFC viewer" />}>
+            <IFCViewer structure={frameStructure}
+              highlightedElements={structuralMetrics?.criticalElementId ? [structuralMetrics.criticalElementId] : []}
+              removedElements={displayFailedElements} />
+          </Suspense>
         </div>
       </div>
 

@@ -1,5 +1,32 @@
 export const API_BASE = "http://localhost:8000";
 
+// ── Resilient fetch wrapper ─────────────────────────────────────────────────
+
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, baseDelay = 1000): Promise<Response> {
+  let lastError: Error | null = null;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fetchWithTimeout(url, options);
+    } catch (e) {
+      lastError = e as Error;
+      if (i < retries - 1) {
+        await new Promise(r => setTimeout(r, baseDelay * Math.pow(2, i)));
+      }
+    }
+  }
+  throw lastError ?? new Error("fetch failed after retries");
+}
+
 export interface Tool {
   name: string;
   description: string;
@@ -14,7 +41,7 @@ export async function fetchHealth(): Promise<{ status: string }> {
 }
 
 export async function fetchTools(): Promise<Tool[]> {
-  const res = await fetch(`${API_BASE}/tools`);
+  const res = await fetchWithRetry(`${API_BASE}/tools`);
   if (!res.ok) throw new Error(`Failed to fetch tools: ${res.status}`);
   const data = await res.json();
   return data.tools;
@@ -43,7 +70,7 @@ export async function fetchScenarios(category?: string, tag?: string): Promise<S
   if (category) params.set("category", category);
   if (tag) params.set("tag", tag);
   const url = `${API_BASE}/scenarios${params.toString() ? "?" + params.toString() : ""}`;
-  const res = await fetch(url);
+  const res = await fetchWithRetry(url);
   if (!res.ok) throw new Error(`Failed to fetch scenarios: ${res.status}`);
   const data = await res.json();
   const raw = data.result || data;

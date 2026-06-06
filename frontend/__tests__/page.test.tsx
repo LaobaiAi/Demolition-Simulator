@@ -37,7 +37,7 @@ describe("Home page", () => {
     });
 
     render(<Home />);
-    expect(screen.getByText("Visualization Panel")).toBeInTheDocument();
+    expect(screen.getByText("WebGL 3D View")).toBeInTheDocument();
   });
 
   it("shows idle status by default", () => {

@@ -340,15 +340,19 @@ class LLMEngine:
     def format_tools_for_llm(self, tools_list: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Convert internal tool format to OpenAI tool format."""
         formatted = []
+        seen: set[str] = set()
         for tool in tools_list:
+            name = tool["name"]
+            if name in seen:
+                continue
+            seen.add(name)
             params = tool.get("input_schema", {})
-            # OpenAI requires type: object — fix empty/invalid schemas to avoid 400 errors
             if not isinstance(params, dict) or params.get("type") != "object":
                 params = {"type": "object", "properties": {}}
             formatted.append({
                 "type": "function",
                 "function": {
-                    "name": tool["name"],
+                    "name": name,
                     "description": tool.get("description", ""),
                     "parameters": params,
                 },

@@ -342,6 +342,8 @@ export function useWebSocket(callbacks: WebSocketCallbacks) {
     let reconnectAttempts = 0;
     const MAX_RECONNECT_DELAY = 30000;
 
+    let disconnectStart = 0;
+
     function connectWithRetry() {
       const ws = new WebSocket(`${WS_BASE}/ws/chat`);
       wsRef.current = ws;
@@ -349,13 +351,24 @@ export function useWebSocket(callbacks: WebSocketCallbacks) {
       ws.onopen = () => {
         setWsConnected("connected");
         reconnectAttempts = 0;
+        disconnectStart = 0;
+        if (callbacks.pendingStepsRef.current.length > 0) {
+          callbacks.setLogEntries((prev) => [...prev, { type: "thinking", content: "Reconnected — resuming session" }].slice(-200));
+        }
       };
       ws.onclose = () => {
-        setWsConnected("reconnecting");
+        if (!disconnectStart) disconnectStart = Date.now();
+        const disconnectedMs = Date.now() - disconnectStart;
         const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
         reconnectTimer = setTimeout(connectWithRetry, delay);
+        if (disconnectedMs > 30000) {
+          setWsConnected("disconnected");
+        } else {
+          setWsConnected("reconnecting");
+        }
       };
       ws.onerror = () => {
+        if (!disconnectStart) disconnectStart = Date.now();
         setWsConnected("reconnecting");
         ws.close();
       };

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { t, type Lang } from "@/lib/i18n";
+import { safeGetItem, safeSetItem, safeParseJson } from "@/lib/safe-storage";
 import type { Conversation } from "@/components/sidebar";
 import type { ChatMessage } from "@/lib/state-restore";
 
@@ -36,16 +37,13 @@ export function useConversations() {
         }
         return { ...c, messages: prev?.messages || [] };
       });
-      localStorage.setItem(CONV_STORAGE, JSON.stringify(stored));
+      safeSetItem(CONV_STORAGE, JSON.stringify(stored));
     } catch {}
   }, []);
 
   const loadConversationsFromStorage = useCallback((): StoredConv[] => {
-    try {
-      const saved = localStorage.getItem(CONV_STORAGE);
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return [];
+    const saved = safeGetItem(CONV_STORAGE);
+    return safeParseJson<StoredConv[]>(saved, []);
   }, []);
 
   const newConversation = useCallback(() => {
@@ -78,7 +76,7 @@ export function useConversations() {
     setConversations(updated);
     if (id === activeConvId) setActiveConvId(null);
     const stored = loadConversationsFromStorage().filter((c) => c.id !== id);
-    localStorage.setItem(CONV_STORAGE, JSON.stringify(stored));
+    safeSetItem(CONV_STORAGE, JSON.stringify(stored));
     if (id === activeConvId) localStorage.setItem(CONV_ACTIVE, "");
   }, [conversations, activeConvId, loadConversationsFromStorage]);
 
@@ -112,7 +110,7 @@ export function useConversations() {
         const stored = loadConversationsFromStorage();
         const si = stored.findIndex((c) => c.id === id);
         if (si >= 0) stored[si].title = title;
-        localStorage.setItem(CONV_STORAGE, JSON.stringify(stored));
+        safeSetItem(CONV_STORAGE, JSON.stringify(stored));
         return prev.map((c) => c.id === id ? { ...c, title } : c);
       }
       return prev;
@@ -124,7 +122,7 @@ export function useConversations() {
     const idx = stored.findIndex((c) => c.id === id);
     if (idx >= 0) {
       stored[idx].messages = messages;
-      localStorage.setItem(CONV_STORAGE, JSON.stringify(stored));
+      safeSetItem(CONV_STORAGE, JSON.stringify(stored));
     }
     updateMessageCount(id, messages.length);
     const firstUser = messages.find((m) => m.role === "user");

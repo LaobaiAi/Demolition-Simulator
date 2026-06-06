@@ -27,6 +27,7 @@ import SettingsPanel from "@/components/settings-panel";
 import { ChatPanel } from "@/components/chat-panel";
 import { VisualizationPanel } from "@/components/visualization-panel";
 import { StatusPanel } from "@/components/status-panel";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { playCollapseSound, playRumbleSound, stopAll } from "@/lib/sound-effects";
 import { t, type Lang } from "@/lib/i18n";
 import { useTheme } from "@/components/theme-provider";
@@ -39,9 +40,11 @@ import {
   type ChatMessage,
   type StepEvent,
 } from "@/lib/state-restore";
+import { safeGetItem, safeParseJson } from "@/lib/safe-storage";
 import { useConversations } from "@/hooks/use-conversations";
 import { useLlmSettings } from "@/hooks/use-llm-settings";
 import { useWebSocket, type WebSocketCallbacks } from "@/hooks/use-websocket";
+import { useErrorToast } from "@/hooks/use-error-toast.tsx";
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
   const controller = new AbortController();
@@ -69,6 +72,21 @@ const DEMOLISH_STRATEGIES: DemolishStrategy[] = [
 
 const CONV_STORAGE = "xuanwu_conversations";
 const CONV_ACTIVE = "xuanwu_active_conv";
+
+function PanelErrorFallback({ name }: { name: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full min-h-[200px] p-4 text-center border border-red-500/20 rounded-lg m-2 bg-red-500/5">
+      <p className="text-sm font-medium text-red-400 mb-1">{name} panel crashed</p>
+      <p className="text-xs text-muted-foreground mb-3">The rest of the app is still functional</p>
+      <button
+        onClick={() => window.location.reload()}
+        className="rounded-lg border border-red-500/30 px-4 py-1.5 text-xs text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+      >
+        Reload page
+      </button>
+    </div>
+  );
+}
 
 export default function Home() {
   const [tools, setTools] = useState<Tool[]>([]);
@@ -179,6 +197,7 @@ export default function Home() {
 
   const conv = useConversations();
   const llm = useLlmSettings();
+  const { ToastContainer } = useErrorToast();
 
   useEffect(() => { langRef.current = llm.lang; }, [llm.lang]);
 
@@ -214,33 +233,31 @@ export default function Home() {
 
   // ---- Load conversations on mount ----
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(CONV_STORAGE);
-      const active = localStorage.getItem(CONV_ACTIVE);
-      if (saved) {
-        const parsed = JSON.parse(saved) as Array<{id: string; title: string; pinned: boolean; createdAt: number; messages: ChatMessage[]}>;
-        conv.setConversations(parsed.map((c) => ({
-          id: c.id, title: c.title, pinned: c.pinned,
-          createdAt: c.createdAt, messageCount: c.messages.length,
-        })));
-        if (active) {
-          const activeConv = parsed.find((c) => c.id === active);
-          if (activeConv?.messages?.length) {
-            conv.setActiveConvId(active);
-            setMessages(activeConv.messages);
-            const restored = restoreStateFromMessages(activeConv.messages);
-            setFrameStructure(restored.frameStructure);
-            setAnalysisResult(restored.analysisResult);
-            setNodeDisplacements(restored.nodeDisplacements);
-            setStructuralMetrics(restored.structuralMetrics);
-            setFailedElements(restored.failedElements);
-            setDemolishReady(restored.demolishReady);
-          }
-        } else if (active) {
+    const saved = safeGetItem(CONV_STORAGE);
+    const active = safeGetItem(CONV_ACTIVE);
+    if (saved) {
+      const parsed = safeParseJson<Array<{id: string; title: string; pinned: boolean; createdAt: number; messages: ChatMessage[]}>>(saved, []);
+      conv.setConversations(parsed.map((c) => ({
+        id: c.id, title: c.title, pinned: c.pinned,
+        createdAt: c.createdAt, messageCount: c.messages.length,
+      })));
+      if (active) {
+        const activeConv = parsed.find((c) => c.id === active);
+        if (activeConv?.messages?.length) {
           conv.setActiveConvId(active);
+          setMessages(activeConv.messages);
+          const restored = restoreStateFromMessages(activeConv.messages);
+          setFrameStructure(restored.frameStructure);
+          setAnalysisResult(restored.analysisResult);
+          setNodeDisplacements(restored.nodeDisplacements);
+          setStructuralMetrics(restored.structuralMetrics);
+          setFailedElements(restored.failedElements);
+          setDemolishReady(restored.demolishReady);
         }
+      } else if (active) {
+        conv.setActiveConvId(active);
       }
-    } catch {}
+    }
     conv.setConvLoaded(true);
   }, []);
 
@@ -684,41 +701,44 @@ export default function Home() {
       />
 
       <div className="flex flex-1 overflow-hidden">
-        <ChatPanel
-          lang={llm.lang}
-          messages={messages}
-          status={status}
-          input={input}
-          setInput={setInput}
-          currentStep={currentStep}
-          streamingText={streamingText}
-          frameStructure={frameStructure}
-          pipelineActive={pipelineActive}
-          pipelineProgress={pipelineProgress}
-          pipelinePhase={pipelinePhase}
-          demolishReady={demolishReady}
-          structuralMetrics={structuralMetrics ? { criticalElementId: structuralMetrics.criticalElementId, criticalAxialForce: structuralMetrics.criticalAxialForce } : null}
-          vdStrategy={vdStrategy}
-          setVdStrategy={setVdStrategy}
-          vdEffectsPreset={vdEffectsPreset}
-          setVdEffectsPreset={setVdEffectsPreset}
-          animSpeed={animSpeed}
-          setAnimSpeed={setAnimSpeed}
-          animEffects={animEffects}
-          setAnimEffects={setAnimEffects}
-          vdConfigOpen={vdConfigOpen}
-          setVdConfigOpen={setVdConfigOpen}
-          demolishDialogOpen={demolishDialogOpen}
-          setDemolishDialogOpen={setDemolishDialogOpen}
-          quickActions={quickActions}
-          onSend={sendMessage}
-          onStop={handleStop}
-          onLaunchVisualDemolition={launchVisualDemolition}
-          onTriggerDemolition={triggerDemolition}
-          onQuickAction={(action) => setInput(action)}
-        />
+        <ErrorBoundary fallback={<PanelErrorFallback name="Chat" />}>
+          <ChatPanel
+            lang={llm.lang}
+            messages={messages}
+            status={status}
+            input={input}
+            setInput={setInput}
+            currentStep={currentStep}
+            streamingText={streamingText}
+            frameStructure={frameStructure}
+            pipelineActive={pipelineActive}
+            pipelineProgress={pipelineProgress}
+            pipelinePhase={pipelinePhase}
+            demolishReady={demolishReady}
+            structuralMetrics={structuralMetrics ? { criticalElementId: structuralMetrics.criticalElementId, criticalAxialForce: structuralMetrics.criticalAxialForce } : null}
+            vdStrategy={vdStrategy}
+            setVdStrategy={setVdStrategy}
+            vdEffectsPreset={vdEffectsPreset}
+            setVdEffectsPreset={setVdEffectsPreset}
+            animSpeed={animSpeed}
+            setAnimSpeed={setAnimSpeed}
+            animEffects={animEffects}
+            setAnimEffects={setAnimEffects}
+            vdConfigOpen={vdConfigOpen}
+            setVdConfigOpen={setVdConfigOpen}
+            demolishDialogOpen={demolishDialogOpen}
+            setDemolishDialogOpen={setDemolishDialogOpen}
+            quickActions={quickActions}
+            onSend={sendMessage}
+            onStop={handleStop}
+            onLaunchVisualDemolition={launchVisualDemolition}
+            onTriggerDemolition={triggerDemolition}
+            onQuickAction={(action) => setInput(action)}
+          />
+        </ErrorBoundary>
 
-        <VisualizationPanel
+        <ErrorBoundary fallback={<PanelErrorFallback name="Visualization" />}>
+          <VisualizationPanel
           lang={llm.lang}
           vizMode={vizMode}
           setVizMode={setVizMode}
@@ -763,8 +783,10 @@ export default function Home() {
           onCanvasCallback={setCanvas3dRef}
           onUnityConnected={handleUnityConnected}
         />
+        </ErrorBoundary>
 
-        <StatusPanel
+        <ErrorBoundary fallback={<PanelErrorFallback name="Status" />}>
+          <StatusPanel
           lang={llm.lang}
           status={status}
           wsConnected={wsConnected}
@@ -781,6 +803,7 @@ export default function Home() {
           onAutoPlay={handleAutoPlay}
           onTimelineReorder={setTimelineSteps}
         />
+        </ErrorBoundary>
       </div>
 
       <SettingsPanel
@@ -958,6 +981,7 @@ export default function Home() {
         demolitionMode={demolitionMode} onOpenSettings={() => llm.setSettingsOpen(true)}
         onClearChat={handleClearChat} onToggleDemolitionMode={() => setDemolitionMode(!demolitionMode)}
         quickActions={quickActions} onQuickAction={sendQuickAction} />
+      {ToastContainer}
     </div>
   );
 }
