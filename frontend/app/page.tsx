@@ -44,7 +44,7 @@ import { safeGetItem, safeParseJson } from "@/lib/safe-storage";
 import { useConversations } from "@/hooks/use-conversations";
 import { useLlmSettings } from "@/hooks/use-llm-settings";
 import { useWebSocket, type WebSocketCallbacks } from "@/hooks/use-websocket";
-import { useErrorToast } from "@/hooks/use-error-toast.tsx";
+import { useErrorToast } from "@/hooks/use-error-toast";
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
   const controller = new AbortController();
