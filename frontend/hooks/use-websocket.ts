@@ -126,12 +126,19 @@ function handlePipelineComplete(data: WsData, cb: WebSocketCallbacks) {
   const steps = data.timeline_steps as Array<{ id: number; elementId: number; elementType: string; phase: string; durationMs: number }> | undefined;
   if (steps) {
     cb.setTimelineSteps(steps);
-    const validIds = steps.filter((s) => s.elementId > 0).map((s) => s.elementId);
-    if (validIds.length > 0) {
-      const uniqueIds = [...new Set(validIds)];
+    const validSteps = steps.filter((s) => s.elementId > 0);
+    if (validSteps.length > 0) {
+      const uniqueIds = [...new Set(validSteps.map((s) => s.elementId))];
       cb.setAnimRequest((prev) => ({ key: (prev?.key ?? 0) + 1, targets: uniqueIds }));
       cb.setAnimPlaying(true);
       cb.setDemolishReady(true);
+      const rounds: DemolitionRound[] = [];
+      let cum: number[] = [];
+      for (let i = 0; i < validSteps.length; i++) {
+        cum = [...cum, validSteps[i].elementId];
+        rounds.push({ round: i, elementIds: [validSteps[i].elementId], cumulativeIds: [...cum] });
+      }
+      cb.setDemolitionRounds(rounds);
     }
   }
 

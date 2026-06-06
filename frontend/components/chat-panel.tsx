@@ -151,8 +151,8 @@ export function ChatPanel({
       {messages.length === 0 && (
         <div className="flex flex-wrap gap-1.5 px-4 pb-2">
           {quickActions.map((action) => (
-            <button key={action} onClick={() => setInput(action)}
-              className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary cursor-pointer">
+            <button key={action} onClick={() => setInput(action)} disabled={status === "loading"}
+              className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
               {action}
             </button>
           ))}
@@ -163,8 +163,8 @@ export function ChatPanel({
         <div className="px-4 pb-2">
           <div>
             <div className="flex gap-1.5">
-              <button onClick={onLaunchVisualDemolition} disabled={!frameStructure}
-                className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-4 py-2.5 text-sm font-medium text-primary hover:bg-primary/20 hover:border-primary/60 transition-all cursor-pointer">
+              <button onClick={onLaunchVisualDemolition} disabled={!frameStructure || status === "loading" || pipelineActive}
+                className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-4 py-2.5 text-sm font-medium text-primary hover:bg-primary/20 hover:border-primary/60 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
                 <Zap className="h-4 w-4" />{t("vd.button", lang)}
               </button>
               <button onClick={() => setVdConfigOpen(!vdConfigOpen)}
@@ -172,7 +172,7 @@ export function ChatPanel({
                 title={t("vd.config", lang)}>
                 <Settings className="h-4 w-4" />
               </button>
-              {demolishReady && (
+              {demolishReady && status === "idle" && (
                 <button onClick={() => setDemolishDialogOpen(true)}
                   className="shrink-0 flex items-center justify-center gap-1 rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2.5 text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
                   title={t("confirm.title", lang)}>
