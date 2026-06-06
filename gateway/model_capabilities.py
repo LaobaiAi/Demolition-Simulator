@@ -91,12 +91,14 @@ def get_capabilities(model: str) -> ModelCapabilities:
     return ModelCapabilities()
 
 
-def build_thinking_config(caps: ModelCapabilities, tools: list | None) -> dict:
+def build_thinking_config(caps: ModelCapabilities, tools: list | None, thinking_enabled: bool = True) -> dict:
     """Return an extra_body dict (or empty dict) for the model's thinking config.
 
     Only DeepSeek V4 and OpenAI o-series models get thinking parameters.
     Other models get an empty dict — we never send unknown extra_body keys.
     """
+    if not thinking_enabled:
+        return {}
     if not caps.supports_thinking:
         return {}
 

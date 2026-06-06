@@ -88,9 +88,11 @@ export function extractRoundAnalysisResults(messages: ChatMessage[]): Record<num
         if (fe && Array.isArray(fe) && fe.length > 0) {
           currentRound++;
         }
-      } else if (step.name === "analyze_frame") {
+      } else if (step.name === "analyze_frame" || step.name === "quick_analysis") {
         if (parsed.max_displacement !== undefined && !("error" in parsed)) {
           results[currentRound] = parsed;
+        } else if (parsed.analysis?.max_displacement !== undefined && !("error" in parsed.analysis)) {
+          results[currentRound] = parsed.analysis as Record<string, unknown>;
         }
       }
     }
@@ -161,6 +163,30 @@ export function restoreStateFromMessages(msgs: ChatMessage[]): RestoredState {
       if (step.name === "generate_simple_frame" || step.name === "generate_frame" || step.name === "generate_from_text") {
         if (parsed.nodes && parsed.elements) {
           frameStructure = parsed as FrameStructure;
+        }
+      } else if (step.name === "quick_analysis") {
+        if (parsed.status === "complete") {
+          const s = parsed.structure as Record<string, unknown> | undefined;
+          if (s?.nodes && s?.elements) {
+            frameStructure = s as unknown as FrameStructure;
+          }
+          const a = parsed.analysis as Record<string, unknown> | undefined;
+          if (a?.max_displacement !== undefined && !("error" in a)) {
+            analysisResult = a;
+            if (a.node_displacements) nodeDisplacements = a.node_displacements as NodeDisp[];
+            maxDisp = (a.max_displacement as number) ?? 0;
+            maxAxial = (a.max_axial_force as number) ?? 0;
+            const ef = a.element_forces as Record<string, unknown>[] | undefined;
+            const extracted = extractMaxAxialForce(ef);
+            if (extracted) { critElId = extracted.elementId; critAxial = extracted.absMaxAxial; demolishReady = true; }
+          }
+          const c = parsed.critical_element as Record<string, unknown> | undefined;
+          if (c?.critical_element_id != null) {
+            critElId = c.critical_element_id as number;
+            critAxial = (c.critical_axial_force_N as number) ?? null;
+            colCount = (c.column_count as number) ?? colCount;
+            demolishReady = true;
+          }
         }
       } else if (ANALYSIS_TOOLS.has(step.name)) {
         if (parsed.max_displacement !== undefined && !("error" in parsed)) {

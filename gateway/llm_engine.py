@@ -308,10 +308,12 @@ class LLMEngine:
         model: str = "gpt-4o",
         api_key: str | None = None,
         base_url: str | None = None,
+        thinking_enabled: bool = False,
     ):
         self.model = model
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.base_url = base_url or os.getenv("OPENAI_BASE_URL")
+        self.thinking_enabled = thinking_enabled
 
         client_kwargs: dict[str, Any] = {"http_client": _build_http_client()}
         if self.api_key:
@@ -321,7 +323,7 @@ class LLMEngine:
 
         self.client = AsyncOpenAI(**client_kwargs)
 
-    def configure(self, model: str | None = None, api_key: str | None = None, base_url: str | None = None):
+    def configure(self, model: str | None = None, api_key: str | None = None, base_url: str | None = None, thinking_enabled: bool | None = None):
         """Reconfigure the LLM engine at runtime (e.g., from frontend settings)."""
         if model is not None:
             self.model = model
@@ -329,6 +331,8 @@ class LLMEngine:
             self.api_key = api_key
         if base_url is not None:
             self.base_url = base_url
+        if thinking_enabled is not None:
+            self.thinking_enabled = thinking_enabled
 
         client_kwargs: dict[str, Any] = {"http_client": _build_http_client()}
         if self.api_key:
@@ -346,7 +350,7 @@ class LLMEngine:
         never send unknown extra_body keys to providers.
         """
         caps = get_capabilities(model)
-        return build_thinking_config(caps, tools)
+        return build_thinking_config(caps, tools, self.thinking_enabled)
 
     @staticmethod
     def _is_deepseek_model(model: str) -> bool:

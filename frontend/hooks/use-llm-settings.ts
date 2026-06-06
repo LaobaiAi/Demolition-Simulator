@@ -37,6 +37,7 @@ export function useLlmSettings() {
   const [llmStatus, setLlmStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [llmTestStatus, setLlmTestStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
   const [llmTestMsg, setLlmTestMsg] = useState("");
+  const [thinkingEnabled, setThinkingEnabled] = useState(false);
 
   useEffect(() => {
     const saved = getSavedLang();
@@ -61,6 +62,9 @@ export function useLlmSettings() {
             setLlmApiKey("••••••••");
             setLlmBaseUrl(backend.base_url || "");
             localStorage.setItem("xuanwu_last_model", backend.model);
+            if (backend.thinking_enabled !== undefined) {
+              setThinkingEnabled(backend.thinking_enabled);
+            }
             return;
           }
         }
@@ -108,8 +112,9 @@ export function useLlmSettings() {
 
   const saveLlmSettings = useCallback(async () => {
     setLlmStatus("saving");
-    const config: Record<string, string | undefined> = {
+    const config: Record<string, string | boolean | undefined> = {
       model: llmModel || undefined,
+      thinking_enabled: thinkingEnabled,
     };
     if (llmBaseUrl) config.base_url = llmBaseUrl;
     if (llmApiKey && llmApiKey !== "••••••••") {
@@ -176,5 +181,6 @@ export function useLlmSettings() {
     handleModelChange,
     saveLlmSettings,
     testLlmConnection,
+    thinkingEnabled, setThinkingEnabled,
   };
 }

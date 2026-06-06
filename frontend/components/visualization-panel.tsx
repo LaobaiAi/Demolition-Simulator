@@ -12,6 +12,7 @@ import { UnityVideoPanel } from "@/components/unity-video-panel";
 import { IFCViewer } from "@/components/ifc-viewer";
 import { VerificationPanel } from "@/components/verification-panel";
 import { DemolitionController } from "@/components/demolition-controller";
+import { WebGLErrorBoundary } from "@/components/webgl-error-boundary";
 import { AnimationExporter } from "@/components/animation-exporter";
 import type { FrameStructure, NodeDisp, StepEvent } from "@/lib/state-restore";
 import type { DemolitionRound } from "@/components/mechanical-summary";
@@ -113,14 +114,16 @@ export function VisualizationPanel({
           </div>
         )}
         <div className={`absolute inset-0 flex flex-col ${vizMode === "webgl" ? "" : "invisible pointer-events-none"}`}>
-          <FrameVisualization3D structure={frameStructure} displacements={nodeDisplacements}
-            criticalElementId={structuralMetrics?.criticalElementId ?? null}
-            failedElements={failedElements} displayFailedElements={displayFailedElements}
-            maxDisplacement={analysisResult?.max_displacement as number | undefined}
-            elementForces={analysisResult?.element_forces as Array<{element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number}> | undefined}
-            animationTrigger={animRequest?.key} animatingElements={animRequest?.targets}
-            onAnimationComplete={onAnimComplete} activeEffects={animEffects}
-            canvasCallback={onCanvasCallback} />
+          <WebGLErrorBoundary onError={() => setVizMode("svg")}>
+            <FrameVisualization3D structure={frameStructure} displacements={nodeDisplacements}
+              criticalElementId={structuralMetrics?.criticalElementId ?? null}
+              failedElements={failedElements} displayFailedElements={displayFailedElements}
+              maxDisplacement={analysisResult?.max_displacement as number | undefined}
+              elementForces={analysisResult?.element_forces as Array<{element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number}> | undefined}
+              animationTrigger={animRequest?.key} animatingElements={animRequest?.targets}
+              onAnimationComplete={onAnimComplete} activeEffects={animEffects}
+              canvasCallback={onCanvasCallback} />
+          </WebGLErrorBoundary>
         </div>
         <div className={`absolute inset-0 ${vizMode === "unity" ? "" : "invisible pointer-events-none"}`}>
           <UnityVideoPanel onStreamConnected={onUnityConnected} />

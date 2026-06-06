@@ -45,8 +45,9 @@ def _resolve_abaqus_python() -> str:
 
 
 def discover_server_configs() -> list[dict]:
-    return _caiao_discover(
+    configs = _caiao_discover(
         servers_dir=CAIAO_SERVERS_DIR,
         sentinel_resolvers={"@abaqus_python@": _resolve_abaqus_python},
         venv_python=VENV_PYTHON,
     )
+    return [c for c in configs if c.get("status") != "deprecated"]

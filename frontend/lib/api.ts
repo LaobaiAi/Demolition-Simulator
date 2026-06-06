@@ -161,6 +161,7 @@ export interface LLMConfig {
   model: string;
   base_url?: string;
   api_key?: string;
+  thinking_enabled?: boolean;
 }
 
 export async function saveLLMSettings(config: LLMConfig): Promise<void> {
@@ -176,6 +177,7 @@ export async function getLLMConfig(): Promise<{
   model: string;
   base_url: string;
   has_api_key: boolean;
+  thinking_enabled: boolean;
 }> {
   const res = await fetch(`${API_BASE}/settings/llm`);
   if (!res.ok) throw new Error(`Failed to get config: ${res.status}`);

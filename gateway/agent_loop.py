@@ -15,13 +15,90 @@ from caiao import CAIAOClientHub
 
 logger = logging.getLogger(__name__)
 
-MAX_TOOL_ITERATIONS = 12
+MAX_TOOL_ITERATIONS = 8
 REPLAN_AFTER = 6  # after this many iterations, force a summary/replan
 
 
 def _make_cache_key(name: str, args: dict) -> str:
     """Deterministic cache key for tool calls."""
     return f"{name}:{json.dumps(args, sort_keys=True, default=str)}"
+
+
+TOOL_KEYWORD_MAP: dict[str, list[str]] = {
+    "generate": ["generate_frame", "generate_frame_3d", "generate_simple_frame",
+                 "generate_from_text", "generate_steel_frame", "generate_concrete_structure",
+                 "generate_hybrid_structure", "generate_truss", "generate_portal_frame",
+                 "generate_beam", "export_ifc", "list_materials"],
+    "analyze": ["analyze_frame", "quick_analysis", "full_analysis_3d",
+                "high_fidelity_analysis", "fapp_analysis", "pynite_analysis",
+                "select_critical_element"],
+    "demolish": ["apply_demolition_action", "plan_demolition_sequence",
+                 "analyze_structure_topology", "get_demolition_plan_summary",
+                 "compute_collapse_chain", "compare_demolition_strategies",
+                 "get_comparison_summary", "recommend_strategy"],
+    "animate": ["create_timeline", "sequence_to_animation_data",
+                "generate_effects_config", "init_physics_scene",
+                "step_physics", "get_physics_state"],
+    "verify": ["high_fidelity_analysis", "fapp_analysis", "pynite_analysis"],
+    "abaqus": ["setup_collapse", "build_factory", "get_max_displacement",
+               "submit_job"],
+    "bim": ["generate_steel_frame", "generate_concrete_structure",
+            "generate_hybrid_structure", "export_ifc", "generate_truss",
+            "generate_portal_frame", "generate_beam"],
+}
+
+def _filter_tools_by_message(
+    user_message: str,
+    llm_tools: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]] | None:
+    """Filter tools to only those relevant to the user's message."""
+    if not llm_tools or len(llm_tools) < 20:
+        return llm_tools
+
+    msg_lower = user_message.lower()
+    matched: set[str] = set()
+
+    for keyword, tools in TOOL_KEYWORD_MAP.items():
+        if keyword in msg_lower:
+            matched.update(tools)
+
+    if not matched:
+        return llm_tools
+
+    filtered = [t for t in llm_tools if t.get("name") in matched]
+    if len(filtered) < 3:
+        return llm_tools
+
+    logger.info(
+        f"Tool filter: {len(llm_tools)} -> {len(filtered)} "
+        f"(keywords: {[k for k in TOOL_KEYWORD_MAP if k in msg_lower]})"
+    )
+    return filtered
+
+
+def _truncate_tool_result(result_data: Any, max_chars: int = 3000) -> Any:
+    """Truncate large tool results to keep LLM context lean."""
+    if isinstance(result_data, dict):
+        trimmed = {}
+        for k, v in result_data.items():
+            if k in ("nodes", "elements", "element_forces", "node_displacements",
+                     "loads", "supports", "keyframes", "steps", "body_states"):
+                if isinstance(v, list):
+                    trimmed[k] = f"[{len(v)} entries - full data on frontend]"
+                elif isinstance(v, str) and len(v) > 500:
+                    trimmed[k] = v[:500] + "..."
+                else:
+                    trimmed[k] = v
+            elif isinstance(v, str) and len(v) > max_chars:
+                trimmed[k] = v[:max_chars] + "..."
+            elif isinstance(v, dict):
+                trimmed[k] = _truncate_tool_result(v, max_chars)
+            else:
+                trimmed[k] = v
+        return trimmed
+    if isinstance(result_data, str) and len(result_data) > max_chars:
+        return result_data[:max_chars] + "..."
+    return result_data
 
 
 class AgentLoop:
@@ -35,6 +112,7 @@ class AgentLoop:
         self._pause_event = asyncio.Event()
         self._resume_event = asyncio.Event()
         self._resume_event.set()  # not paused initially
+        self._cached_tools: list[dict[str, Any]] | None = None
 
     def cancel(self) -> None:
         """Signal the agent loop to stop at the next checkpoint."""
@@ -93,8 +171,12 @@ class AgentLoop:
             messages.extend(history)
         messages.append({"role": "user", "content": user_message})
 
-        tools_list = await self.hub.list_tools()
+        if self._cached_tools is None:
+            self._cached_tools = await self.hub.list_tools()
+            logger.info(f"Cached {len(self._cached_tools)} tools from hub")
+        tools_list = self._cached_tools
         llm_tools = self.llm.format_tools_for_llm(tools_list) if tools_list else None
+        llm_tools = _filter_tools_by_message(user_message, llm_tools)
 
         total_reasoning: list[str] = []
         total_iterations = 0
@@ -209,7 +291,8 @@ class AgentLoop:
                         }
                         logger.info(f"Tool result [{iteration}]: {str(result_data)[:120]}")
 
-                    result_text = result_data if isinstance(result_data, str) else json.dumps(result_data)
+                    truncated_data = _truncate_tool_result(result_data)
+                    result_text = truncated_data if isinstance(truncated_data, str) else json.dumps(truncated_data)
                     messages.append({
                         "role": "tool",
                         "tool_call_id": tc["id"],

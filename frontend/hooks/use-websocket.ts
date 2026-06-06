@@ -94,7 +94,7 @@ function handlePipelineStep(data: WsData, cb: WebSocketCallbacks) {
   if (data.tool === "generate_frame") {
     const parsed = tryParseJson(rawData.result);
     if (parsed?.nodes && parsed?.elements) {
-      cb.setFrameStructure(parsed as unknown as unknown as FrameStructure);
+      cb.setFrameStructure(parsed as unknown as FrameStructure);
       cb.setDemolitionMode(true);
     }
   } else if (data.tool === "build_frame_model") {
@@ -131,6 +131,7 @@ function handlePipelineComplete(data: WsData, cb: WebSocketCallbacks) {
       const uniqueIds = [...new Set(validIds)];
       cb.setAnimRequest((prev) => ({ key: (prev?.key ?? 0) + 1, targets: uniqueIds }));
       cb.setAnimPlaying(true);
+      cb.setDemolishReady(true);
     }
   }
 
@@ -298,6 +299,15 @@ function handleToolResult(data: WsData, cb: WebSocketCallbacks) {
   }
 }
 
+function handleStatus(data: WsData, cb: WebSocketCallbacks) {
+  const content = (data.content as string) || "";
+  if (content === "paused") {
+    cb.setCurrentStep("⏸ Paused — waiting for resume");
+  } else if (content === "resumed") {
+    cb.setCurrentStep("");
+  }
+}
+
 // ── Catch-all handler for tool_call / thinking / tool_result ───────────────
 
 function handleCatchAll(data: WsData, cb: WebSocketCallbacks) {
@@ -320,6 +330,7 @@ const MESSAGE_HANDLERS: Record<string, HandlerFn> = {
   memory: handleMemory,
   response: handleResponse,
   error: handleError,
+  status: handleStatus,
 };
 
 export function useWebSocket(callbacks: WebSocketCallbacks) {
@@ -348,15 +359,47 @@ export function useWebSocket(callbacks: WebSocketCallbacks) {
         setWsConnected("reconnecting");
         ws.close();
       };
+      let _streamBuf = "";
+      let _streamRaf: number | null = null;
+      let _streamLastFlush = 0;
+
+      function _flushStream() {
+        if (_streamBuf.length > 0) {
+          callbacks.setStreamingText((prev) => prev + _streamBuf);
+          _streamBuf = "";
+        }
+        _streamLastFlush = performance.now();
+        _streamRaf = null;
+      }
+
+      const _throttledCB: WebSocketCallbacks = {
+        ...callbacks,
+        setStreamingText: ((updater: string | ((prev: string) => string)) => {
+          const result = typeof updater === "function" ? updater("") : updater;
+          if (result === "" || (typeof result === "string" && result.length === 0)) {
+            _streamBuf = "";
+            if (_streamRaf !== null) { cancelAnimationFrame(_streamRaf); _streamRaf = null; }
+            callbacks.setStreamingText(() => "");
+          } else {
+            _streamBuf += typeof result === "string" ? result : "";
+            if (_streamRaf === null) {
+              const elapsed = performance.now() - _streamLastFlush;
+              if (elapsed >= 50) _flushStream();
+              else _streamRaf = requestAnimationFrame(() => _flushStream());
+            }
+          }
+        }) as unknown as WebSocketCallbacks["setStreamingText"],
+      };
+
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data) as WsData;
         if (data.type === "ping") return;
 
         const handler = MESSAGE_HANDLERS[data.type as string];
         if (handler) {
-          handler(data, callbacks);
+          handler(data, _throttledCB);
         } else {
-          handleCatchAll(data, callbacks);
+          handleCatchAll(data, _throttledCB);
         }
       };
     }

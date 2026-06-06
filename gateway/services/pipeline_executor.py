@@ -93,6 +93,7 @@ async def execute_pipeline_streaming(
         progress = round((i + 1) / len(pipeline_def), 2)
 
         if "error" in result:
+            err_msg = str(result.get("error") or "Unknown error")
             yield {
                 "type": "pipeline_step",
                 "phase": label,
@@ -100,11 +101,11 @@ async def execute_pipeline_streaming(
                 "step_index": i,
                 "total_steps": len(pipeline_def),
                 "tool": tool_name,
-                "error": str(result.get("error", "Unknown error")),
+                "error": err_msg,
             }
             yield {
                 "type": "pipeline_error",
-                "content": f"Pipeline failed at step {i + 1}/{len(pipeline_def)} ({label}): {result.get('error', 'Unknown error')}",
+                "content": f"Pipeline failed at step {i + 1}/{len(pipeline_def)} ({label}): {err_msg}",
             }
             return
 

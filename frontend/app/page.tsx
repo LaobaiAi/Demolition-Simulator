@@ -385,7 +385,9 @@ export default function Home() {
   }, [input, status, wsSend]);
 
   const handleStop = useCallback(() => {
-    wsRef.current?.close();
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "cancel" }));
+    }
     setStatus("idle");
     setStreamingText("");
     setCurrentStep("");
@@ -562,6 +564,25 @@ export default function Home() {
       setStatus("loading");
       pendingStepsRef.current = [];
       wsRef.current.send(JSON.stringify({ type: "message", content: msg }));
+    } else {
+      setDemoStatus(t("demo.ws_failed", langRef.current));
+      setTimeout(() => { setDemoRunning(false); demoRef.current.running = false; }, 3000);
+    }
+  }, []);
+
+  const runBimDemolitionDemo = useCallback(() => {
+    setDemoLibraryOpen(false);
+    setDemoRunning(true);
+    demoRef.current = { running: true, phase: "launching" };
+    setDemoStatus(t("demo.sending", langRef.current));
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: "launch_pipeline", pipeline: "full_bim_demolition",
+        params: { mode: "topology", structure_type: "steel", strategy: "top_down", effects_preset: "standard", speed: 1.0 },
+      }));
+      setPipelineActive(true);
+      setPipelineProgress(0);
+      setPipelinePhase(t("demo.bim_demolition", langRef.current));
     } else {
       setDemoStatus(t("demo.ws_failed", langRef.current));
       setTimeout(() => { setDemoRunning(false); demoRef.current.running = false; }, 3000);
@@ -755,6 +776,8 @@ export default function Home() {
         llmModel={llm.llmModel} onModelChange={llm.handleModelChange}
         llmStatus={llm.llmStatus} llmTestStatus={llm.llmTestStatus} llmTestMsg={llm.llmTestMsg}
         onSaveLlm={llm.saveLlmSettings} onTestLlm={llm.testLlmConnection}
+        thinkingEnabled={llm.thinkingEnabled}
+        setThinkingEnabled={llm.setThinkingEnabled}
         theme={theme} setTheme={setTheme} onLangChange={llm.handleLangChange}
         onClearConversations={() => {
           if (confirm(t("settings.clear_conv_confirm", llm.lang))) {
@@ -866,6 +889,28 @@ export default function Home() {
                   </div>
                 </div>
                 <Button onClick={run3dFullFlowDemo} disabled={demoRunning} className="shrink-0" size="sm">
+                  {demoRunning ? (<><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />{t("demo.running", llm.lang)}</>)
+                    : (<><Zap className="h-3.5 w-3.5 mr-1.5" />{t("demo.run", llm.lang)}</>)}
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 hover:border-emerald-500/40 transition-colors">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <Library className="h-4 w-4 text-emerald-400" />{t("demo.bim_demolition", llm.lang)}
+                  </h3>
+                  <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">{t("demo.bim_demolition_desc", llm.lang)}</p>
+                  <div className="mt-3 flex items-center gap-3 text-[10px] text-muted-foreground/70">
+                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />BIM Model</span>
+                    <span>→</span>
+                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-400" />Plan</span>
+                    <span>→</span>
+                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-violet-400" />Timeline</span>
+                  </div>
+                </div>
+                <Button onClick={runBimDemolitionDemo} disabled={demoRunning} className="shrink-0" size="sm">
                   {demoRunning ? (<><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />{t("demo.running", llm.lang)}</>)
                     : (<><Zap className="h-3.5 w-3.5 mr-1.5" />{t("demo.run", llm.lang)}</>)}
                 </Button>

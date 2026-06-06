@@ -59,6 +59,8 @@ interface Props {
   llmTestMsg: string;
   onSaveLlm: () => Promise<void>;
   onTestLlm: () => Promise<void>;
+  thinkingEnabled: boolean;
+  setThinkingEnabled: (v: boolean) => void;
   theme: string;
   setTheme: (t: string) => void;
   onLangChange: (l: Lang) => void;
@@ -87,6 +89,8 @@ export default function SettingsPanel({
   llmTestMsg,
   onSaveLlm,
   onTestLlm,
+  thinkingEnabled,
+  setThinkingEnabled,
   theme,
   setTheme,
   onLangChange,
@@ -159,6 +163,27 @@ export default function SettingsPanel({
                     ))}
                   </datalist>
                   <p className="text-xs text-muted-foreground mt-0.5">{t("settings.model_hint", lang)}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground uppercase tracking-wide">{t("settings.thinking_mode", lang)}</label>
+                  <div className="mt-2 flex items-center gap-3">
+                    <button
+                      onClick={() => setThinkingEnabled(!thinkingEnabled)}
+                      className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors cursor-pointer ${
+                        thinkingEnabled ? "bg-primary/40" : "bg-muted-foreground/20"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                          thinkingEnabled ? "translate-x-6" : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                    <span className="text-sm text-muted-foreground">
+                      {thinkingEnabled ? t("settings.thinking_on", lang) : t("settings.thinking_off", lang)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">{t("settings.thinking_hint", lang)}</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <button

@@ -18,6 +18,7 @@ class LLMSettingsRequest(BaseModel):
     model: str | None = None
     api_key: str | None = None
     base_url: str | None = None
+    thinking_enabled: bool | None = None
 
 
 @router.get("/llm")
@@ -34,6 +35,7 @@ async def get_llm_config(request: Request):
         "base_url": llm.base_url or "",
         "has_api_key": bool(llm.api_key),
         "api_key_masked": masked,
+        "thinking_enabled": getattr(llm, 'thinking_enabled', False),
     }
 
 
@@ -43,12 +45,12 @@ async def configure_llm(req: LLMSettingsRequest, request: Request):
     memory = request.app.state.memory
     if llm is None:
         return JSONResponse({"status": "error", "message": "LLM engine not initialized"}, status_code=503)
-    llm.configure(model=req.model, api_key=req.api_key, base_url=req.base_url)
+    llm.configure(model=req.model, api_key=req.api_key, base_url=req.base_url, thinking_enabled=req.thinking_enabled)
 
     config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "llm_config.json")
     try:
         with open(config_file, "w") as f:
-            json.dump({"model": llm.model, "api_key": llm.api_key, "base_url": llm.base_url}, f)
+            json.dump({"model": llm.model, "api_key": llm.api_key, "base_url": llm.base_url, "thinking_enabled": llm.thinking_enabled}, f)
     except Exception as e:
         logger.warning(f"Failed to save LLM config: {e}")
 
@@ -60,6 +62,7 @@ async def configure_llm(req: LLMSettingsRequest, request: Request):
             "model": llm.model,
             "base_url": llm.base_url or "default (OpenAI)",
             "has_api_key": bool(llm.api_key),
+            "thinking_enabled": llm.thinking_enabled,
         },
     }
 
