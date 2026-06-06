@@ -7,6 +7,7 @@ from typing import Any, AsyncGenerator
 
 import httpx
 from openai import AsyncOpenAI
+from model_capabilities import get_capabilities, build_thinking_config
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +50,6 @@ SYSTEM_PROMPT = """You are XuanwuAI, an AI structural engineering assistant spec
 |------|-------|-----------|
 | **quick_analysis** 🥇 | 2D frame | **PREFERRED for 2D** — merged pipeline: generate + anaStruct analyze + select critical element in ONE call. Same params as generate_frame. |
 | **full_analysis_3d** 🥇 | 3D frame (XY grid) | **PREFERRED for 3D** — merged pipeline: generate_3d → UnifiedFrame → PyNite 3D FEM → select critical. Supports num_bays_y. |
-
-> **DEPRECATED**: `run_full_analysis` (legacy 2D composite pipeline) — use `quick_analysis` instead. Still available for backwards compatibility but will be removed in a future version.
 
 ### 🏗️ B. FRAME GENERATION
 
@@ -262,13 +261,12 @@ When a tool returns an error:
 ## ⚙️ BIM MODELING — MATERIAL KNOWLEDGE
 
 ### Steel Grades (Chinese Standard)
-| Grade | fy (MPa) | fu (MPa) | Typical use |
-|-------|----------|----------|-------------|
-| Q235 | 235 | 370-500 | Light structures, secondary beams |
-| Q345 | 345 | 470-630 | General building frames |
-| Q355 | 355 | 470-630 | Standard building frames (replaces Q345) |
-| Q390 | 390 | 490-650 | High-rise, heavy loads |
-| Q420 | 420 | 520-680 | Critical columns, seismic |
+| Grade | fy (MPa) | Typical use |
+|-------|----------|-------------|
+| Q235 | 235 | Light structures |
+| Q355 | 355 | Standard building frames |
+| Q390 | 390 | High-rise, heavy loads |
+| Q420 | 420 | Critical columns, seismic |
 
 ### Steel Sections available in bim_model_server
 - **IPE** (100-600): I-beams for beams/girders
@@ -284,12 +282,12 @@ When a tool returns an error:
 | C40 | 40 | 33.5 | Prestressed, critical elements |
 
 ### Demolition Strategies
-| Strategy | Approach | Risk | Best for |
-|----------|----------|------|----------|
-| top_down 🥇 | Remove top→down: slabs→beams→columns | Low | Multi-story buildings (safest) |
-| bottom_up | Remove bottom→up: columns→beams→slabs | High | Single story, controlled collapse |
-| sequential | Element by element in ID order | Medium | Simple frames |
-| llm | Smart planning based on structure topology | Medium | Irregular structures |
+| Strategy | Best for |
+|----------|----------|
+| top_down 🥇 | Multi-story buildings (safest) |
+| bottom_up | Single story, controlled collapse |
+| sequential | Simple frames |
+| llm | Irregular structures |
 
 ================================================================================
 ## 🚨 RULES (non-negotiable)
@@ -341,40 +339,19 @@ class LLMEngine:
         logger.info(f"LLM reconfigured: model={self.model}, base_url={self.base_url or 'default'}")
 
     @staticmethod
-    def _is_deepseek_model(model: str) -> bool:
-        """Check if the model is DeepSeek (supports thinking/reasoning)."""
-        model_lower = model.lower()
-        return "deepseek" in model_lower
+    def _get_extra_body(model: str, tools: list | None) -> dict:
+        """Build extra_body for thinking config, using the model registry.
+
+        Returns empty dict for models that don't support thinking — we
+        never send unknown extra_body keys to providers.
+        """
+        caps = get_capabilities(model)
+        return build_thinking_config(caps, tools)
 
     @staticmethod
-    def _enable_thinking(model: str, tools: list | None) -> dict:
-        """Configure thinking mode based on model and whether tools are present.
-
-        DeepSeek V4 models (deepseek-v4-flash, deepseek-v4-pro) support thinking via:
-          - thinking: {"type": "enabled"}
-          - reasoning_effort: "high" | "max" (default "high")
-        The thinking format is NOT OpenAI o-series — DeepSeek does NOT support
-        budget_tokens inside the thinking object. Use reasoning_effort instead.
-        """
-        extra = {}
-        if not model:
-            return extra
-
-        model_lower = model.lower()
-        is_deepseek = "deepseek" in model_lower
-        is_reasoning = any(k in model_lower for k in ("reasoning", "r1", "v4-pro", "pro"))
-
-        if is_deepseek or is_reasoning:
-            # DeepSeek V4 thinking format (NOT OpenAI o-series format)
-            extra["thinking"] = {"type": "enabled"}
-            # With tools, use "high" reasoning effort (avoids excessive thinking per tool round)
-            # Without tools, use "max" for deeper reasoning on pure chat
-            extra["reasoning_effort"] = "high" if tools else "max"
-        else:
-            # OpenAI-compatible: no thinking param needed
-            pass
-
-        return extra
+    def _is_deepseek_model(model: str) -> bool:
+        caps = get_capabilities(model)
+        return caps.thinking_format == "deepseek_v4"
 
     async def chat(
         self,
@@ -395,7 +372,7 @@ class LLMEngine:
         }
 
         # Auto-configure thinking mode based on model
-        thinking_config = self._enable_thinking(self.model, tools)
+        thinking_config = self._get_extra_body(self.model, tools)
         if thinking_config:
             kwargs["extra_body"] = thinking_config
 
@@ -511,7 +488,7 @@ class LLMEngine:
         }
 
         # Auto-configure thinking mode based on model
-        thinking_config = self._enable_thinking(self.model, tools)
+        thinking_config = self._get_extra_body(self.model, tools)
         if thinking_config:
             kwargs["extra_body"] = thinking_config
 
