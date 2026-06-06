@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:8000";
+export const API_BASE = "http://localhost:8000";
 
 export interface Tool {
   name: string;
@@ -76,8 +76,10 @@ export async function callTool(
   return res.json();
 }
 
+export const WS_BASE = API_BASE.replace("http://", "ws://");
+
 export function createChatWebSocket(): WebSocket {
-  return new WebSocket("ws://localhost:8000/ws/chat");
+  return new WebSocket(`${WS_BASE}/ws/chat`);
 }
 
 export interface MetricComparison {
