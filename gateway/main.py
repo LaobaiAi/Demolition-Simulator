@@ -108,9 +108,14 @@ def _system_load_checker() -> float:
             return float(f.read().split()[0])
     try:
         import psutil
-        return psutil.getloadavg()[0] / (os.cpu_count() or 4)
+        cpu_pct = psutil.cpu_percent(interval=0.1) / 100.0
+        mem_pct = psutil.virtual_memory().percent / 100.0
+        return max(cpu_pct, mem_pct)
     except Exception:
-        return 0.0
+        try:
+            return 1.0 / (os.cpu_count() or 4)
+        except Exception:
+            return 0.5
 
 
 _TRIM_BLACKLIST = {

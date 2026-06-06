@@ -22,8 +22,8 @@ class SessionMemory:
         self.user_id = user_id
         self._memory = None
         self._local: list[dict[str, Any]] = []
-        self._try_init()
         self._load_local()
+        threading.Thread(target=self._try_init, daemon=True).start()
 
     def _try_init(self) -> None:
         try:
