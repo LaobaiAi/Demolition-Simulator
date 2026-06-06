@@ -10,7 +10,7 @@ import json
 import logging
 from typing import Any, AsyncGenerator
 
-from llm_engine import LLMEngine, SYSTEM_PROMPT
+from llm_engine import LLMEngine, build_system_prompt
 from caiao import CAIAOClientHub
 
 logger = logging.getLogger(__name__)
@@ -157,26 +157,23 @@ class AgentLoop:
         history: list[dict[str, Any]] | None = None,
         memory_context: str = "",
     ) -> AsyncGenerator[dict[str, Any], None]:
-        system_content = SYSTEM_PROMPT
-        if memory_context:
-            system_content = f"{SYSTEM_PROMPT}\n\n{memory_context}"
-
-        messages: list[dict[str, Any]] = [
-            {"role": "system", "content": system_content},
-        ]
-        if history:
-            # NOTE: reasoning_content is preserved in history for DeepSeek models,
-            # which require it when the previous assistant turn had tool_calls.
-            # OpenAI models ignore this field so it's harmless to keep it.
-            messages.extend(history)
-        messages.append({"role": "user", "content": user_message})
-
         if self._cached_tools is None:
             self._cached_tools = await self.hub.list_tools()
             logger.info(f"Cached {len(self._cached_tools)} tools from hub")
         tools_list = self._cached_tools
         llm_tools = self.llm.format_tools_for_llm(tools_list) if tools_list else None
         llm_tools = _filter_tools_by_message(user_message, llm_tools)
+
+        system_content = build_system_prompt(user_message, has_tools=llm_tools is not None)
+        if memory_context:
+            system_content = f"{system_content}\n\n{memory_context}"
+
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": system_content},
+        ]
+        if history:
+            messages.extend(history)
+        messages.append({"role": "user", "content": user_message})
 
         total_reasoning: list[str] = []
         total_iterations = 0

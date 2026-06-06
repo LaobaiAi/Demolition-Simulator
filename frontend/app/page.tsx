@@ -84,7 +84,14 @@ export default function Home() {
   const [currentStep, setCurrentStep] = useState("");
   const [toolsDialogOpen, setToolsDialogOpen] = useState(false);
   const [memoryDialogOpen, setMemoryDialogOpen] = useState(false);
-  const [streamingText, setStreamingText] = useState("");
+  const streamingFullRef = useRef("");
+  const [streamingDisplay, setStreamingDisplay] = useState("");
+  const streamingText = streamingDisplay;
+  const setStreamingText = useCallback((updater: (prev: string) => string) => {
+    const full = updater(streamingFullRef.current);
+    streamingFullRef.current = full;
+    setStreamingDisplay(full.length > 300 ? full.slice(-300) : full);
+  }, []);
   const [demolishDialogOpen, setDemolishDialogOpen] = useState(false);
   const [vdConfigOpen, setVdConfigOpen] = useState(false);
   const [vdStrategy, setVdStrategy] = useState("top_down");
@@ -389,7 +396,7 @@ export default function Home() {
       wsRef.current.send(JSON.stringify({ type: "cancel" }));
     }
     setStatus("idle");
-    setStreamingText("");
+    setStreamingText(() => "");
     setCurrentStep("");
     pendingStepsRef.current = [];
   }, []);
@@ -417,10 +424,10 @@ export default function Home() {
     setDemolishReady(false);
     wsRef.current?.send(JSON.stringify({
       type: "launch_pipeline", pipeline: "visual_demolition",
-      params: { mode, structure: frameStructure, strategy: vdStrategy, effects_preset: vdEffectsPreset, speed: 1,
-        structure_params: { num_bays_x: 3, num_stories: 4, span_x_m: 6.0, story_height_m: 3.0, steel_grade: "Q355" } },
+      params: { mode, structure: frameStructure, strategy: vdStrategy, effects_preset: vdEffectsPreset,
+        speed: animSpeed, effects: animEffects, structure_params: frameStructure },
     }));
-  }, [frameStructure, vdStrategy, vdEffectsPreset, llm.lang]);
+  }, [frameStructure, vdStrategy, vdEffectsPreset, animSpeed, animEffects, llm.lang]);
 
   const launchScenarioFromDemo = useCallback(async (scenarioName: string, scenario: ScenarioSummary) => {
     setDemoLibraryOpen(false);
@@ -432,16 +439,24 @@ export default function Home() {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       const needsAnalysis = scenario.category === "mechanics";
       let structureParams: Record<string, unknown> = { num_bays_x: 3, num_stories: 4, span_x_m: 6.0, story_height_m: 3.0, steel_grade: "Q355" };
+      let fullStrategy = needsAnalysis ? "llm" : "top_down";
+      let fullEffects = "standard";
+      let fullSpeed = 1.0;
       try {
         const full = await fetchScenario(scenarioName);
         if (full?.structure_params) structureParams = full.structure_params as Record<string, unknown>;
+        if (full?.strategy) fullStrategy = full.strategy;
+        if (full?.effects_preset) fullEffects = full.effects_preset;
+        if (full?.speed) fullSpeed = full.speed;
+        if (full?.effects) setAnimEffects(full.effects as Record<string, boolean>);
       } catch { /* use defaults */ }
+      if (scenario.viz_mode) setVizMode(scenario.viz_mode as "svg" | "webgl" | "unity" | "ifc");
       const buildingType = structureParams.building_type as string | undefined;
       const pipeline = buildingType === "steam_turbine" ? "steam_turbine_demolition" : "visual_demolition";
       wsRef.current.send(JSON.stringify({
         type: "launch_pipeline", pipeline,
-        params: { mode: needsAnalysis ? "mechanics" : "topology", strategy: needsAnalysis ? "llm" : "top_down",
-          effects_preset: "standard", speed: 1.0, structure_params: structureParams },
+        params: { mode: needsAnalysis ? "mechanics" : "topology", strategy: fullStrategy,
+          effects_preset: fullEffects, speed: fullSpeed, structure_params: structureParams },
       }));
       setPipelineActive(true);
       setPipelineProgress(0);
@@ -635,7 +650,7 @@ export default function Home() {
     setFailedElements([]);
     setMemorySnippets([]);
     setCurrentStep("");
-    setStreamingText("");
+    setStreamingText(() => "");
     setDemolishReady(false);
     setFrameStructure(null);
     setNodeDisplacements(null);
