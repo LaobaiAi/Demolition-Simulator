@@ -41,6 +41,7 @@ json.dumps = _patched_dumps
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from caiao import CAIAOClientHub
 from llm_engine import LLMEngine
@@ -205,6 +206,11 @@ class _BodySizeLimitMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(_BodySizeLimitMiddleware)
+
+# ── Serve exported IFC files (from bim_model_server) ─────────────────────
+_exports_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "caiao_servers", "exports")
+os.makedirs(_exports_dir, exist_ok=True)
+app.mount("/exports", StaticFiles(directory=_exports_dir), name="exports")
 
 # ── All REST endpoints are defined in gateway/routers/ ────────────────────
 # Routers are registered in lifespan() via app.include_router().
