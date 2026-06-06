@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, type MutableRefObject } from "react";
 import { t, type Lang } from "@/lib/i18n";
-import { API_BASE, WS_BASE } from "@/lib/api";
+import { WS_BASE } from "@/lib/api";
 import {
   extractMaxAxialForce,
   ANALYSIS_TOOLS,
@@ -49,6 +49,279 @@ export interface WebSocketCallbacks {
   compactStep: (step: StepEvent) => StepEvent;
 }
 
+type WsData = StepEvent & Record<string, unknown>;
+
+function tryParseJson(v: unknown): Record<string, unknown> | null {
+  if (!v) return null;
+  if (typeof v === "object") return v as Record<string, unknown>;
+  try { return JSON.parse(v as string); }
+  catch { return null; }
+}
+
+// ── Step label mapping ──────────────────────────────────────────────────────
+
+const STEP_LABELS: Record<string, string> = {
+  generate_simple_frame: "step.generating",
+  generate_frame: "step.generating",
+  analyze_frame: "step.analyzing",
+  quick_analysis: "step.generating",
+  pynite_analysis: "step.analyzing",
+  fapp_analysis: "step.analyzing",
+  select_critical_element: "step.critical",
+  apply_demolition_action: "step.demolishing",
+  high_fidelity_analysis: "step.verifying",
+};
+
+// ── Message type handlers ──────────────────────────────────────────────────
+
+type HandlerFn = (data: WsData, cb: WebSocketCallbacks) => void;
+
+function handlePipelineStart(data: WsData, cb: WebSocketCallbacks) {
+  cb.setPipelineActive(true);
+  cb.setPipelineProgress(0);
+  cb.setPipelinePhase(t("vd.pipeline_starting", cb.langRef.current));
+  cb.setDemoStatus("Building model in Blender...");
+  cb.setMessages((prev) => { const copy = [...prev]; copy.push({ role: "user", content: "Pipeline launched" }); return copy; });
+}
+
+function handlePipelineStep(data: WsData, cb: WebSocketCallbacks) {
+  cb.setPipelineProgress((data.progress as number) || 0);
+  cb.setPipelinePhase((data.phase as string) || "");
+
+  const rawData = data.data as Record<string, unknown> | undefined;
+  if (!rawData) return;
+
+  if (data.tool === "generate_frame") {
+    const parsed = tryParseJson(rawData.result);
+    if (parsed?.nodes && parsed?.elements) {
+      cb.setFrameStructure(parsed as unknown as unknown as FrameStructure);
+      cb.setDemolitionMode(true);
+    }
+  } else if (data.tool === "build_frame_model") {
+    const parsed = tryParseJson(rawData.result);
+    if (parsed?.blend_file) {
+      cb.pipelineBuildResultRef.current = parsed;
+      cb.setSteamTurbinePreview((parsed.preview_image as string) || null);
+      cb.setDemoStatus("Steam turbine building generated");
+      cb.setLogEntries((prev) => [...prev, { type: "build", content: `Steam turbine model saved: ${parsed.blend_file}` }].slice(-200));
+    }
+  } else if (data.tool === "plan_demolition_sequence") {
+    const parsed = tryParseJson(rawData.result);
+    if (parsed?.steps && Array.isArray(parsed.steps)) {
+      const elementIds = (parsed.steps as Record<string, unknown>[])
+        .filter((s) => (s.element_id as number) > 0)
+        .map((s) => s.element_id as number);
+      if (elementIds.length > 0) {
+        cb.setDemolitionRounds([{ round: 1, elementIds, cumulativeIds: elementIds }]);
+      }
+    }
+  }
+}
+
+function handlePipelineComplete(data: WsData, cb: WebSocketCallbacks) {
+  cb.setPipelineActive(false);
+  cb.setPipelineProgress(1);
+  cb.setPipelinePhase("");
+
+  const steps = data.timeline_steps as Array<{ id: number; elementId: number; elementType: string; phase: string; durationMs: number }> | undefined;
+  if (steps) {
+    cb.setTimelineSteps(steps);
+    const validIds = steps.filter((s) => s.elementId > 0).map((s) => s.elementId);
+    if (validIds.length > 0) {
+      const uniqueIds = [...new Set(validIds)];
+      cb.setAnimRequest((prev) => ({ key: (prev?.key ?? 0) + 1, targets: uniqueIds }));
+      cb.setAnimPlaying(true);
+    }
+  }
+
+  cb.setDemoRunning(false);
+  cb.setRunningDemoKey(null);
+  cb.demoRef.current.running = false;
+
+  const buildResult = cb.pipelineBuildResultRef.current;
+  if (buildResult?.blend_file) {
+    cb.setMessages((prev) => [...prev, { role: "ai", content: `Steam turbine building generated: ${buildResult.blend_file}` }]);
+  } else {
+    cb.setMessages((prev) => { const copy = [...prev]; copy.push({ role: "ai", content: "Pipeline complete" }); return copy; });
+  }
+  cb.pipelineBuildResultRef.current = null;
+}
+
+function handlePipelineError(data: WsData, cb: WebSocketCallbacks) {
+  cb.setPipelineActive(false);
+  cb.setPipelineProgress(0);
+  cb.setPipelinePhase("");
+  cb.setLogEntries((prev) => [...prev, { type: "error", content: (data.content as string) || "" }].slice(-200));
+  cb.setDemoRunning(false);
+  cb.setRunningDemoKey(null);
+  cb.demoRef.current.running = false;
+  cb.pipelineBuildResultRef.current = null;
+}
+
+function handleUserEcho(_data: WsData, cb: WebSocketCallbacks) {
+  cb.setCurrentStep("");
+  cb.setStreamingText(() => "");
+  cb.setDemolishReady(false);
+}
+
+function handleMemory(data: WsData, cb: WebSocketCallbacks) {
+  cb.setMemorySnippets((prev) => [...prev, (data.content as string) || ""].slice(-5));
+  cb.setLogEntries((prev) => [...prev, { type: "thinking", content: `Memory: ${data.content}` }].slice(-200));
+}
+
+function handleResponse(data: WsData, cb: WebSocketCallbacks) {
+  const compacted = cb.pendingStepsRef.current.map(cb.compactStep);
+  cb.setMessages((prev) => [...prev, { role: "ai", content: (data.content as string) || "", steps: compacted }]);
+  cb.setLogEntries((prev) => [...prev, { type: "response", content: data.content }].slice(-200));
+  cb.pendingStepsRef.current = [];
+  cb.setStatus("idle");
+  cb.setStreamingText(() => "");
+}
+
+function handleError(data: WsData, cb: WebSocketCallbacks) {
+  cb.setMessages((prev) => [...prev, { role: "ai", content: `Error: ${data.content}` }]);
+  cb.setLogEntries((prev) => [...prev, data as StepEvent].slice(-200));
+  cb.pendingStepsRef.current = [];
+  cb.setStatus("idle");
+  cb.setStreamingText(() => "");
+}
+
+// ── Tool result sub-handlers ───────────────────────────────────────────────
+
+function handleToolCall(data: WsData, cb: WebSocketCallbacks) {
+  if (!data.name) return;
+  const key = STEP_LABELS[data.name];
+  const label = key ? t(key, cb.langRef.current) : `Running ${data.name}...`;
+  cb.setCurrentStep(label);
+}
+
+const TOOL_RESULT_HANDLERS: Record<string, (parsed: Record<string, unknown>, cb: WebSocketCallbacks) => void> = {
+  generate_simple_frame(p, cb) { if (p.nodes && p.elements) cb.setFrameStructure(p as unknown as FrameStructure); },
+  generate_frame(p, cb) { if (p.nodes && p.elements) cb.setFrameStructure(p as unknown as FrameStructure); },
+  generate_from_text(p, cb) { if (p.nodes && p.elements) cb.setFrameStructure(p as unknown as FrameStructure); },
+
+  quick_analysis(p, cb) {
+    if (p.status !== "complete") return;
+    if (p.structure && (p.structure as Record<string, unknown>).nodes && (p.structure as Record<string, unknown>).elements) {
+      cb.setFrameStructure(p.structure as unknown as FrameStructure);
+    }
+    const analysis = p.analysis as Record<string, unknown> | undefined;
+    if (analysis && analysis.max_displacement !== undefined && !("error" in analysis)) {
+      cb.setAnalysisResult(analysis);
+      if (analysis.solver) cb.setAnalysisSolver(analysis.solver as string);
+      if (analysis.node_displacements) cb.setNodeDisplacements(analysis.node_displacements as NodeDisp[]);
+      cb.setRoundAnalysisResults((prev) => ({ ...prev, [-1]: analysis }));
+      const extracted = extractMaxAxialForce(analysis.element_forces as Record<string, unknown>[] | undefined);
+      cb.setStructuralMetrics((prev) => ({
+        maxDisplacement: (analysis.max_displacement as number) ?? 0,
+        maxAxialForce: (analysis.max_axial_force as number) ?? 0,
+        criticalElementId: extracted?.elementId ?? prev?.criticalElementId ?? null,
+        criticalAxialForce: extracted?.absMaxAxial ?? prev?.criticalAxialForce ?? null,
+        columnCount: prev?.columnCount ?? 0,
+        failedElements: prev?.failedElements ?? [],
+      }));
+    }
+    const crit = p.critical_element as Record<string, unknown> | undefined;
+    if (crit?.critical_element_id != null) {
+      cb.setStructuralMetrics((prev) => ({
+        maxDisplacement: prev?.maxDisplacement ?? 0,
+        maxAxialForce: prev?.maxAxialForce ?? 0,
+        criticalElementId: crit.critical_element_id as number,
+        criticalAxialForce: (crit.critical_axial_force_N as number) ?? null,
+        columnCount: (crit.column_count as number) ?? prev?.columnCount ?? 0,
+        failedElements: prev?.failedElements ?? [],
+      }));
+      cb.setDemolishReady(true);
+    }
+  },
+
+  select_critical_element(p, cb) {
+    cb.setStructuralMetrics((prev) => ({
+      maxDisplacement: prev?.maxDisplacement ?? 0,
+      maxAxialForce: prev?.maxAxialForce ?? 0,
+      criticalElementId: (p.critical_element_id as number) ?? null,
+      criticalAxialForce: (p.critical_axial_force_N as number) ?? null,
+      columnCount: (p.column_count as number) ?? prev?.columnCount ?? 0,
+      failedElements: prev?.failedElements ?? [],
+    }));
+    cb.setDemolishReady(true);
+  },
+
+  apply_demolition_action(p, cb) {
+    const feList = p.failed_elements as number[] | undefined;
+    if (!feList) return;
+    cb.demolitionIdxRef.current++;
+    cb.setFailedElements((prev) => { const merged = new Set([...prev, ...feList]); return Array.from(merged); });
+    cb.setStructuralMetrics((prev) => {
+      const merged = new Set([...(prev?.failedElements || []), ...feList]);
+      return prev
+        ? { ...prev, failedElements: Array.from(merged) }
+        : { maxDisplacement: 0, maxAxialForce: 0, criticalElementId: null, criticalAxialForce: null, columnCount: 0, failedElements: Array.from(merged) };
+    });
+    cb.setAnimRequest((prev) => ({ key: (prev?.key ?? 0) + 1, targets: feList }));
+    cb.setAnimPlaying(true);
+    cb.setAnimatingRound(cb.demolitionIdxRef.current);
+  },
+};
+
+function handleAnalysisResult(p: Record<string, unknown>, toolName: string, cb: WebSocketCallbacks) {
+  if (p.max_displacement === undefined || "error" in p) return;
+  cb.setAnalysisResult(p);
+  if (p.solver) cb.setAnalysisSolver(p.solver as string);
+  if (p.node_displacements) cb.setNodeDisplacements(p.node_displacements as NodeDisp[]);
+  if (toolName === "analyze_frame") {
+    cb.setRoundAnalysisResults((prev) => ({ ...prev, [cb.demolitionIdxRef.current]: p }));
+  }
+  const extracted = extractMaxAxialForce(p.element_forces as Record<string, unknown>[] | undefined);
+  cb.setStructuralMetrics((prev) => ({
+    maxDisplacement: (p.max_displacement as number) ?? 0,
+    maxAxialForce: (p.max_axial_force as number) ?? 0,
+    criticalElementId: extracted?.elementId ?? prev?.criticalElementId ?? null,
+    criticalAxialForce: extracted?.absMaxAxial ?? prev?.criticalAxialForce ?? null,
+    columnCount: prev?.columnCount ?? 0,
+    failedElements: prev?.failedElements ?? [],
+  }));
+}
+
+function handleToolResult(data: WsData, cb: WebSocketCallbacks) {
+  const name = data.name || "";
+
+  if (TOOL_RESULT_HANDLERS[name]) {
+    const parsed = tryParseJson(data.result);
+    if (parsed) TOOL_RESULT_HANDLERS[name](parsed, cb);
+    return;
+  }
+
+  if (ANALYSIS_TOOLS.has(name)) {
+    const parsed = tryParseJson(data.result);
+    if (parsed) handleAnalysisResult(parsed, name, cb);
+  }
+}
+
+// ── Catch-all handler for tool_call / thinking / tool_result ───────────────
+
+function handleCatchAll(data: WsData, cb: WebSocketCallbacks) {
+  cb.pendingStepsRef.current = [...cb.pendingStepsRef.current, data as StepEvent];
+  cb.setLogEntries((prev) => [...prev, data as StepEvent].slice(-200));
+
+  if (data.type === "tool_call") handleToolCall(data, cb);
+  if (data.type === "thinking" && data.content) cb.setStreamingText((prev) => prev + (data.content as string));
+  if (data.type === "tool_result" && data.result) handleToolResult(data, cb);
+}
+
+// ── Dispatch table ─────────────────────────────────────────────────────────
+
+const MESSAGE_HANDLERS: Record<string, HandlerFn> = {
+  pipeline_start: handlePipelineStart,
+  pipeline_step: handlePipelineStep,
+  pipeline_complete: handlePipelineComplete,
+  pipeline_error: handlePipelineError,
+  user_echo: handleUserEcho,
+  memory: handleMemory,
+  response: handleResponse,
+  error: handleError,
+};
+
 export function useWebSocket(callbacks: WebSocketCallbacks) {
   const [wsConnected, setWsConnected] = useState<"connected" | "reconnecting" | "disconnected">("disconnected");
   const wsRef = useRef<WebSocket | null>(null);
@@ -76,236 +349,14 @@ export function useWebSocket(callbacks: WebSocketCallbacks) {
         ws.close();
       };
       ws.onmessage = (event) => {
-        const data: StepEvent = JSON.parse(event.data);
+        const data = JSON.parse(event.data) as WsData;
         if (data.type === "ping") return;
 
-        if (data.type === "pipeline_start") {
-          callbacks.setPipelineActive(true);
-          callbacks.setPipelineProgress(0);
-          callbacks.setPipelinePhase(t("vd.pipeline_starting", callbacks.langRef.current));
-          callbacks.setDemoStatus("Building model in Blender...");
-          callbacks.setMessages((prev) => { const copy = [...prev]; copy.push({ role: "user", content: "Pipeline launched" }); return copy; });
-          return;
-        }
-        if (data.type === "pipeline_step") {
-          callbacks.setPipelineProgress(data.progress || 0);
-          callbacks.setPipelinePhase(data.phase || "");
-          if (data.tool === "generate_frame" && (data as unknown as Record<string, unknown>).data) {
-            try {
-              const d = (data as unknown as Record<string, unknown>).data as Record<string, unknown>;
-              const parsed = JSON.parse(d.result as string);
-              if (parsed.nodes && parsed.elements) {
-                callbacks.setFrameStructure(parsed as FrameStructure);
-                callbacks.setDemolitionMode(true);
-              }
-            } catch { /* ignore */ }
-          }
-          if (data.tool === "build_frame_model" && (data as unknown as Record<string, unknown>).data) {
-            try {
-              const d = (data as unknown as Record<string, unknown>).data as Record<string, unknown>;
-              const parsed = JSON.parse(d.result as string);
-              if (parsed.blend_file) {
-                callbacks.pipelineBuildResultRef.current = parsed;
-                callbacks.setSteamTurbinePreview(parsed.preview_image || null);
-                callbacks.setDemoStatus("Steam turbine building generated");
-                callbacks.setLogEntries((prev) => [...prev, { type: "build", content: `Steam turbine model saved: ${parsed.blend_file}` }].slice(-200));
-              }
-            } catch { /* ignore */ }
-          }
-          if (data.tool === "plan_demolition_sequence" && (data as unknown as Record<string, unknown>).data) {
-            try {
-              const d = (data as unknown as Record<string, unknown>).data as Record<string, unknown>;
-              const parsed = JSON.parse(d.result as string);
-              if (parsed.steps && Array.isArray(parsed.steps)) {
-                const elementIds = parsed.steps
-                  .filter((s: Record<string, unknown>) => (s.element_id as number) > 0)
-                  .map((s: Record<string, unknown>) => s.element_id as number);
-                if (elementIds.length > 0) {
-                  callbacks.setDemolitionRounds([{ round: 1, elementIds, cumulativeIds: elementIds }]);
-                }
-              }
-            } catch { /* ignore */ }
-          }
-          return;
-        }
-        if (data.type === "pipeline_complete") {
-          callbacks.setPipelineActive(false);
-          callbacks.setPipelineProgress(1);
-          callbacks.setPipelinePhase("");
-          if ((data as unknown as Record<string, unknown>).timeline_steps) {
-            const steps = (data as unknown as Record<string, unknown>).timeline_steps as Array<{ id: number; elementId: number; elementType: string; phase: string; durationMs: number }>;
-            callbacks.setTimelineSteps(steps);
-            const validIds = steps.filter((s) => s.elementId > 0).map((s) => s.elementId);
-            if (validIds.length > 0) {
-              const uniqueIds = [...new Set(validIds)];
-              callbacks.setAnimRequest((prev) => ({ key: (prev?.key ?? 0) + 1, targets: uniqueIds }));
-              callbacks.setAnimPlaying(true);
-            }
-          }
-          callbacks.setDemoRunning(false);
-          callbacks.setRunningDemoKey(null);
-          callbacks.demoRef.current.running = false;
-          const buildResult = callbacks.pipelineBuildResultRef.current;
-          if (buildResult?.blend_file) {
-            callbacks.setMessages((prev) => [...prev, { role: "ai", content: `Steam turbine building generated: ${buildResult.blend_file}` }]);
-          } else {
-            callbacks.setMessages((prev) => { const copy = [...prev]; copy.push({ role: "ai", content: "Pipeline complete" }); return copy; });
-          }
-          callbacks.pipelineBuildResultRef.current = null;
-          return;
-        }
-        if (data.type === "pipeline_error") {
-          callbacks.setPipelineActive(false);
-          callbacks.setPipelineProgress(0);
-          callbacks.setPipelinePhase("");
-          callbacks.setLogEntries((prev) => [...prev, { type: "error", content: (data.content || "") }].slice(-200));
-          callbacks.setDemoRunning(false);
-          callbacks.setRunningDemoKey(null);
-          callbacks.demoRef.current.running = false;
-          callbacks.pipelineBuildResultRef.current = null;
-          return;
-        }
-
-        if (data.type === "user_echo") {
-          callbacks.setCurrentStep("");
-          callbacks.setStreamingText(() => "");
-          callbacks.setDemolishReady(false);
-          return;
-        }
-
-        if (data.type === "memory") {
-          callbacks.setMemorySnippets((prev) => [...prev, data.content || ""].slice(-5));
-          callbacks.setLogEntries((prev) => [...prev, { type: "thinking", content: `Memory: ${data.content}` }].slice(-200));
-          return;
-        }
-
-        if (data.type === "response") {
-          const compacted = callbacks.pendingStepsRef.current.map(callbacks.compactStep);
-          callbacks.setMessages((prev) => [...prev, { role: "ai", content: data.content || "", steps: compacted }]);
-          callbacks.setLogEntries((prev) => [...prev, { type: "response", content: data.content }].slice(-200));
-          callbacks.pendingStepsRef.current = [];
-          callbacks.setStatus("idle");
-          callbacks.setStreamingText(() => "");
-        } else if (data.type === "error") {
-          callbacks.setMessages((prev) => [...prev, { role: "ai", content: `Error: ${data.content}` }]);
-          callbacks.setLogEntries((prev) => [...prev, data].slice(-200));
-          callbacks.pendingStepsRef.current = [];
-          callbacks.setStatus("idle");
-          callbacks.setStreamingText(() => "");
+        const handler = MESSAGE_HANDLERS[data.type as string];
+        if (handler) {
+          handler(data, callbacks);
         } else {
-          callbacks.pendingStepsRef.current = [...callbacks.pendingStepsRef.current, data];
-          callbacks.setLogEntries((prev) => [...prev, data].slice(-200));
-
-          if (data.type === "tool_call" && data.name) {
-            const L = callbacks.langRef.current;
-            const stepLabels: Record<string, string> = {
-              generate_simple_frame: t("step.generating", L), generate_frame: t("step.generating", L),
-              analyze_frame: t("step.analyzing", L), quick_analysis: t("step.generating", L),
-              pynite_analysis: t("step.analyzing", L), fapp_analysis: t("step.analyzing", L),
-              select_critical_element: t("step.critical", L), apply_demolition_action: t("step.demolishing", L),
-              high_fidelity_analysis: t("step.verifying", L),
-            };
-            callbacks.setCurrentStep(stepLabels[data.name] || `Running ${data.name}...`);
-          }
-
-          if (data.type === "thinking" && data.content) {
-            callbacks.setStreamingText((prev) => prev + data.content);
-          }
-
-          if (data.type === "tool_result" && data.result &&
-              (data.name === "generate_simple_frame" || data.name === "generate_frame" || data.name === "generate_from_text")) {
-            try {
-              const parsed = typeof data.result === "string" ? JSON.parse(data.result) : data.result;
-              if (parsed.nodes && parsed.elements) callbacks.setFrameStructure(parsed as FrameStructure);
-            } catch { /* ignore */ }
-          }
-
-          if (data.type === "tool_result" && data.name === "quick_analysis" && data.result) {
-            try {
-              const parsed = typeof data.result === "string" ? JSON.parse(data.result) : data.result;
-              if (parsed.status === "complete") {
-                if (parsed.structure?.nodes && parsed.structure?.elements) callbacks.setFrameStructure(parsed.structure as FrameStructure);
-                if (parsed.analysis?.max_displacement !== undefined && !("error" in parsed.analysis)) {
-                  callbacks.setAnalysisResult(parsed.analysis);
-                  if (parsed.analysis.solver) callbacks.setAnalysisSolver(parsed.analysis.solver);
-                  if (parsed.analysis.node_displacements) callbacks.setNodeDisplacements(parsed.analysis.node_displacements);
-                  callbacks.setRoundAnalysisResults((prev) => ({ ...prev, [-1]: parsed.analysis }));
-                  const elemForces = parsed.analysis.element_forces as Record<string, unknown>[] | undefined;
-                  const extracted = extractMaxAxialForce(elemForces);
-                  callbacks.setStructuralMetrics((prev) => ({
-                    maxDisplacement: parsed.analysis.max_displacement ?? 0, maxAxialForce: parsed.analysis.max_axial_force ?? 0,
-                    criticalElementId: extracted?.elementId ?? prev?.criticalElementId ?? null,
-                    criticalAxialForce: extracted?.absMaxAxial ?? prev?.criticalAxialForce ?? null,
-                    columnCount: prev?.columnCount ?? 0, failedElements: prev?.failedElements ?? [],
-                  }));
-                }
-                if (parsed.critical_element?.critical_element_id != null) {
-                  callbacks.setStructuralMetrics((prev) => ({
-                    maxDisplacement: prev?.maxDisplacement ?? 0, maxAxialForce: prev?.maxAxialForce ?? 0,
-                    criticalElementId: parsed.critical_element.critical_element_id,
-                    criticalAxialForce: parsed.critical_element.critical_axial_force_N ?? null,
-                    columnCount: parsed.critical_element.column_count ?? prev?.columnCount ?? 0,
-                    failedElements: prev?.failedElements ?? [],
-                  }));
-                  callbacks.setDemolishReady(true);
-                }
-              }
-            } catch { /* ignore */ }
-          }
-
-          if (data.type === "tool_result" && data.name && ANALYSIS_TOOLS.has(data.name) && data.result) {
-            try {
-              const parsed = typeof data.result === "string" ? JSON.parse(data.result) : data.result;
-              if (parsed.max_displacement !== undefined && !("error" in parsed)) {
-                callbacks.setAnalysisResult(parsed);
-                if (parsed.solver) callbacks.setAnalysisSolver(parsed.solver);
-                if (parsed.node_displacements) callbacks.setNodeDisplacements(parsed.node_displacements);
-                if (data.name === "analyze_frame") {
-                  callbacks.setRoundAnalysisResults((prev) => ({ ...prev, [callbacks.demolitionIdxRef.current]: parsed }));
-                }
-                const elemForces = parsed.element_forces as Record<string, unknown>[] | undefined;
-                const extracted = extractMaxAxialForce(elemForces);
-                callbacks.setStructuralMetrics((prev) => ({
-                  maxDisplacement: parsed.max_displacement ?? 0, maxAxialForce: parsed.max_axial_force ?? 0,
-                  criticalElementId: extracted?.elementId ?? prev?.criticalElementId ?? null,
-                  criticalAxialForce: extracted?.absMaxAxial ?? prev?.criticalAxialForce ?? null,
-                  columnCount: prev?.columnCount ?? 0, failedElements: prev?.failedElements ?? [],
-                }));
-              }
-            } catch { /* ignore */ }
-          }
-
-          if (data.type === "tool_result" && data.name === "select_critical_element" && data.result) {
-            try {
-              const parsed = typeof data.result === "string" ? JSON.parse(data.result) : data.result;
-              callbacks.setStructuralMetrics((prev) => ({
-                maxDisplacement: prev?.maxDisplacement ?? 0, maxAxialForce: prev?.maxAxialForce ?? 0,
-                criticalElementId: parsed.critical_element_id ?? null,
-                criticalAxialForce: parsed.critical_axial_force_N ?? null,
-                columnCount: parsed.column_count ?? prev?.columnCount ?? 0,
-                failedElements: prev?.failedElements ?? [],
-              }));
-              callbacks.setDemolishReady(true);
-            } catch { /* ignore */ }
-          }
-
-          if (data.type === "tool_result" && data.name === "apply_demolition_action" && data.result) {
-            try {
-              const parsed = typeof data.result === "string" ? JSON.parse(data.result) : data.result;
-              if (parsed.failed_elements) {
-                const feList = parsed.failed_elements as number[];
-                callbacks.demolitionIdxRef.current++;
-                callbacks.setFailedElements((prev) => { const merged = new Set([...prev, ...feList]); return Array.from(merged); });
-                callbacks.setStructuralMetrics((prev) => {
-                  const merged = new Set([...(prev?.failedElements || []), ...feList]);
-                  return prev ? { ...prev, failedElements: Array.from(merged) } : { maxDisplacement: 0, maxAxialForce: 0, criticalElementId: null, criticalAxialForce: null, columnCount: 0, failedElements: Array.from(merged) };
-                });
-                callbacks.setAnimRequest((prev) => ({key: (prev?.key ?? 0) + 1, targets: feList}));
-                callbacks.setAnimPlaying(true);
-                callbacks.setAnimatingRound(callbacks.demolitionIdxRef.current);
-              }
-            } catch { /* ignore */ }
-          }
+          handleCatchAll(data, callbacks);
         }
       };
     }
