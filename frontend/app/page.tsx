@@ -168,6 +168,7 @@ export default function Home() {
 
   useEffect(() => {
     const id = ++scenariosFetchId.current;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetching loading state
     setScenariosLoading(true);
     fetchScenarios()
       .then((data) => {
@@ -235,6 +236,7 @@ export default function Home() {
         const activeConv = parsed.find((c) => c.id === active);
         if (activeConv?.messages?.length) {
           conv.setActiveConvId(active);
+          /* eslint-disable react-hooks/set-state-in-effect -- restoring saved state on mount */
           setMessages(activeConv.messages);
           const restored = restoreStateFromMessages(activeConv.messages);
           setFrameStructure(restored.frameStructure);
@@ -243,6 +245,7 @@ export default function Home() {
           setStructuralMetrics(restored.structuralMetrics);
           setFailedElements(restored.failedElements);
           setDemolishReady(restored.demolishReady);
+          /* eslint-enable react-hooks/set-state-in-effect */
         }
       } else if (active) {
         conv.setActiveConvId(active);
@@ -273,7 +276,11 @@ export default function Home() {
     setStructuralMetrics: (updater) => setStructuralMetrics(updater),
     setFailedElements: (updater) => setFailedElements(updater),
     setRoundAnalysisResults: (updater) => setRoundAnalysisResults(updater),
-    setDemolitionRounds, setTimelineSteps,
+    setDemolitionRounds: (rounds) => {
+      setDemolitionRounds(rounds);
+      setActiveRoundIdx(rounds.length > 0 ? rounds.length - 1 : -1);
+    },
+    setTimelineSteps,
     setSteamTurbinePreview, setDemoRunning, setRunningDemoKey,
     setAnimRequest: (updater) => setAnimRequest(updater),
     setAnimPlaying, setAnimatingRound,
@@ -292,10 +299,6 @@ export default function Home() {
       logEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [logEntries, logPaused]);
-
-  useEffect(() => {
-    setActiveRoundIdx(demolitionRounds.length > 0 ? demolitionRounds.length - 1 : -1);
-  }, [demolitionRounds.length]);
 
   const displayFailedElements = useMemo(() => {
     if (activeRoundIdx >= 0 && activeRoundIdx < demolitionRounds.length) {
