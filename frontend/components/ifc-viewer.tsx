@@ -317,20 +317,26 @@ export function IFCViewer({
           const geomSize = geometries.size();
 
           for (let j = 0; j < geomSize; j++) {
-            const flatGeom = geometries.get(j);
-            const verts = ifcApi.GetVertexArray(
-              flatGeom.geometryData.flatVertices,
-              flatGeom.geometryData.flatVertices.size
-            );
-            const indices = ifcApi.GetIndexArray(
-              flatGeom.geometryData.flatIndices,
-              flatGeom.geometryData.flatIndices.size
-            );
+            const placedGeom = geometries.get(j);
+            let ifcGeom;
+            try {
+              ifcGeom = ifcApi.GetGeometry(modelId, placedGeom.geometryExpressID);
+            } catch {
+              continue;
+            }
+            if (!ifcGeom) continue;
+
+            const vertData = ifcGeom.GetVertexData();
+            const vertSize = ifcGeom.GetVertexDataSize();
+            const idxData = ifcGeom.GetIndexData();
+            const idxSize = ifcGeom.GetIndexDataSize();
+
+            const verts = ifcApi.GetVertexArray(vertData, vertSize);
+            const indices = ifcApi.GetIndexArray(idxData, idxSize);
 
             if (!verts || !indices || verts.length === 0 || indices.length === 0) continue;
 
             const geo = new THREE.BufferGeometry();
-            // web-ifc returns interleaved XYZ coordinates as [x,y,z,x,y,z,...]
             const pos = new Float32Array(verts.length);
             for (let k = 0; k < verts.length; k++) pos[k] = verts.get(k);
             geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
@@ -338,7 +344,6 @@ export function IFCViewer({
             const idx = new Uint32Array(indices.length);
             for (let k = 0; k < indices.length; k++) idx[k] = indices.get(k);
             geo.setIndex(new THREE.BufferAttribute(idx, 1));
-
             geo.computeVertexNormals();
 
             const mesh = new THREE.Mesh(geo, sharedMat.clone());
@@ -503,15 +508,19 @@ export function IFCViewer({
             const geomSize = geometries.size();
 
             for (let j = 0; j < geomSize; j++) {
-              const flatGeom = geometries.get(j);
-              const verts = ifcApi.GetVertexArray(
-                flatGeom.geometryData.flatVertices,
-                flatGeom.geometryData.flatVertices.size
-              );
-              const indices = ifcApi.GetIndexArray(
-                flatGeom.geometryData.flatIndices,
-                flatGeom.geometryData.flatIndices.size
-              );
+              const placedGeom = geometries.get(j);
+              let ifcGeom;
+              try {
+                ifcGeom = ifcApi.GetGeometry(modelId, placedGeom.geometryExpressID);
+              } catch { continue; }
+              if (!ifcGeom) continue;
+
+              const vertData = ifcGeom.GetVertexData();
+              const vertSize = ifcGeom.GetVertexDataSize();
+              const idxData = ifcGeom.GetIndexData();
+              const idxSize = ifcGeom.GetIndexDataSize();
+              const verts = ifcApi.GetVertexArray(vertData, vertSize);
+              const indices = ifcApi.GetIndexArray(idxData, idxSize);
               if (!verts || !indices || verts.length === 0 || indices.length === 0) continue;
 
               const geo = new THREE.BufferGeometry();
@@ -688,7 +697,7 @@ export function IFCViewer({
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
-            className={`absolute inset-0 z-15 flex flex-col items-center justify-center gap-4 transition-colors ${
+            className={`absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 transition-colors ${
               dragOver
                 ? "bg-primary/10 border-2 border-primary border-dashed"
                 : "bg-xuanwu-deep/60 border-2 border-border/30 border-dashed"
