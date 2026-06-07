@@ -117,7 +117,7 @@ MOCK_TOOLS = [
 ]
 
 
-async def test_prompt_variant(
+async def run_prompt_variant(
     llm: LLMEngine,
     test_case: dict,
     system_prompt: str,
@@ -185,7 +185,7 @@ async def main():
                 tc["message"], has_tools=True
             )
             prompt_tokens_est = len(prompt) // 4
-            result = await test_prompt_variant(llm, tc, prompt, var_name)
+            result = await run_prompt_variant(llm, tc, prompt, var_name)
             result["prompt_tokens_est"] = prompt_tokens_est
             all_results.append(result)
 
