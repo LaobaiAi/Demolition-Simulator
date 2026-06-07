@@ -144,6 +144,10 @@ export default function Home() {
   const [steamTurbinePreview, setSteamTurbinePreview] = useState<string | null>(null);
   const pipelineBuildResultRef = useRef<Record<string, unknown> | null>(null);
 
+  const [demolitionRounds, setDemolitionRounds] = useState<DemolitionRound[]>([]);
+  const [roundAnalysisResults, setRoundAnalysisResults] = useState<Record<number, Record<string, unknown>>>({});
+  const [activeRoundIdx, setActiveRoundIdx] = useState(-1);
+
   const logEndRef = useRef<HTMLDivElement>(null);
   const pendingStepsRef = useRef<StepEvent[]>([]);
   const langRef = useRef<Lang>("en");
@@ -289,9 +293,6 @@ export default function Home() {
     }
   }, [logEntries, logPaused]);
 
-  const [demolitionRounds, setDemolitionRounds] = useState<DemolitionRound[]>([]);
-  const [roundAnalysisResults, setRoundAnalysisResults] = useState<Record<number, Record<string, unknown>>>({});
-  const [activeRoundIdx, setActiveRoundIdx] = useState(-1);
   useEffect(() => {
     setActiveRoundIdx(demolitionRounds.length > 0 ? demolitionRounds.length - 1 : -1);
   }, [demolitionRounds.length]);
