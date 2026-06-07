@@ -1,4 +1,5 @@
 name: run_full_analysis
+version: 0.1.0
 kind: composite
 description: "Pipeline: generate frame → analyze → find critical element"
 status: deprecated

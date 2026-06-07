@@ -1,4 +1,5 @@
 name: abaqus_environment_server
+version: 0.1.0
 kind: infrastructure
 description: "Shared Abaqus environment provider — discovers Abaqus installation paths, validates license and environment health, provides project configuration"
 start_mode: eager

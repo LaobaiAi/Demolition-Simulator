@@ -1,4 +1,5 @@
 name: steam_turbine_demolition
+version: 0.1.0
 kind: composite
 description: "Steam turbine industrial building — build Blender model for demo/visualization"
 status: active

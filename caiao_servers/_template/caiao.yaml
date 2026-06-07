@@ -28,7 +28,10 @@ health:
   health_check_interval_s: 0          # 0 = no periodic check
 
 # ── Tools ─────────────────────────────────────────────────────────────────
-tools: []
+tools:
+  - name: __EXAMPLE_TOOL__
+    description: "Replace with actual tools"
+    tags: [example]
 # Example:
 #   - name: my_tool
 #     description: "What this tool does"

@@ -1,4 +1,5 @@
 name: blender_animate_server
+version: 0.1.0
 kind: atomic-mcp
 description: "Demolition animation keyframing via Blender — metadata-driven sorting, grouping, and keyframe application for progressive structural collapse"
 start_mode: lazy

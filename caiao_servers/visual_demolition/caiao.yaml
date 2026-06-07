@@ -1,4 +1,5 @@
 name: visual_demolition
+version: 0.1.0
 kind: composite
 description: "Visual demolition pipeline — generate structure, optionally run FEM analysis, plan demolition, create animation"
 status: active

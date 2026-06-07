@@ -1,4 +1,5 @@
 name: blender_environment_server
+version: 0.1.0
 kind: infrastructure
 description: "Shared Blender environment provider — resolves Blender binary path, validates environment health, provides pipeline directory paths and project configuration"
 start_mode: eager
