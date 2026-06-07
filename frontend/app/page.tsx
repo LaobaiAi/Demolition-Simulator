@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { fetchTools, fetchScenarios, fetchScenario, type Tool, type ScenarioSummary, API_BASE } from "@/lib/api";
-import { type StructuralMetrics } from "@/components/mechanical-summary";
+import { type StructuralMetrics, type DemolitionRound } from "@/components/mechanical-summary";
 import { FloatingToolbar } from "@/components/floating-toolbar";
 import { Sidebar } from "@/components/sidebar";
 import ServerManager from "@/components/server-manager";
@@ -31,8 +31,6 @@ import { playCollapseSound, playRumbleSound, stopAll } from "@/lib/sound-effects
 import { t, type Lang } from "@/lib/i18n";
 import { useTheme } from "@/components/theme-provider";
 import {
-  extractRoundAnalysisResults,
-  extractDemolitionRounds,
   restoreStateFromMessages,
   type FrameStructure,
   type NodeDisp,
@@ -128,7 +126,6 @@ export default function Home() {
   const [nodeDisplacements, setNodeDisplacements] = useState<NodeDisp[] | null>(null);
   const [analysisSolver, setAnalysisSolver] = useState<string | null>(null);
   const [vizMode, setVizMode] = useState<"svg" | "webgl" | "unity" | "ifc">("webgl");
-  const [activeRoundIdx, setActiveRoundIdx] = useState(-1);
   const [autoPlaying, setAutoPlaying] = useState(false);
   const [animRequest, setAnimRequest] = useState<{key: number; targets: number[]} | null>(null);
   const [animPlaying, setAnimPlaying] = useState(false);
@@ -292,9 +289,8 @@ export default function Home() {
     }
   }, [logEntries, logPaused]);
 
-  const demolitionRounds = useMemo(() => extractDemolitionRounds(messages), [messages]);
-  const roundAnalysisResults = useMemo(() => extractRoundAnalysisResults(messages), [messages]);
-
+  const [demolitionRounds, setDemolitionRounds] = useState<DemolitionRound[]>([]);
+  const [roundAnalysisResults, setRoundAnalysisResults] = useState<Record<number, Record<string, unknown>>>({});
   const [activeRoundIdx, setActiveRoundIdx] = useState(-1);
   useEffect(() => {
     setActiveRoundIdx(demolitionRounds.length > 0 ? demolitionRounds.length - 1 : -1);
@@ -840,7 +836,7 @@ export default function Home() {
           </DialogHeader>
           <div className="flex-1 overflow-y-auto min-h-0 space-y-3 py-2">
             <ScenarioPicker lang={llm.lang} scenarios={scenarios} loading={scenariosLoading} disabled={demoRunning}
-              hasWebSocket={wsConnected} runningKey={runningDemoKey}
+              hasWebSocket={wsConnected === "connected"} runningKey={runningDemoKey}
               onLaunch={launchScenarioFromDemo} onStop={handleStopDemo} />
 
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 hover:border-primary/40 transition-colors">

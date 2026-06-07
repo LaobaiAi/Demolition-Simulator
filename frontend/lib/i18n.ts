@@ -749,11 +749,11 @@ export function t(key: string, lang: Lang): string {
   const val = translations[lang]?.[key];
   if (!val && lang !== "en" && typeof window !== "undefined") {
     const flag = `__i18n_warned_${key}`;
-    if (!(window as Record<string, unknown>)[flag]) {
+    if (!(window as unknown as Record<string, unknown>)[flag]) {
       console.warn(
         `[i18n] Missing "${lang}" translation for key "${key}". Using English fallback.`,
       );
-      (window as Record<string, unknown>)[flag] = true;
+      (window as unknown as Record<string, unknown>)[flag] = true;
     }
   }
   return val || translations.en[key] || key;

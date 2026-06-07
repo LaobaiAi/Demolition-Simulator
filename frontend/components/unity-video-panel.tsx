@@ -341,7 +341,7 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
       setTimeout(() => connectWsRef.current(), 5000);
     } catch (e: unknown) {
       setPhase("error");
-      setStatusText(e.message || "Failed to launch Unity");
+      setStatusText((e instanceof Error ? e.message : undefined) || "Failed to launch Unity");
     }
   };
 
