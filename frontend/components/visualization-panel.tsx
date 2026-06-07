@@ -73,9 +73,9 @@ export function VisualizationPanel({
   failedElements, displayFailedElements, roundStructure,
   selectedAnalysisResult, verifyContext,
   demolitionRounds, activeRoundIdx,
-  animRequest, animEffects, animPlaying, animatingRound, animSpeed, autoPlaying,
+  animRequest, animEffects, animatingRound, animSpeed, autoPlaying,
   canvas3dRef, logEntries, logPaused,
-  onAnimComplete, onRoundClick, onRoundAnimate, onAutoPlay,
+  onAnimComplete, onRoundClick, onAutoPlay,
   onStepForward, onStepBackward, onReset, onSpeedChange, onEffectToggle, onPause,
   onLogPauseToggle, onCanvasCallback, onUnityConnected,
 }: VizPanelProps) {

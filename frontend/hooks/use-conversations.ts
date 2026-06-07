@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { t, type Lang } from "@/lib/i18n";
+import { useState, useCallback } from "react";
 import { safeGetItem, safeSetItem, safeParseJson } from "@/lib/safe-storage";
 import type { Conversation } from "@/components/sidebar";
 import type { ChatMessage } from "@/lib/state-restore";

@@ -118,8 +118,8 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
           setImgUrl(url);
           wsFailureCountRef.current = 0;
         }
-      } catch (e: any) {
-        if (e.name === "AbortError") return;
+      } catch (e: unknown) {
+        if (e instanceof DOMException && e.name === "AbortError") return;
         wsFailureCountRef.current++;
       }
       if (mountedRef.current && transportRef.current === "http") {
@@ -298,6 +298,7 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
 
   useEffect(() => {
     mountedRef.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- connection init is side-effect
     checkAndConnect();
     return () => {
       mountedRef.current = false;
@@ -338,7 +339,7 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
       reconnectAttemptRef.current = 0;
       wsFailureCountRef.current = 0;
       setTimeout(() => connectWsRef.current(), 5000);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setPhase("error");
       setStatusText(e.message || "Failed to launch Unity");
     }

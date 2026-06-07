@@ -55,11 +55,11 @@ interface ChatPanelProps {
 export function ChatPanel({
   lang, messages, status, input, setInput, currentStep, streamingText,
   frameStructure, pipelineActive, pipelineProgress, pipelinePhase,
-  demolishReady, structuralMetrics,
+  demolishReady,
   vdStrategy, setVdStrategy, vdEffectsPreset, setVdEffectsPreset,
-  animSpeed, setAnimSpeed, animEffects, setAnimEffects,
-  vdConfigOpen, setVdConfigOpen, demolishDialogOpen, setDemolishDialogOpen,
-  quickActions, onSend, onStop, onLaunchVisualDemolition, onTriggerDemolition, onQuickAction,
+  animSpeed, setAnimSpeed, setAnimEffects,
+  vdConfigOpen, setVdConfigOpen, setDemolishDialogOpen,
+  quickActions, onSend, onStop, onLaunchVisualDemolition,
 }: ChatPanelProps) {
   return (
     <div className="flex w-[30%] min-w-[300px] flex-col border-r border-border">

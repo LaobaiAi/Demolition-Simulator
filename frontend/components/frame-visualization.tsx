@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Eye, Film, Maximize2, Minimize2, Settings2 } from "lucide-react";
-import { CollapseAnimation, EFFECT_DEFS, type EffectKey } from "./frame-viz-animation";
+import { CollapseAnimation } from "./frame-viz-animation";
 
 
 interface FrameNode {
@@ -151,7 +151,6 @@ export function FrameVisualization({
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setTab("animation");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [animationTrigger]);
 
   if (!structure || !structure.nodes.length) {

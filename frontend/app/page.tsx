@@ -1,5 +1,4 @@
 "use client";
-/* eslint-disable react-hooks/immutability */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
@@ -18,7 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { fetchTools, fetchScenarios, fetchScenario, type Tool, type ScenarioSummary, API_BASE } from "@/lib/api";
-import { type DemolitionRound, type StructuralMetrics } from "@/components/mechanical-summary";
+import { type StructuralMetrics } from "@/components/mechanical-summary";
 import { FloatingToolbar } from "@/components/floating-toolbar";
 import { Sidebar } from "@/components/sidebar";
 import ServerManager from "@/components/server-manager";
@@ -54,10 +53,6 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
   } finally {
     clearTimeout(timer);
   }
-}
-
-function genId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
 interface DemolishStrategy { key: string; category: "topology" | "mechanics"; }
@@ -133,16 +128,17 @@ export default function Home() {
   const [nodeDisplacements, setNodeDisplacements] = useState<NodeDisp[] | null>(null);
   const [analysisSolver, setAnalysisSolver] = useState<string | null>(null);
   const [vizMode, setVizMode] = useState<"svg" | "webgl" | "unity" | "ifc">("webgl");
-  const [demolitionRounds, setDemolitionRounds] = useState<DemolitionRound[]>([]);
   const [activeRoundIdx, setActiveRoundIdx] = useState(-1);
   const [autoPlaying, setAutoPlaying] = useState(false);
   const [animRequest, setAnimRequest] = useState<{key: number; targets: number[]} | null>(null);
   const [animPlaying, setAnimPlaying] = useState(false);
   const [animatingRound, setAnimatingRound] = useState(-1);
   const autoPlayQueueRef = useRef<number[]>([]);
-  const [roundAnalysisResults, setRoundAnalysisResults] = useState<Record<number, Record<string, unknown>>>({});
   const { theme, setTheme } = useTheme();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem("xuanwu_sidebar_collapsed") === "true"; }
+    catch { return false; }
+  });
   const [demoLibraryOpen, setDemoLibraryOpen] = useState(false);
   const [demoRunning, setDemoRunning] = useState(false);
   const [runningDemoKey, setRunningDemoKey] = useState<string | null>(null);
@@ -163,13 +159,6 @@ export default function Home() {
     setRunningDemoKey(null);
     setDemoStatus("");
     setPipelineActive(false);
-  }, []);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("xuanwu_sidebar_collapsed");
-      if (saved === "true") setSidebarCollapsed(true);
-    } catch {}
   }, []);
 
   useEffect(() => {
@@ -303,14 +292,13 @@ export default function Home() {
     }
   }, [logEntries, logPaused]);
 
+  const demolitionRounds = useMemo(() => extractDemolitionRounds(messages), [messages]);
+  const roundAnalysisResults = useMemo(() => extractRoundAnalysisResults(messages), [messages]);
+
+  const [activeRoundIdx, setActiveRoundIdx] = useState(-1);
   useEffect(() => {
-    const rounds = extractDemolitionRounds(messages);
-    setDemolitionRounds(rounds);
-    const results = extractRoundAnalysisResults(messages);
-    setRoundAnalysisResults(results);
-    if (rounds.length > 0) setActiveRoundIdx(rounds.length - 1);
-    else setActiveRoundIdx(-1);
-  }, [messages]);
+    setActiveRoundIdx(demolitionRounds.length > 0 ? demolitionRounds.length - 1 : -1);
+  }, [demolitionRounds.length]);
 
   const displayFailedElements = useMemo(() => {
     if (activeRoundIdx >= 0 && activeRoundIdx < demolitionRounds.length) {
@@ -535,38 +523,6 @@ export default function Home() {
     playRumbleSound(0.4, 3);
     handleRoundAnimate(queue[0]);
   }, [autoPlaying, demolitionRounds, handleRoundAnimate]);
-
-  const runUnityFullFlowDemo = useCallback(async () => {
-    setDemoLibraryOpen(false);
-    setDemoRunning(true);
-    demoRef.current = { running: true, phase: "launching" };
-    setDemoStatus(t("demo.launching", langRef.current));
-    try {
-      const res = await fetch(`${API_BASE}/unity/launch`, { method: "POST" });
-      if (!res.ok) {
-        setDemoStatus(t("demo.launch_failed", langRef.current));
-        setTimeout(() => { setDemoRunning(false); demoRef.current.running = false; }, 3000);
-        return;
-      }
-    } catch {
-      setDemoStatus(t("demo.launch_failed", langRef.current));
-      setTimeout(() => { setDemoRunning(false); demoRef.current.running = false; }, 3000);
-      return;
-    }
-    setVizMode("unity");
-    demoRef.current.phase = "analyzing";
-    setDemoStatus(t("demo.sending", langRef.current));
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const msg = t("quick.2x2", langRef.current);
-      setMessages((prev) => [...prev, { role: "user", content: msg }]);
-      setStatus("loading");
-      pendingStepsRef.current = [];
-      wsRef.current.send(JSON.stringify({ type: "message", content: msg }));
-    } else {
-      setDemoStatus(t("demo.ws_failed", langRef.current));
-      setTimeout(() => { setDemoRunning(false); demoRef.current.running = false; }, 3000);
-    }
-  }, []);
 
   const runFrameGeneratorDemo = useCallback(() => {
     setDemoLibraryOpen(false);
@@ -884,7 +840,7 @@ export default function Home() {
           </DialogHeader>
           <div className="flex-1 overflow-y-auto min-h-0 space-y-3 py-2">
             <ScenarioPicker lang={llm.lang} scenarios={scenarios} loading={scenariosLoading} disabled={demoRunning}
-              hasWebSocket={wsRef.current?.readyState === WebSocket.OPEN} runningKey={runningDemoKey}
+              hasWebSocket={wsConnected} runningKey={runningDemoKey}
               onLaunch={launchScenarioFromDemo} onStop={handleStopDemo} />
 
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 hover:border-primary/40 transition-colors">

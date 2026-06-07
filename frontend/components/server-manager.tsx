@@ -664,7 +664,7 @@ function OrphansTab({ data, loading, lang, expandedServers, expandedSchemas, onT
   if (loading) return <p style={styles.loading}>{t("srv.orphan_loading", lang)}</p>;
   if (!data) return <p style={styles.hint}>Failed to load orphan data.</p>;
 
-  const { orphans, fragile, robust, summary } = data;
+  const { orphans, summary } = data;
 
   // Group orphans by server
   const grouped: Record<string, OrphanTool[]> = {};

@@ -28,7 +28,11 @@ function saveProfiles(profiles: Record<string, { api_key: string; base_url: stri
 }
 
 export function useLlmSettings() {
-  const [lang, setLang] = useState<Lang>("en");
+  const [lang, setLang] = useState<Lang>(() => {
+    const saved = getSavedLang();
+    if (typeof document !== "undefined") document.documentElement.setAttribute("data-lang", saved);
+    return saved;
+  });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState("llm");
   const [llmApiKey, setLlmApiKey] = useState("");
@@ -38,12 +42,6 @@ export function useLlmSettings() {
   const [llmTestStatus, setLlmTestStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
   const [llmTestMsg, setLlmTestMsg] = useState("");
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
-
-  useEffect(() => {
-    const saved = getSavedLang();
-    setLang(saved);
-    document.documentElement.setAttribute("data-lang", saved);
-  }, []);
 
   const handleLangChange = useCallback((newLang: Lang) => {
     setLang(newLang);

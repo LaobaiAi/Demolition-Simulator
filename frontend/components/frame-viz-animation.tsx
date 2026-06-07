@@ -84,8 +84,9 @@ export function CollapseAnimation({
   const [animScale, setAnimScale] = useState(1);
   const [animPanX, setAnimPanX] = useState(0);
   const [animPanY, setAnimPanY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef<{active:boolean; startX:number; startY:number; panX:number; panY:number}>({active:false, startX:0, startY:0, panX:0, panY:0});
-  const resetAnimExplore = () => { setAnimExplore(false); setAnimScale(1); setAnimPanX(0); setAnimPanY(0); dragRef.current.active = false; };
+  const resetAnimExplore = () => { setAnimExplore(false); setAnimScale(1); setAnimPanX(0); setAnimPanY(0); setIsDragging(false); dragRef.current.active = false; };
 
   const minX = Math.min(...nodes.map(n => n.x));
   const maxX = Math.max(...nodes.map(n => n.x));
@@ -340,11 +341,11 @@ export function CollapseAnimation({
         )}
 
         <svg viewBox={`0 0 ${svgW} ${svgH}`} className="w-full h-full"
-          style={{ cursor: animExplore ? (dragRef.current.active ? 'grabbing' : 'grab') : 'default' }}
+          style={{ cursor: animExplore ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
           onWheel={e => { if (!animExplore) return; e.preventDefault(); setAnimScale(p => Math.min(5, Math.max(0.5, p * (e.deltaY > 0 ? 0.9 : 1.1)))); }}
-          onMouseDown={e => { if (!animExplore || e.button !== 0) return; dragRef.current = { active: true, startX: e.clientX, startY: e.clientY, panX: animPanX, panY: animPanY }; }}
+          onMouseDown={e => { if (!animExplore || e.button !== 0) return; setIsDragging(true); dragRef.current = { active: true, startX: e.clientX, startY: e.clientY, panX: animPanX, panY: animPanY }; }}
           onMouseMove={e => { if (!animExplore || !dragRef.current.active) return; setAnimPanX(dragRef.current.panX + e.clientX - dragRef.current.startX); setAnimPanY(dragRef.current.panY + e.clientY - dragRef.current.startY); }}
-          onMouseUp={() => { dragRef.current.active = false; }}>
+          onMouseUp={() => { setIsDragging(false); dragRef.current.active = false; }}>
           <g transform={`translate(${animPanX + shakeX}, ${animPanY + shakeY}) scale(${animScale})`}>
             {Array.from({ length: 6 }).map((_, i) => (
               <line key={`gh-${i}`} x1={pad} y1={pad + i * (svgH - pad*2)/5} x2={svgW-pad} y2={pad + i * (svgH - pad*2)/5} stroke="var(--border)" strokeWidth={0.5} />
@@ -524,7 +525,7 @@ export function CollapseAnimation({
               if (localT < 0) return null;
               const age = localT / 1000;
               if (age > p.lifetime) return null;
-              let x = p.x + p.vx * age * 60;
+              const x = p.x + p.vx * age * 60;
               let y = p.y + p.vy * age * 60 + 0.5 * 980 * age * age * 0.6;
               if (e.bounce) {
                 if (y > p.groundY && !p.didBounce) p.didBounce = true;

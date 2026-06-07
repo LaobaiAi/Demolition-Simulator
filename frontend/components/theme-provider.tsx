@@ -68,22 +68,21 @@ export function useTheme() {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState(DEFAULT_THEME);
-
-  // Initialize theme from localStorage before first paint
-  useLayoutEffect(() => {
+  const [theme, setThemeState] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      const themeKey = saved && THEMES.some((t) => t.key === saved) ? saved : DEFAULT_THEME;
-      setThemeState(themeKey);
-      const root = document.documentElement;
-      // Add theme classes (swap from SSR default theme-xuanwu-dark)
-      for (const t of THEMES) root.classList.remove(t.key);
-      if (themeKey !== "theme-light") root.classList.add("dark");
-      else root.classList.remove("dark");
-      root.classList.add(themeKey);
-    } catch {}
-  }, []);
+      return saved && THEMES.some((t) => t.key === saved) ? saved : DEFAULT_THEME;
+    } catch { return DEFAULT_THEME; }
+  });
+
+  // Apply theme classes on mount
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    for (const t of THEMES) root.classList.remove(t.key);
+    if (theme !== "theme-light") root.classList.add("dark");
+    else root.classList.remove("dark");
+    root.classList.add(theme);
+  }, [theme]);
 
   const setTheme = useCallback((key: string) => {
     setThemeState(key);

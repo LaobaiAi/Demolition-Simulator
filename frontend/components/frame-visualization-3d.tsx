@@ -8,7 +8,7 @@ import {
   EFFECT_DEFS_3D as EFFECT_DEFS, COLLAPSE_DURATION, GRAVITY, SECTION_COL, SECTION_BEAM,
   GROUND_Y, EXPLOSION_FORCE, DEBRIS_COUNT_PER_ELEM, DUST_COUNT_PER_ELEM,
   seedRand, stressColor, buildBoxAlign, disposeMesh, clearGroup,
-  type EffectKey3D as EffectKey, type BodyState3D as BodyState, type DebrisItem3D as DebrisItem,
+  type EffectKey3D as EffectKey, type DebrisItem3D as DebrisItem,
   type DustItem3D as DustItem, type FractureItem3D as FractureItem, type AnimationState3D as AnimationState,
 } from "./frame-viz-3d-utils";
 
@@ -95,6 +95,7 @@ export function FrameVisualization3D({
   // Sync external activeEffects into local state + ref
   useEffect(() => {
     if (!activeEffects) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing parent prop to local state
     setEffects(activeEffects);
     effectsRef.current = activeEffects;
   }, [activeEffects]);
@@ -615,7 +616,6 @@ export function FrameVisualization3D({
         disposeMesh(child);
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [animationTrigger, structure, bounds]);
 
   // ── Reset Camera ─────────────────────────────────────────────────────

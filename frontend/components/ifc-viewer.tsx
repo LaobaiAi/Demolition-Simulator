@@ -77,7 +77,7 @@ export function IFCViewer({
   // Upload state
   const [uploadedIfcName, setUploadedIfcName] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [ifcLoadedFilename, setIfcLoadedFilename] = useState<string | null>(null);
+  const [, setIfcLoadedFilename] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // State
@@ -276,6 +276,7 @@ export function IFCViewer({
     setError(null);
 
     const loadIFC = async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic import type
       let IfcAPI: any;
       try {
         const mod = await import("web-ifc");
@@ -461,7 +462,8 @@ export function IFCViewer({
     const hasIfcData = hasIFC && (ifcUrl || ifcData);
     if (hasIfcData && typeof window !== "undefined") {
       const loadIFC = async () => {
-        let IfcAPI: any;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic import type
+      let IfcAPI: any;
         try {
           const mod = await import("web-ifc");
           IfcAPI = mod.IfcAPI;
@@ -562,7 +564,6 @@ export function IFCViewer({
       buildFallbackStructure(mg);
     }
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ifcUrl, ifcData, structure, fitCamera]);
 
   // ── 4. Highlight / Removed Elements ─────────────────────────
@@ -577,7 +578,6 @@ export function IFCViewer({
       const hl = highlightSet.has(id);
       const rm = removedSet.has(id);
 
-      // eslint-disable-next-line react-hooks/immutability
       mesh.visible = !rm;
 
       if (hl) {
