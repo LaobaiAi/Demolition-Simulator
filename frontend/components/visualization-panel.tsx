@@ -140,7 +140,7 @@ export function VisualizationPanel({
         <div className={`absolute inset-0 ${vizMode === "unity" ? "" : "invisible pointer-events-none"}`}>
           <UnityVideoPanel onStreamConnected={onUnityConnected} />
         </div>
-        <div className={`absolute inset-0 ${vizMode === "ifc" ? "" : "invisible pointer-events-none"}`}>
+        <div className={`absolute inset-0 flex flex-col ${vizMode === "ifc" ? "" : "invisible pointer-events-none"}`}>
           <Suspense fallback={<LoadingFallback label="IFC viewer" />}>
             <IFCViewer structure={frameStructure}
               highlightedElements={structuralMetrics?.criticalElementId ? [structuralMetrics.criticalElementId] : []}

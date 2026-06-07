@@ -343,15 +343,33 @@ const MESSAGE_HANDLERS: Record<string, HandlerFn> = {
 export function useWebSocket(callbacks: WebSocketCallbacks) {
   const [wsConnected, setWsConnected] = useState<"connected" | "reconnecting" | "disconnected">("disconnected");
   const wsRef = useRef<WebSocket | null>(null);
+  const msgQueueRef = useRef<string[]>([]);
 
   useEffect(() => {
     let reconnectTimer: ReturnType<typeof setTimeout>;
     let reconnectAttempts = 0;
     const MAX_RECONNECT_DELAY = 30000;
+    const MAX_RECONNECT_ATTEMPTS = 15;
+    let mounted = true;
 
     let disconnectStart = 0;
 
+    function flushMessageQueue() {
+      const queue = msgQueueRef.current;
+      if (queue.length === 0) return;
+      msgQueueRef.current = [];
+      for (const msg of queue) {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(msg);
+        } else {
+          msgQueueRef.current.unshift(msg);
+          break;
+        }
+      }
+    }
+
     function connectWithRetry() {
+      if (!mounted) return;
       const ws = new WebSocket(`${WS_BASE}/ws/chat`);
       wsRef.current = ws;
 
@@ -359,22 +377,27 @@ export function useWebSocket(callbacks: WebSocketCallbacks) {
         setWsConnected("connected");
         reconnectAttempts = 0;
         disconnectStart = 0;
+        flushMessageQueue();
         if (callbacks.pendingStepsRef.current.length > 0) {
           callbacks.setLogEntries((prev) => [...prev, { type: "thinking", content: "Reconnected — resuming session" }].slice(-200));
         }
       };
       ws.onclose = () => {
+        if (!mounted) return;
         if (!disconnectStart) disconnectStart = Date.now();
         const disconnectedMs = Date.now() - disconnectStart;
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
-        reconnectTimer = setTimeout(connectWithRetry, delay);
-        if (disconnectedMs > 30000) {
+        const jitter = Math.random() * 1000;
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts) + jitter, MAX_RECONNECT_DELAY);
+        reconnectAttempts++;
+        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS || disconnectedMs > 60000) {
           setWsConnected("disconnected");
-        } else {
-          setWsConnected("reconnecting");
+          return;
         }
+        reconnectTimer = setTimeout(connectWithRetry, delay);
+        setWsConnected("reconnecting");
       };
       ws.onerror = () => {
+        if (!mounted) return;
         if (!disconnectStart) disconnectStart = Date.now();
         setWsConnected("reconnecting");
         ws.close();
@@ -426,8 +449,10 @@ export function useWebSocket(callbacks: WebSocketCallbacks) {
 
     connectWithRetry();
     return () => {
+      mounted = false;
       clearTimeout(reconnectTimer);
       wsRef.current?.close();
+      wsRef.current = null;
     };
   }, []);
 
@@ -436,7 +461,8 @@ export function useWebSocket(callbacks: WebSocketCallbacks) {
       wsRef.current.send(JSON.stringify({ type: "message", content }));
       return true;
     }
-    return false;
+    msgQueueRef.current.push(JSON.stringify({ type: "message", content }));
+    return true;
   }, []);
 
   const sendPipeline = useCallback((pipeline: string, params: Record<string, unknown>) => {

@@ -1,10 +1,16 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Wifi, WifiOff, Monitor, Play, Loader2, ArrowRight, RotateCw } from "lucide-react";
+import { Wifi, WifiOff, Monitor, Play, Loader2, ArrowRight, RotateCw, Radio, AlertTriangle } from "lucide-react";
 
 const GATEWAY = "http://localhost:8000";
-const STUN_SERVERS = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+const WS_URL = "ws://localhost:5006";
+const HTTP_URL = "http://localhost:5006";
+const POLL_INTERVAL_MS = 333;
+const WS_CONNECT_TIMEOUT_MS = 8000;
+const WS_MAX_CONSECUTIVE_FAILURES = 3;
+const HTTP_UPGRADE_RETRY_INTERVAL_MS = 30000;
+const BMP_HEADER_SIZE = 54;
 
 type Phase =
   | "checking"
@@ -12,129 +18,259 @@ type Phase =
   | "idle"
   | "launching"
   | "starting"
-  | "connecting"
   | "connected"
   | "disconnected"
   | "error";
 
+type Transport = "ws" | "http" | "none";
+
 interface Props {
   onStreamConnected?: () => void;
+}
+
+function validateBmp(data: ArrayBuffer): boolean {
+  if (data.byteLength < BMP_HEADER_SIZE) return false;
+  const view = new DataView(data);
+  return view.getUint8(0) === 0x42 && view.getUint8(1) === 0x4D;
 }
 
 export function UnityVideoPanel({ onStreamConnected }: Props) {
   const [phase, setPhase] = useState<Phase>("checking");
   const [statusText, setStatusText] = useState("Detecting Unity...");
   const [videoScale, setVideoScale] = useState(1);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [hasUnity, setHasUnity] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const pcRef = useRef<RTCPeerConnection | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [imgUrl, setImgUrl] = useState("");
+  const [transport, setTransport] = useState<Transport>("none");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const upgradeRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasConnected = useRef(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const blobUrlRef = useRef<string>("");
+  const reconnectAttemptRef = useRef(0);
+  const mountedRef = useRef(true);
+  const waitingForUnityRef = useRef(false);
+  const connectWsRef = useRef<() => void>(() => {});
+  const wsFailureCountRef = useRef(0);
+  const transportRef = useRef<Transport>("none");
+  const pollAbortRef = useRef<AbortController | null>(null);
 
-  const clearPoll = () => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  };
+  const setTransportBoth = useCallback((t: Transport) => {
+    transportRef.current = t;
+    setTransport(t);
+  }, []);
 
-  const closePeer = () => {
-    if (pcRef.current) {
-      pcRef.current.close();
-      pcRef.current = null;
-    }
-  };
-
-  const establishWebRTC = useCallback(async () => {
-    closePeer();
-    clearPoll();
-    setPhase("connecting");
-    setStatusText("Establishing WebRTC...");
-
-    try {
-      const offerRes = await fetch(`${GATEWAY}/webrtc/offer`);
-      if (!offerRes.ok) throw new Error("No SDP offer");
-
-      const { sdp: offerBase64 } = await offerRes.json();
-      if (!offerBase64) throw new Error("Empty offer");
-
-      const offerSdp = atob(offerBase64);
-      const pc = new RTCPeerConnection(STUN_SERVERS);
-      pcRef.current = pc;
-
-      pc.ontrack = (event) => {
-        if (videoRef.current && event.streams[0]) {
-          videoRef.current.srcObject = event.streams[0];
-          setPhase("connected");
-          setStatusText("Live");
-          if (!hasConnected.current) {
-            hasConnected.current = true;
-            onStreamConnected?.();
-          }
-        }
-      };
-
-      pc.onconnectionstatechange = () => {
-        if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
-          setPhase("disconnected");
-          setStatusText("Stream dropped");
-        }
-      };
-
-      pc.oniceconnectionstatechange = () => {
-        if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
-          setPhase("disconnected");
-          setStatusText("Connection lost");
-        }
-      };
-
-      await pc.setRemoteDescription(
-        new RTCSessionDescription({ type: "offer", sdp: offerSdp })
-      );
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-
-      await fetch(`${GATEWAY}/webrtc/answer`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sdp: btoa(answer.sdp || "") }),
-      });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (e: any) {
-      setPhase("error");
-      setStatusText(e.message || "WebRTC failed");
-    }
-  }, [onStreamConnected]);
-
-  const reconnectUnity = useCallback(async () => {
-    setPhase("connecting");
-    setStatusText("Reconnecting to Unity...");
-    try {
-      const res = await fetch(`${GATEWAY}/unity/reconnect`, { method: "POST" });
-      const data = await res.json();
-      if (data.status === "ok") {
-        setStatusText("Waiting for new WebRTC offer...");
-        // Polling will pick up the new offer
-      } else if (data.status === "launch_required") {
-        setPhase("idle");
-        setStatusText("Unity not responding — click Launch Unity");
-      } else {
-        setPhase("error");
-        setStatusText(data.message || "Reconnect failed");
+  const cleanupWs = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.onopen = null;
+      wsRef.current.onclose = null;
+      wsRef.current.onerror = null;
+      wsRef.current.onmessage = null;
+      if (wsRef.current.readyState === WebSocket.OPEN ||
+          wsRef.current.readyState === WebSocket.CONNECTING) {
+        wsRef.current.close();
       }
-    } catch {
-      setPhase("error");
-      setStatusText("Reconnect failed — gateway unreachable");
+      wsRef.current = null;
     }
   }, []);
 
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearTimeout(pollRef.current);
+      pollRef.current = null;
+    }
+    if (pollAbortRef.current) {
+      pollAbortRef.current.abort();
+      pollAbortRef.current = null;
+    }
+    if (upgradeRetryRef.current) {
+      clearInterval(upgradeRetryRef.current);
+      upgradeRetryRef.current = null;
+    }
+  }, []);
+
+  const startHttpPolling = useCallback(() => {
+    if (!mountedRef.current) return;
+    stopPolling();
+    cleanupWs();
+    setTransportBoth("http");
+    setPhase("connected");
+    setStatusText("Live (HTTP)");
+
+    const poll = async () => {
+      if (!mountedRef.current || transportRef.current !== "http") return;
+      const controller = new AbortController();
+      pollAbortRef.current = controller;
+      try {
+        const res = await fetch(HTTP_URL + "/", {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const buf = await res.arrayBuffer();
+        if (validateBmp(buf)) {
+          const blob = new Blob([buf], { type: "image/bmp" });
+          const url = URL.createObjectURL(blob);
+          if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+          blobUrlRef.current = url;
+          setImgUrl(url);
+          wsFailureCountRef.current = 0;
+        }
+      } catch (e: any) {
+        if (e.name === "AbortError") return;
+        wsFailureCountRef.current++;
+      }
+      if (mountedRef.current && transportRef.current === "http") {
+        pollRef.current = setTimeout(poll, POLL_INTERVAL_MS);
+      }
+    };
+
+    poll();
+
+    upgradeRetryRef.current = setInterval(() => {
+      if (transportRef.current === "http" && mountedRef.current) {
+        connectWsRef.current();
+      }
+    }, HTTP_UPGRADE_RETRY_INTERVAL_MS);
+  }, [stopPolling, cleanupWs, setTransportBoth]);
+
+  const reconnectWs = useCallback(() => {
+    if (!mountedRef.current) return;
+    const attempt = reconnectAttemptRef.current;
+
+    if (!hasConnected.current && !waitingForUnityRef.current) {
+      setPhase("idle");
+      setStatusText("Unity not running");
+      return;
+    }
+
+    if (attempt >= 3 && hasConnected.current) {
+      startHttpPolling();
+      return;
+    }
+
+    if (attempt > 20) {
+      waitingForUnityRef.current = false;
+      startHttpPolling();
+      return;
+    }
+
+    const jitter = Math.random() * 1000;
+    const delay = attempt < 5 ? 2000 + jitter : Math.min(5000 * Math.pow(1.3, attempt - 5) + jitter, 30000);
+    reconnectAttemptRef.current = attempt + 1;
+    setStatusText(`Connecting... (${attempt + 1}/20)`);
+    reconnectRef.current = setTimeout(() => {
+      if (mountedRef.current) connectWsRef.current();
+    }, delay);
+  }, [startHttpPolling]);
+
+  const connectWs = useCallback(() => {
+    if (!mountedRef.current) return;
+    cleanupWs();
+    if (reconnectRef.current) {
+      clearTimeout(reconnectRef.current);
+      reconnectRef.current = null;
+    }
+
+    setPhase("starting");
+    setStatusText("Connecting to Unity...");
+    setTransportBoth("none");
+
+    let wsConnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    try {
+      const ws = new WebSocket(WS_URL);
+      ws.binaryType = "blob";
+      wsRef.current = ws;
+
+      wsConnectTimer = setTimeout(() => {
+        if (wsRef.current === ws && ws.readyState === WebSocket.CONNECTING) {
+          try { ws.close(); } catch {}
+          wsRef.current = null;
+          wsFailureCountRef.current++;
+          if (wsFailureCountRef.current >= WS_MAX_CONSECUTIVE_FAILURES) {
+            startHttpPolling();
+          } else {
+            reconnectWs();
+          }
+        }
+      }, WS_CONNECT_TIMEOUT_MS);
+
+      ws.onopen = () => {
+        if (wsConnectTimer) { clearTimeout(wsConnectTimer); wsConnectTimer = null; }
+        if (!mountedRef.current) { ws.close(); return; }
+        if (wsRef.current !== ws) return;
+        stopPolling();
+        setTransportBoth("ws");
+        setPhase("connected");
+        setStatusText("Live (WebSocket)");
+        reconnectAttemptRef.current = 0;
+        waitingForUnityRef.current = false;
+        wsFailureCountRef.current = 0;
+        if (!hasConnected.current) {
+          hasConnected.current = true;
+          onStreamConnected?.();
+        }
+      };
+
+      ws.onmessage = (event) => {
+        if (transportRef.current !== "ws") return;
+        if (event.data instanceof Blob) {
+          event.data.arrayBuffer().then((buf: ArrayBuffer) => {
+            if (transportRef.current !== "ws") return;
+            if (validateBmp(buf)) {
+              const bmpBlob = new Blob([buf], { type: "image/bmp" });
+              const url = URL.createObjectURL(bmpBlob);
+              if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+              blobUrlRef.current = url;
+              setImgUrl(url);
+              wsFailureCountRef.current = 0;
+            } else {
+              wsFailureCountRef.current++;
+            }
+          });
+        }
+      };
+
+      ws.onclose = () => {
+        if (wsConnectTimer) { clearTimeout(wsConnectTimer); wsConnectTimer = null; }
+        if (!mountedRef.current) return;
+        if (wsRef.current !== ws) return;
+        setPhase("disconnected");
+        setStatusText("Connection lost");
+        wsRef.current = null;
+        wsFailureCountRef.current++;
+        if (transportRef.current === "ws" && wsFailureCountRef.current >= WS_MAX_CONSECUTIVE_FAILURES) {
+          startHttpPolling();
+        } else {
+          reconnectWs();
+        }
+      };
+
+      ws.onerror = () => {};
+    } catch {
+      if (wsConnectTimer) clearTimeout(wsConnectTimer);
+      if (!mountedRef.current) return;
+      wsFailureCountRef.current++;
+      if (wsFailureCountRef.current >= WS_MAX_CONSECUTIVE_FAILURES) {
+        startHttpPolling();
+      } else {
+        reconnectWs();
+      }
+    }
+  }, [onStreamConnected, cleanupWs, reconnectWs, stopPolling, startHttpPolling, setTransportBoth]);
+
+  useEffect(() => {
+    connectWsRef.current = connectWs;
+  }, [connectWs]);
+
   const checkAndConnect = useCallback(async () => {
     try {
-      const statusRes = await fetch(`${GATEWAY}/unity/status`);
+      const statusRes = await fetch(GATEWAY + "/unity/status");
       if (!statusRes.ok) throw new Error("Gateway unreachable");
       const status = await statusRes.json();
-      setHasUnity(!!status.unity_path);
 
       if (!status.unity_path) {
         setPhase("not_installed");
@@ -142,110 +278,51 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
         return;
       }
 
-      if (status.webrtc_offer_available) {
-        establishWebRTC();
-        return;
-      }
-
-      if (status.unity_alive && status.tcp_ready) {
-        // Unity is running but no WebRTC offer — offer was likely lost
+      if (status.frame_server_ready) {
+        connectWs();
+      } else if (status.process_running || status.tcp_ready) {
+        waitingForUnityRef.current = true;
+        reconnectAttemptRef.current = 0;
         setPhase("starting");
-        setStatusText("Unity running — reconnecting WebRTC...");
-        return;
+        setStatusText("Waiting for Unity...");
+        reconnectWs();
+      } else {
+        setPhase("idle");
+        setStatusText("Unity not running");
       }
-
-      if (status.unity_alive) {
-        setPhase("starting");
-        setStatusText("Unity starting — waiting for TCP...");
-        return;
-      }
-
-      setPhase("idle");
-      setStatusText("Unity not running");
     } catch {
       setPhase("error");
       setStatusText("Gateway unreachable");
     }
-  }, [establishWebRTC]);
+  }, [connectWs, reconnectWs]);
 
-  // Initial check
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    mountedRef.current = true;
     checkAndConnect();
-  }, [checkAndConnect]);
-
-  // Poll while in transitional states
-  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (phase === "launching" || phase === "starting") {
-      let attemptCount = 0;
-      pollRef.current = setInterval(async () => {
-        attemptCount++;
-        try {
-          const res = await fetch(`${GATEWAY}/unity/status`);
-          const status = await res.json();
-
-          if (status.webrtc_offer_available) {
-            clearPoll();
-            establishWebRTC();
-            return;
-          }
-
-          if (phase === "launching" && status.unity_alive) {
-            setPhase("starting");
-            setStatusText("Unity alive — reconnecting WebRTC...");
-          }
-
-          // Auto-trigger reconnect if stuck in starting with TCP ready but no offer
-          if (phase === "starting" && status.tcp_ready && attemptCount >= 3) {
-            attemptCount = 0;
-            fetch(`${GATEWAY}/unity/reconnect`, { method: "POST" }).catch(() => {});
-            setStatusText("Requesting WebRTC restart...");
-          }
-        } catch {}
-      }, 2000);
-    }
-    const savedTimeout = reconnectTimeoutRef.current;
     return () => {
-      clearPoll();
-      if (savedTimeout) clearTimeout(savedTimeout);
+      mountedRef.current = false;
+      cleanupWs();
+      stopPolling();
+      if (reconnectRef.current) clearTimeout(reconnectRef.current);
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
     };
-  }, [phase, establishWebRTC]);
+  }, [checkAndConnect, cleanupWs, stopPolling]);
 
-  // If disconnected and a fresh offer appears, auto-reconnect.
-  // Only poll in "disconnected" (Unity process is alive, WebRTC was lost).
-  // Skip polling in "idle" (Unity not running) or "error" (explicit failure) — no offer will appear.
-  useEffect(() => {
-    if (phase === "disconnected") {
-      pollRef.current = setInterval(async () => {
-        try {
-          const res = await fetch(`${GATEWAY}/webrtc/offer`);
-          if (res.ok) {
-            const { sdp } = await res.json();
-            if (sdp) {
-              clearPoll();
-              establishWebRTC();
-            }
-          }
-        } catch {}
-      }, 3000);
-    }
-    return clearPoll;
-  }, [phase, establishWebRTC]);
-
-  // Cleanup
-  useEffect(() => {
-    return () => {
-      clearPoll();
-      closePeer();
-    };
-  }, []);
+  const confirmAndLaunch = () => {
+    setConfirmOpen(false);
+    launchUnity();
+  };
 
   const launchUnity = async () => {
     setPhase("launching");
     setStatusText("Launching Unity Editor...");
+    reconnectAttemptRef.current = 0;
+    if (reconnectRef.current) {
+      clearTimeout(reconnectRef.current);
+      reconnectRef.current = null;
+    }
     try {
-      const res = await fetch(`${GATEWAY}/unity/launch`, { method: "POST" });
+      const res = await fetch(GATEWAY + "/unity/launch", { method: "POST" });
       const data = await res.json();
       if (!res.ok && res.status === 404) {
         setPhase("not_installed");
@@ -257,13 +334,22 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
         setStatusText(data.message || "Launch failed");
         return;
       }
-      // Polling will pick up the status change
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      waitingForUnityRef.current = true;
+      reconnectAttemptRef.current = 0;
+      wsFailureCountRef.current = 0;
+      setTimeout(() => connectWsRef.current(), 5000);
     } catch (e: any) {
       setPhase("error");
       setStatusText(e.message || "Failed to launch Unity");
     }
   };
+
+  const reconnectUnity = useCallback(() => {
+    reconnectAttemptRef.current = 0;
+    wsFailureCountRef.current = 0;
+    stopPolling();
+    connectWs();
+  }, [connectWs, stopPolling]);
 
   const phaseBadge = () => {
     switch (phase) {
@@ -271,10 +357,9 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
         return { color: "bg-muted-foreground", pulse: true, label: "..." };
       case "launching":
       case "starting":
-      case "connecting":
         return { color: "bg-amber-500", pulse: true, label: statusText };
       case "connected":
-        return { color: "bg-emerald-500", pulse: false, label: "Live" };
+        return { color: "bg-emerald-500", pulse: false, label: statusText };
       default:
         return { color: "bg-red-500", pulse: false, label: "Offline" };
     }
@@ -284,18 +369,21 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
 
   return (
     <div className="flex-1 flex flex-col bg-xuanwu-deep relative">
-      {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-4 py-2">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Monitor className="h-4 w-4 text-primary" />
           Unity 3D View
         </div>
         <div className="flex items-center gap-2">
-          <span className={`h-2 w-2 rounded-full ${badge.color} ${badge.pulse ? "animate-pulse" : ""}`} />
+          <span className={"h-2 w-2 rounded-full " + badge.color + (badge.pulse ? " animate-pulse" : "")} />
           <span className="text-[10px] text-muted-foreground">{badge.label}</span>
-
           {phase === "connected" && (
             <>
+              {transport === "http" && (
+                <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20" title="HTTP polling fallback — lower frame rate">
+                  HTTP
+                </span>
+              )}
               <button
                 onClick={() => setVideoScale((s) => Math.max(0.5, s - 0.1))}
                 className="px-1.5 py-0.5 rounded text-[10px] text-muted-foreground hover:text-foreground border border-border hover:border-primary/50 cursor-pointer"
@@ -310,21 +398,18 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
         </div>
       </div>
 
-      {/* Content area */}
       <div className="flex-1 flex items-center justify-center p-2 relative bg-black/40">
-        {phase === "connected" ? (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
+        {phase === "connected" && imgUrl ? (
+          <img
+            ref={imgRef}
+            src={imgUrl}
+            alt="Unity 3D View"
             className="max-w-full max-h-full rounded-lg"
-            style={{ transform: `scale(${videoScale})` }}
+            style={{ transform: "scale(" + videoScale + ")" }}
           />
         ) : (
           <div className="flex flex-col items-center gap-5 text-center">
-            {/* Icon */}
-            {phase === "checking" || phase === "launching" || phase === "starting" || phase === "connecting" ? (
+            {(phase === "checking" || phase === "launching" || phase === "starting") ? (
               <div className="relative">
                 <div className="w-16 h-16 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
                 <Loader2 className="absolute inset-0 m-auto h-6 w-6 text-primary/60 animate-spin" />
@@ -341,13 +426,11 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
               </div>
             )}
 
-            {/* Status text */}
             <div>
               <p className="text-sm font-medium text-foreground">
                 {phase === "checking" && "Detecting Unity..."}
                 {phase === "launching" && "Launching Unity Editor..."}
-                {phase === "starting" && "Unity is starting up"}
-                {phase === "connecting" && "Establishing WebRTC..."}
+                {phase === "starting" && "Connecting to Unity..."}
                 {phase === "idle" && "Unity not running"}
                 {phase === "not_installed" && "Unity Editor not found"}
                 {phase === "disconnected" && "Stream disconnected"}
@@ -355,20 +438,18 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
               </p>
               <p className="text-xs text-muted-foreground/60 mt-1 max-w-[340px] leading-relaxed">
                 {phase === "checking" && "Checking Unity installation and connection status..."}
-                {phase === "launching" && "The Unity Editor window will appear. Scene setup and Play mode are automatic — no manual steps needed."}
-                {phase === "starting" && "Scene auto-building, TCP server starting, WebRTC initializing. This takes ~10-20 seconds."}
-                {phase === "connecting" && "Negotiating peer-to-peer video connection..."}
-                {phase === "idle" && "Click the button below to launch Unity. The editor will auto-configure the scene and start streaming."}
+                {phase === "launching" && "Launching Unity Editor. This may take 30-60 seconds the first time."}
+                {phase === "starting" && "Establishing connection to Unity frame server..."}
+                {phase === "idle" && "Click the button below to launch Unity and start the live 3D view."}
                 {phase === "not_installed" && "Install Unity 2021.3 LTS+ or set the UNITY_PATH environment variable."}
-                {phase === "disconnected" && "The WebRTC connection was lost. The stream will auto-reconnect when available."}
+                {phase === "disconnected" && "Connection lost. Trying WebSocket, will fall back to HTTP polling if needed."}
               </p>
             </div>
 
-            {/* Action buttons */}
             <div className="flex gap-2">
               {phase === "idle" && (
                 <button
-                  onClick={launchUnity}
+                  onClick={() => setConfirmOpen(true)}
                   className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 transition-all cursor-pointer font-medium text-sm"
                 >
                   <Play className="h-4 w-4" />
@@ -385,32 +466,27 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
                   <ArrowRight className="h-3 w-3" />
                 </button>
               )}
-              {/* eslint-disable-next-line react-hooks/refs */}
-              {(phase === "starting" && !hasConnected.current) || phase === "disconnected" || phase === "error" ? (
+              {(phase === "disconnected" || phase === "error") && (
                 <button
                   onClick={() => {
                     hasConnected.current = false;
+                    wsFailureCountRef.current = 0;
                     reconnectUnity();
                   }}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 transition-all cursor-pointer text-xs"
                 >
                   <RotateCw className="h-3.5 w-3.5" />
-                  {phase === "starting" ? "Force Reconnect" : "Reconnect"}
+                  Reconnect
                 </button>
-              ) : null}
+              )}
             </div>
 
-            {/* Progress steps for launching */}
-            {(phase === "launching" || phase === "starting" || phase === "connecting") && (
+            {(phase === "launching" || phase === "starting") && (
               <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50 mt-1">
                 <span className={phase === "launching" ? "text-primary" : ""}>Launch Editor</span>
-                <span>→</span>
-                <span className={phase === "starting" ? "text-primary" : ""}>Scene Setup</span>
-                <span>→</span>
-                <span className={phase === "starting" ? "text-primary" : ""}>Play Mode</span>
-                <span>→</span>
-                <span className={phase === "connecting" ? "text-primary" : ""}>WebRTC</span>
-                <span>→</span>
+                <span>{"→"}</span>
+                <span className={phase === "starting" ? "text-primary" : ""}>Connect</span>
+                <span>{"→"}</span>
                 <span>Live</span>
               </div>
             )}
@@ -418,12 +494,49 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
         )}
 
         {phase === "connected" && (
-          <div className="absolute bottom-3 right-3 bg-black/60 rounded-md px-2.5 py-1.5 text-[10px] text-emerald-400 border border-emerald-500/20 pointer-events-none">
-            <Wifi className="inline h-3 w-3 mr-1" />
-            Unity Live Stream
+          <div className="absolute bottom-3 right-3 bg-black/60 rounded-md px-2.5 py-1.5 text-[10px] text-emerald-400 border border-emerald-500/20 pointer-events-none flex items-center gap-1.5">
+            {transport === "ws" ? <Wifi className="h-3 w-3" /> : <Radio className="h-3 w-3" />}
+            {transport === "ws" ? "WebSocket" : "HTTP Polling"}
           </div>
         )}
       </div>
+
+      {confirmOpen && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-[#0f172a] border border-amber-500/30 rounded-xl p-6 max-w-md mx-4 shadow-2xl">
+            <div className="flex items-start gap-3 mb-4">
+              <AlertTriangle className="h-6 w-6 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Launch Unity Editor</h3>
+                <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                  This will start the Unity Editor in the background. Please be aware:
+                </p>
+                <ul className="text-xs text-muted-foreground mt-2 space-y-1.5 list-disc list-inside leading-relaxed">
+                  <li>Unity Editor is a heavy application — first launch may take <span className="text-amber-400">30–60 seconds</span></li>
+                  <li>It will consume <span className="text-amber-400">2–4 GB of memory</span> while running</li>
+                  <li>This feature is <span className="text-amber-400">experimental</span> — occasional instability is expected</li>
+                  <li>If the video stream does not appear, switching to another tab and back may help</li>
+                </ul>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end mt-5">
+              <button
+                onClick={() => setConfirmOpen(false)}
+                className="px-4 py-2 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground border border-border hover:border-primary/30 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmAndLaunch}
+                className="px-5 py-2 rounded-lg text-xs font-medium bg-amber-600/20 text-amber-400 border border-amber-500/30 hover:bg-amber-600/30 transition-colors cursor-pointer flex items-center gap-2"
+              >
+                <Play className="h-3.5 w-3.5" />
+                Yes, Launch Unity
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
