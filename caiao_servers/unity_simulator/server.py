@@ -78,22 +78,13 @@ def _send_to_unity(command: dict[str, Any]) -> dict[str, Any]:
         sock.connect((UNITY_HOST, UNITY_PORT))
         payload = json.dumps(command)
         sock.sendall(payload.encode("utf-8"))
-        response_data = b""
         try:
-            while True:
-                chunk = sock.recv(4096)
-                if not chunk:
-                    break
-                response_data += chunk
-                if b"\n" in response_data:
-                    break
+            raw = sock.recv(4096)
+            return json.loads(raw.decode("utf-8").strip())
         except socket.timeout:
-            pass
-        sock.close()
-
-        if response_data:
-            return json.loads(response_data.decode("utf-8").strip())
-        return {"status": "sent", "command": command}
+            return {"status": "sent", "command": command}
+        finally:
+            sock.close()
     except ConnectionRefusedError:
         return {"error": f"Unity not reachable at {UNITY_HOST}:{UNITY_PORT}. Start the Unity simulation first."}
     except socket.timeout:

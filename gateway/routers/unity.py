@@ -1,4 +1,4 @@
-"""Unity process management + WebRTC signaling REST endpoints."""
+"""Unity process management + MJPEG frame server status REST endpoints."""
 
 import logging
 import os
@@ -10,7 +10,6 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["unity"])
@@ -22,9 +21,9 @@ UNITY_PROJECT_DIR: str | None = None
 def _init_unity_project_dir() -> None:
     global UNITY_PROJECT_DIR
     if UNITY_PROJECT_DIR is None:
-        gateway_dir = os.path.dirname(os.path.abspath(__file__))
-        project_dir = os.path.dirname(gateway_dir)
-        UNITY_PROJECT_DIR = os.path.join(project_dir, "unity_project")
+        file_dir = os.path.dirname(os.path.abspath(__file__))
+        repo_root = os.path.dirname(os.path.dirname(file_dir))
+        UNITY_PROJECT_DIR = os.path.join(repo_root, "unity_project")
 
 
 def _find_unity_exe() -> str | None:
@@ -58,11 +57,12 @@ def _find_unity_exe() -> str | None:
     return candidates[0] if candidates else None
 
 
-def _detect_running_unity() -> bool:
+def _check_port(port: int) -> bool:
+    """Check if a TCP port is open on localhost."""
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(1.0)
-        result = sock.connect_ex(("127.0.0.1", 5005))
+        result = sock.connect_ex(("127.0.0.1", port))
         sock.close()
         return result == 0
     except Exception:
@@ -98,9 +98,7 @@ async def launch_unity(request: Request):
     if unity_proc is not None and unity_proc.poll() is None:
         return {"status": "ok", "message": "Unity is already running", "pid": unity_proc.pid}
 
-    flag_dir = os.path.join(UNITY_PROJECT_DIR, "Temp")
-    os.makedirs(flag_dir, exist_ok=True)
-    flag_path = os.path.join(flag_dir, "auto_play.flag")
+    flag_path = os.path.join(UNITY_PROJECT_DIR, "auto_play.flag")
     with open(flag_path, "w") as f:
         f.write("1")
     logger.info(f"Auto-play flag created: {flag_path}")
@@ -115,6 +113,8 @@ async def launch_unity(request: Request):
             cwd=os.path.dirname(unity_exe),
         )
         request.app.state.unity_process = proc
+        request.app.state.unity_restart_backoff = 0
+        request.app.state.unity_auto_restart = True
         return {"status": "launching", "pid": proc.pid, "unity_path": unity_exe, "project": UNITY_PROJECT_DIR}
     except Exception as e:
         if os.path.exists(flag_path):
@@ -123,78 +123,37 @@ async def launch_unity(request: Request):
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
 
-@router.post("/unity/reconnect")
-async def reconnect_unity(request: Request):
-    tcp_result = _send_tcp_command({"action": "restart_webrtc"})
-    if tcp_result["status"] == "ok":
-        request.app.state.webrtc_offer = None
-        request.app.state.webrtc_answer = None
-        return {
-            "status": "ok",
-            "message": "WebRTC restart command sent to Unity. A fresh SDP offer should arrive shortly.",
-        }
-    unity_exe = _find_unity_exe()
-    if unity_exe:
-        return {"status": "launch_required", "message": "Unity not responding on TCP. Click Launch Unity to start fresh."}
-    return {"status": "error", "message": "Unity not found and not running."}
-
-
 @router.get("/unity/status")
 async def unity_status(request: Request):
     _init_unity_project_dir()
     unity_proc = request.app.state.unity_process
     running = unity_proc is not None and unity_proc.poll() is None
 
-    tcp_ok = _detect_running_unity()
+    tcp_5005 = _check_port(5005)
+    frame_server_ok = _check_port(5006)
 
-    unity_alive = running or tcp_ok
+    unity_alive = running or tcp_5005
 
     return {
         "process_running": running,
         "unity_alive": unity_alive,
         "pid": unity_proc.pid if running else None,
-        "tcp_ready": tcp_ok,
-        "webrtc_offer_available": request.app.state.webrtc_offer is not None,
+        "tcp_ready": tcp_5005,
+        "frame_server_ready": frame_server_ok,
         "unity_path": _find_unity_exe(),
     }
 
 
-# ── WebRTC Signaling ──────────────────────────────────────────────────────────
-
-class SdpPayload(BaseModel):
-    sdp: str
-
-
-@router.post("/webrtc/offer")
-async def post_webrtc_offer(payload: SdpPayload, request: Request):
-    request.app.state.webrtc_offer = payload.sdp
-    request.app.state.webrtc_answer = None
-    logger.info(f"WebRTC offer received ({len(payload.sdp)} chars)")
-    return {"status": "ok"}
-
-
-@router.get("/webrtc/offer")
-async def get_webrtc_offer(request: Request):
-    if request.app.state.webrtc_offer is None:
-        return JSONResponse({"sdp": None}, status_code=404)
-    return {"sdp": request.app.state.webrtc_offer}
-
-
-@router.delete("/webrtc/offer")
-async def delete_webrtc_offer(request: Request):
-    request.app.state.webrtc_offer = None
-    return {"status": "ok"}
-
-
-@router.post("/webrtc/answer")
-async def post_webrtc_answer(payload: SdpPayload, request: Request):
-    request.app.state.webrtc_answer = payload.sdp
-    logger.info(f"WebRTC answer received ({len(payload.sdp)} chars)")
-    return {"status": "ok"}
-
-
-@router.get("/webrtc/answer")
-async def get_webrtc_answer(request: Request):
-    if request.app.state.webrtc_answer is None:
-        return JSONResponse({"sdp": None}, status_code=404)
-    return {"sdp": request.app.state.webrtc_answer}
+@router.post("/unity/reconnect")
+async def reconnect_unity(request: Request):
+    """Reconnect to Unity's frame server (port 5006)."""
+    frame_server_ok = _check_port(5006)
+    if frame_server_ok:
+        return {"status": "ok", "message": "Frame server is running on port 5006."}
+    unity_alive = _check_port(5005)
+    if unity_alive:
+        return {"status": "waiting", "message": "Unity TCP is alive, frame server not yet ready on port 5006."}
+    unity_exe = _find_unity_exe()
+    if unity_exe:
+        return {"status": "launch_required", "message": "Unity not responding. Click Launch Unity to start."}
+    return {"status": "error", "message": "Unity not found and not running."}

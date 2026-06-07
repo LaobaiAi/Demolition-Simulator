@@ -154,8 +154,9 @@ async def lifespan(app: FastAPI):
     app.state.agent = agent
     app.state.memory = memory
     app.state.unity_process = None
-    app.state.webrtc_offer = None
-    app.state.webrtc_answer = None
+    app.state.unity_monitor_task = None
+    app.state.unity_restart_backoff = 0
+    app.state.unity_auto_restart = True
 
     # Register all routers
     for router in _all_routers:
@@ -166,9 +167,81 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Gateway ready — no saved LLM config, configure via /settings/llm")
 
-    _detect_running_unity()
+    # Auto-launch Unity if installed and not running
+    if not _detect_running_unity():
+        try:
+            from routers.unity import _find_unity_exe, _init_unity_project_dir, UNITY_PROJECT_DIR
+            _init_unity_project_dir()
+            unity_exe = _find_unity_exe()
+            if unity_exe and UNITY_PROJECT_DIR:
+                import os as _os
+                import subprocess as _sp
+                flag_path = _os.path.join(UNITY_PROJECT_DIR, "auto_play.flag")
+                with open(flag_path, "w") as f:
+                    f.write("1")
+                proc = _sp.Popen(
+                    [unity_exe, "-projectPath", UNITY_PROJECT_DIR],
+                    stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+                )
+                app.state.unity_process = proc
+                logger.info(f"Auto-launched Unity (PID {proc.pid})")
+        except Exception as e:
+            logger.warning(f"Auto-launch Unity failed: {e}")
+
+    # Start Unity process health monitor
+    async def _monitor_unity():
+        while True:
+            await asyncio.sleep(10)
+            try:
+                proc = app.state.unity_process
+                if proc is None:
+                    app.state.unity_restart_backoff = 0
+                    continue
+
+                if proc.poll() is not None:
+                    exit_code = proc.returncode
+                    logger.warning(f"Unity process exited (code={exit_code})")
+                    app.state.unity_process = None
+
+                    if not app.state.unity_auto_restart:
+                        continue
+
+                    backoff = app.state.unity_restart_backoff
+                    if backoff > 5:
+                        logger.error("Unity restart backoff limit reached — giving up")
+                        continue
+
+                    delay = min(10 * (2 ** backoff), 300)
+                    app.state.unity_restart_backoff = backoff + 1
+                    logger.info(f"Restarting Unity in {delay}s (attempt {backoff + 1})")
+                    await asyncio.sleep(delay)
+
+                    from routers.unity import _find_unity_exe, _init_unity_project_dir, UNITY_PROJECT_DIR
+                    _init_unity_project_dir()
+                    unity_exe = _find_unity_exe()
+                    if unity_exe and UNITY_PROJECT_DIR:
+                        import os as _os
+                        import subprocess as _sp
+                        flag_path = _os.path.join(UNITY_PROJECT_DIR, "auto_play.flag")
+                        with open(flag_path, "w") as f:
+                            f.write("1")
+                        proc = _sp.Popen(
+                            [unity_exe, "-projectPath", UNITY_PROJECT_DIR],
+                            stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+                        )
+                        app.state.unity_process = proc
+                        logger.info(f"Auto-restarted Unity (PID {proc.pid})")
+            except Exception as e:
+                logger.warning(f"Unity monitor error: {e}")
+
+    monitor_task = asyncio.create_task(_monitor_unity())
+    app.state.unity_monitor_task = monitor_task
+
     yield
     logger.info("Shutting down...")
+    app.state.unity_auto_restart = False
+    if app.state.unity_monitor_task:
+        app.state.unity_monitor_task.cancel()
     unity_proc = app.state.unity_process
     if unity_proc and unity_proc.poll() is None:
         logger.info("Terminating Unity process...")
