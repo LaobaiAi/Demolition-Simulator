@@ -5,30 +5,31 @@ using System.IO;
 [InitializeOnLoad]
 public static class AutoPlayOnLoad
 {
-    private const string FLAG_PATH = "Temp/auto_play.flag";
+    private const string FLAG_PATH = "auto_play.flag";
+    private const string PREFS_ACTIVE = "XuanwuAI_AutoPlay_Active";
     private static double _startTime;
     private static bool _triggered;
+    private static double _exitTime;
+    private static bool _pendingReEnter;
 
     static AutoPlayOnLoad()
     {
         _startTime = EditorApplication.timeSinceStartup;
         EditorApplication.update += Poll;
-        Debug.Log("[XuanwuAI] AutoPlayOnLoad registered — waiting for flag: " + FLAG_PATH);
+        EditorApplication.playModeStateChanged += OnPlayModeChanged;
+        Debug.Log("[XuanwuAI] AutoPlayOnLoad registered — " + FLAG_PATH);
     }
 
     private static void Poll()
     {
         if (_triggered) return;
-
-        // Wait 4 seconds for editor to stabilize after compilation
         if (EditorApplication.timeSinceStartup - _startTime < 4.0) return;
-
         if (!File.Exists(FLAG_PATH)) return;
 
         _triggered = true;
         EditorApplication.update -= Poll;
 
-        Debug.Log("[XuanwuAI] Auto-play flag detected — setting up scene...");
+        Debug.Log("[XuanwuAI] Auto-play flag detected — setup + play...");
 
         try
         {
@@ -36,13 +37,13 @@ public static class AutoPlayOnLoad
         }
         catch (System.Exception e)
         {
-            Debug.LogError($"[XuanwuAI] Auto-setup failed: {e.Message}");
+            Debug.LogError("[XuanwuAI] Auto-setup failed: " + e.Message);
             _triggered = false;
             EditorApplication.update += Poll;
             return;
         }
 
-        EditorApplication.playModeStateChanged += OnPlayModeChanged;
+        EditorPrefs.SetBool(PREFS_ACTIVE, true);
         EditorApplication.EnterPlaymode();
         Debug.Log("[XuanwuAI] Entering Play mode...");
     }
@@ -51,17 +52,44 @@ public static class AutoPlayOnLoad
     {
         if (state == PlayModeStateChange.EnteredPlayMode)
         {
-            EditorApplication.playModeStateChanged -= OnPlayModeChanged;
-            if (File.Exists(FLAG_PATH))
+            if (File.Exists(FLAG_PATH)) File.Delete(FLAG_PATH);
+            _pendingReEnter = false;
+        }
+        else if (state == PlayModeStateChange.ExitingPlayMode)
+        {
+            if (EditorPrefs.GetBool(PREFS_ACTIVE, false))
             {
-                File.Delete(FLAG_PATH);
-                Debug.Log("[XuanwuAI] Play mode entered — flag deleted.");
+                _exitTime = EditorApplication.timeSinceStartup;
+                EditorApplication.update += DelayedReEnter;
+                _pendingReEnter = true;
             }
         }
-        else if (state == PlayModeStateChange.ExitingEditMode)
+        else if (state == PlayModeStateChange.EnteredEditMode)
         {
-            if (File.Exists(FLAG_PATH))
-                File.Delete(FLAG_PATH);
+            if (_pendingReEnter && !_triggered)
+            {
+                _triggered = true;
+                EditorApplication.EnterPlaymode();
+            }
         }
+    }
+
+    private static void DelayedReEnter()
+    {
+        if (_pendingReEnter && EditorApplication.timeSinceStartup - _exitTime > 5.0)
+        {
+            _pendingReEnter = false;
+            EditorApplication.update -= DelayedReEnter;
+            EditorApplication.EnterPlaymode();
+            Debug.Log("[XuanwuAI] Auto re-entered Play mode");
+        }
+    }
+
+    [MenuItem("Tools/XuanwuAI/Toggle Auto-Play %#p")]
+    private static void ToggleAutoPlay()
+    {
+        bool active = EditorPrefs.GetBool(PREFS_ACTIVE, false);
+        EditorPrefs.SetBool(PREFS_ACTIVE, !active);
+        Debug.Log("[XuanwuAI] Auto-play " + (!active ? "ENABLED" : "DISABLED"));
     }
 }

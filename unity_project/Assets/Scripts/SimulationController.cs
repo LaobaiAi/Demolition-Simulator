@@ -94,15 +94,28 @@ public class SimulationController : MonoBehaviour
 
             try
             {
-                var command = JsonUtility.FromJson<DemolitionCommand>(_pendingCommand);
+                DemolitionCommand command = null;
+                try
+                {
+                    command = JsonUtility.FromJson<DemolitionCommand>(_pendingCommand);
+                }
+                catch
+                {
+                    command = TryParseManually(_pendingCommand);
+                }
+
                 if (command != null)
                 {
                     ExecuteCommand(command);
                 }
+                else
+                {
+                    Debug.LogWarning($"[XuanwuAI] Unparseable command: {_pendingCommand}");
+                }
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[XuanwuAI] Failed to parse command: {ex.Message}");
+                Debug.LogError($"[XuanwuAI] Command execution error: {ex.Message}");
             }
 
             _pendingCommand = null;
@@ -325,6 +338,74 @@ public class SimulationController : MonoBehaviour
         public string action;
         public int[] failed_elements;
         public float force_multiplier = 1.5f;
+    }
+
+    private static DemolitionCommand TryParseManually(string json)
+    {
+        if (string.IsNullOrEmpty(json)) return null;
+        try
+        {
+            var cmd = new DemolitionCommand();
+            cmd.force_multiplier = 1.5f;
+
+            int idx = 0;
+            while (idx < json.Length)
+            {
+                int keyStart = json.IndexOf('"', idx);
+                if (keyStart < 0) break;
+                int keyEnd = json.IndexOf('"', keyStart + 1);
+                if (keyEnd < 0) break;
+                string key = json.Substring(keyStart + 1, keyEnd - keyStart - 1);
+                idx = keyEnd + 1;
+
+                int colon = json.IndexOf(':', idx);
+                if (colon < 0) break;
+                idx = colon + 1;
+
+                while (idx < json.Length && json[idx] == ' ') idx++;
+
+                if (key == "action")
+                {
+                    if (json[idx] == '"')
+                    {
+                        int vEnd = json.IndexOf('"', idx + 1);
+                        if (vEnd > idx) cmd.action = json.Substring(idx + 1, vEnd - idx - 1);
+                        idx = vEnd + 1;
+                    }
+                }
+                else if (key == "force_multiplier")
+                {
+                    int vEnd = idx;
+                    while (vEnd < json.Length && (char.IsDigit(json[vEnd]) || json[vEnd] == '.' || json[vEnd] == '-')) vEnd++;
+                    if (vEnd > idx) float.TryParse(json.Substring(idx, vEnd - idx), out cmd.force_multiplier);
+                    idx = vEnd;
+                }
+                else if (key == "failed_elements")
+                {
+                    if (json[idx] == '[')
+                    {
+                        var list = new System.Collections.Generic.List<int>();
+                        int arrIdx = idx + 1;
+                        while (arrIdx < json.Length && json[arrIdx] != ']')
+                        {
+                            while (arrIdx < json.Length && (json[arrIdx] == ' ' || json[arrIdx] == ',')) arrIdx++;
+                            if (arrIdx >= json.Length || json[arrIdx] == ']') break;
+                            int nEnd = arrIdx;
+                            while (nEnd < json.Length && char.IsDigit(json[nEnd])) nEnd++;
+                            if (nEnd > arrIdx) list.Add(int.Parse(json.Substring(arrIdx, nEnd - arrIdx)));
+                            arrIdx = nEnd;
+                        }
+                        cmd.failed_elements = list.ToArray();
+                        idx = arrIdx + 1;
+                    }
+                }
+                else idx++;
+            }
+
+            if (string.IsNullOrEmpty(cmd.action)) return null;
+            return cmd;
+        }
+        catch { return null; }
     }
 
     // Helper to convert JSON naming convention

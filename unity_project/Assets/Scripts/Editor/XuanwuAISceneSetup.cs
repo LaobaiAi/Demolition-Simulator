@@ -34,13 +34,13 @@ public static class XuanwuAISceneSetup
 
         // --- Create dedicated camera with WebRTC streamer ---
         var camGo = new GameObject("XuanwuAICamera");
+        camGo.tag = "MainCamera";
         var cam = camGo.AddComponent<Camera>();
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.backgroundColor = new Color(0.04f, 0.06f, 0.1f);
         cam.transform.position = new Vector3(6f, 4f, -15f);
         cam.transform.LookAt(new Vector3(6f, 3f, 0f));
-        camGo.AddComponent<WebRTCStreamer>();
-        camGo.AddComponent<WebRTCSignaling>();
+        camGo.AddComponent<FrameServer>();
 
         // --- Lighting ---
         var lightGo = GameObject.Find("XuanwuAILight");
@@ -75,7 +75,7 @@ public static class XuanwuAISceneSetup
         Selection.activeGameObject = camGo;
 
         Debug.Log("[XuanwuAI] Scene setup complete! Press Play to start simulation.");
-        Debug.Log("[XuanwuAI] Camera: " + camGo.name + " | TCP: port 5005 | WebRTC: auto-start");
+        Debug.Log("[XuanwuAI] Camera: " + camGo.name + " | TCP: port 5005 | MJPEG: port 5006 | WebRTC: auto-start");
     }
 
     [MenuItem("Tools/XuanwuAI/Reset Simulation")]
