@@ -37,7 +37,7 @@ public static class XuanwuAISceneSetup
         camGo.tag = "MainCamera";
         var cam = camGo.AddComponent<Camera>();
         cam.clearFlags = CameraClearFlags.SolidColor;
-        cam.backgroundColor = new Color(0.04f, 0.06f, 0.1f);
+        cam.backgroundColor = new Color(0.53f, 0.81f, 0.98f);
         cam.transform.position = new Vector3(6f, 4f, -15f);
         cam.transform.LookAt(new Vector3(6f, 3f, 0f));
         camGo.AddComponent<FrameServer>();
@@ -69,13 +69,14 @@ public static class XuanwuAISceneSetup
         ground.transform.SetParent(root.transform);
 
         // --- Build frame ---
-        builder.BuildFrame();
+        // Don't build demo frame — wait for frontend to send structure via build_frame TCP command
+        // builder.BuildFrame();
 
         // --- Select the camera ---
         Selection.activeGameObject = camGo;
 
-        Debug.Log("[XuanwuAI] Scene setup complete! Press Play to start simulation.");
-        Debug.Log("[XuanwuAI] Camera: " + camGo.name + " | TCP: port 5005 | MJPEG: port 5006 | WebRTC: auto-start");
+        Debug.Log("[XuanwuAI] Scene setup complete — waiting for structure from frontend.");
+        Debug.Log("[XuanwuAI] Camera: " + camGo.name + " | TCP: port 5005 | FrameServer: port 5006");
     }
 
     [MenuItem("Tools/XuanwuAI/Reset Simulation")]

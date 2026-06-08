@@ -39,100 +39,117 @@ public class FrameBuilder : MonoBehaviour
     [ContextMenu("Build Frame")]
     public void BuildFrame()
     {
-        // Clear existing structure
-        var existingStructure = GameObject.Find("FrameStructure");
-        if (existingStructure != null)
-            DestroyImmediate(existingStructure);
+        ClearStructure();
+        var (elements, _) = BuildFromParams(spans, stories, spanLength, storyHeight);
+        RegisterElements(elements);
+        Debug.Log($"[FrameBuilder] Built {spans}x{stories} frame: {elements.Count} elements.");
+    }
 
-        var structureRoot = new GameObject("FrameStructure");
-        structureRoot.transform.SetParent(transform);
+    public void BuildFrameFromData(List<Vector3> nodePositions, List<(int i, int j, string type)> elementDefs)
+    {
+        ClearStructure();
+        var elements = new List<GameObject>();
+        var nodeDict = new Dictionary<int, Vector3>();
+        for (int k = 0; k < nodePositions.Count; k++)
+            nodeDict[k] = nodePositions[k];
 
+        for (int k = 0; k < elementDefs.Count; k++)
+        {
+            var (ni, nj, etype) = elementDefs[k];
+            if (!nodeDict.ContainsKey(ni) || !nodeDict.ContainsKey(nj)) continue;
+            var start = nodeDict[ni];
+            var end = nodeDict[nj];
+            float thickness = etype == "column" ? columnWidth : beamHeight;
+            var go = CreateStructuralElement(
+                $"{etype}_{k}",
+                start, end,
+                new Vector3(thickness, Vector3.Distance(start, end) / 2f, thickness),
+                etype == "column" ? columnMaterial : beamMaterial
+            );
+            go.transform.SetParent(_structureRoot.transform);
+            elements.Add(go);
+        }
+
+        ConnectJoints(elements, nodeDict);
+        RegisterElements(elements);
+        Debug.Log($"[FrameBuilder] Built from data: {elements.Count} elements, {nodePositions.Count} nodes.");
+    }
+
+    private void ClearStructure()
+    {
+        var existing = GameObject.Find("FrameStructure");
+        if (existing != null)
+            DestroyImmediate(existing);
+        _structureRoot = new GameObject("FrameStructure");
+        _structureRoot.transform.SetParent(transform);
+    }
+
+    private (List<GameObject>, Dictionary<int, Vector3>) BuildFromParams(int spans, int stories, float spanLen, float storyH)
+    {
         var elements = new List<GameObject>();
         var nodePositions = new Dictionary<int, Vector3>();
 
-        // Generate node grid
         int nodeId = 0;
         for (int row = 0; row <= stories; row++)
         {
             for (int col = 0; col <= spans; col++)
             {
-                var pos = new Vector3(col * spanLength, row * storyHeight, 0);
-                nodePositions[nodeId] = pos;
-                nodeId++;
-
-                // Ground marker at row 0
+                nodePositions[nodeId++] = new Vector3(col * spanLen, row * storyH, 0);
                 if (row == 0)
                 {
                     var marker = GameObject.CreatePrimitive(PrimitiveType.Cube);
                     marker.name = $"Node_{nodeId - 1}_Base";
-                    marker.transform.position = pos + Vector3.down * 0.15f;
+                    marker.transform.position = nodePositions[nodeId - 1] + Vector3.down * 0.15f;
                     marker.transform.localScale = new Vector3(0.5f, 0.3f, 0.5f);
-                    marker.transform.SetParent(structureRoot.transform);
+                    marker.transform.SetParent(_structureRoot.transform);
                     if (groundMaterial != null)
                         marker.GetComponent<Renderer>().material = groundMaterial;
                 }
             }
         }
 
-        // Build columns (vertical elements)
-        int elementId = 0;
+        int elemId = 0;
         for (int row = 0; row < stories; row++)
         {
             for (int col = 0; col <= spans; col++)
             {
-                int bottomNodeId = row * (spans + 1) + col;
-                int topNodeId = (row + 1) * (spans + 1) + col;
-
-                var column = CreateStructuralElement(
-                    $"Column_{elementId}",
-                    nodePositions[bottomNodeId],
-                    nodePositions[topNodeId],
-                    new Vector3(columnWidth, storyHeight / 2f, columnDepth),
-                    columnMaterial
-                );
-                column.transform.SetParent(structureRoot.transform);
-                elements.Add(column);
-                elementId++;
+                int bottom = row * (spans + 1) + col;
+                int top = (row + 1) * (spans + 1) + col;
+                var colGo = CreateStructuralElement($"Column_{elemId}", nodePositions[bottom], nodePositions[top],
+                    new Vector3(columnWidth, storyH / 2f, columnDepth), columnMaterial);
+                colGo.transform.SetParent(_structureRoot.transform);
+                elements.Add(colGo);
+                elemId++;
             }
         }
 
-        // Build beams (horizontal elements)
         for (int row = 1; row <= stories; row++)
         {
             for (int col = 0; col < spans; col++)
             {
-                int leftNodeId = row * (spans + 1) + col;
-                int rightNodeId = row * (spans + 1) + col + 1;
-
-                var beam = CreateStructuralElement(
-                    $"Beam_{elementId}",
-                    nodePositions[leftNodeId],
-                    nodePositions[rightNodeId],
-                    new Vector3(spanLength / 2f, beamHeight, beamDepth),
-                    beamMaterial
-                );
-                beam.transform.SetParent(structureRoot.transform);
-                elements.Add(beam);
-                elementId++;
+                int left = row * (spans + 1) + col;
+                int right = row * (spans + 1) + col + 1;
+                var beamGo = CreateStructuralElement($"Beam_{elemId}", nodePositions[left], nodePositions[right],
+                    new Vector3(spanLen / 2f, beamHeight, beamDepth), beamMaterial);
+                beamGo.transform.SetParent(_structureRoot.transform);
+                elements.Add(beamGo);
+                elemId++;
             }
         }
 
-        // Connect elements with ConfigurableJoints at shared nodes
-        ConnectJoints(elements, nodePositions);
-
-        // Register with SimulationController
-        var controller = GetComponent<SimulationController>();
-        var elementsField = typeof(SimulationController).GetField("structuralElements",
-            System.Reflection.BindingFlags.NonPublic |
-            System.Reflection.BindingFlags.Instance);
-        if (elementsField != null)
-        {
-            elementsField.SetValue(controller, elements);
-        }
-
-        Debug.Log($"[FrameBuilder] Built {spans}x{stories} frame: {elements.Count} elements, " +
-                  $"{nodePositions.Count} nodes.");
+        return (elements, nodePositions);
     }
+
+    private void RegisterElements(List<GameObject> elements)
+    {
+        var controller = GetComponent<SimulationController>();
+        var field = typeof(SimulationController).GetField("structuralElements",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        if (field != null)
+            field.SetValue(controller, elements);
+    }
+
+    private GameObject _structureRoot;
 
     private GameObject CreateStructuralElement(
         string name, Vector3 start, Vector3 end, Vector3 halfExtents, Material material)

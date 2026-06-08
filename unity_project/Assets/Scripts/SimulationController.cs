@@ -26,9 +26,16 @@ public class SimulationController : MonoBehaviour
     [SerializeField] private int listenPort = 5005;
 
     [Header("Simulation Settings")]
-    [SerializeField] private float defaultExplosionForce = 50000f;
+    [SerializeField] private float defaultExplosionForce = 2000f;
     [SerializeField] private float explosionRadius = 2.5f;
     [SerializeField] private ForceMode forceMode = ForceMode.Impulse;
+    [SerializeField] private DemolitionStyle demolitionStyle = DemolitionStyle.Collapse;
+
+    private enum DemolitionStyle
+    {
+        Collapse,
+        Explosive
+    }
 
     [Header("Frame Structure")]
     [Tooltip("Assign all structural elements (columns & beams) in order. " +
@@ -106,6 +113,7 @@ public class SimulationController : MonoBehaviour
 
                 if (command != null)
                 {
+                    command._rawJson = _pendingCommand;
                     ExecuteCommand(command);
                 }
                 else
@@ -183,6 +191,10 @@ public class SimulationController : MonoBehaviour
         switch (command.action)
         {
             case "demolish":
+                if (command.style == "explosive")
+                    demolitionStyle = DemolitionStyle.Explosive;
+                else
+                    demolitionStyle = DemolitionStyle.Collapse;
                 DemolishElements(command.failed_elements, command.force_multiplier);
                 break;
             case "reset":
@@ -191,10 +203,102 @@ public class SimulationController : MonoBehaviour
             case "restart_webrtc":
                 RestartWebRTC();
                 break;
+            case "build_frame":
+                if (command._rawJson != null)
+                    ExecuteBuildFrame(command._rawJson);
+                break;
             default:
                 Debug.LogWarning($"[XuanwuAI] Unknown action: {command.action}");
                 break;
         }
+    }
+
+    private void ExecuteBuildFrame(string json)
+    {
+        var builder = GetComponent<FrameBuilder>();
+        if (builder == null)
+        {
+            Debug.LogWarning("[XuanwuAI] No FrameBuilder component found");
+            return;
+        }
+
+        var nodes = new List<Vector3>();
+        var elements = new List<(int, int, string)>();
+
+        int nodesStart = json.IndexOf("\"nodes\"");
+        int elementsStart = json.IndexOf("\"elements\"");
+
+        if (nodesStart < 0 || elementsStart < 0) return;
+
+        string nodesJson = json.Substring(nodesStart, elementsStart - nodesStart);
+        string elementsJson = json.Substring(elementsStart);
+
+        int idx = nodesJson.IndexOf('[');
+        if (idx < 0) return;
+        idx++;
+        while (idx < nodesJson.Length && nodesJson[idx] != ']')
+        {
+            while (idx < nodesJson.Length && nodesJson[idx] != '{') idx++;
+            if (idx >= nodesJson.Length || nodesJson[idx] != '{') break;
+            int end = nodesJson.IndexOf('}', idx);
+            if (end < 0) break;
+            string nodeStr = nodesJson.Substring(idx, end - idx + 1);
+            float x = ExtractFloat(nodeStr, "x");
+            float y = ExtractFloat(nodeStr, "y");
+            float z = ExtractFloat(nodeStr, "z");
+            nodes.Add(new Vector3(x, y, z));
+            idx = end + 1;
+        }
+
+        idx = elementsJson.IndexOf('[');
+        if (idx < 0) return;
+        idx++;
+        while (idx < elementsJson.Length && elementsJson[idx] != ']')
+        {
+            while (idx < elementsJson.Length && elementsJson[idx] != '{') idx++;
+            if (idx >= elementsJson.Length || elementsJson[idx] != '{') break;
+            int end = elementsJson.IndexOf('}', idx);
+            if (end < 0) break;
+            string elemStr = elementsJson.Substring(idx, end - idx + 1);
+            int ni = (int)ExtractFloat(elemStr, "node_i");
+            int nj = (int)ExtractFloat(elemStr, "node_j");
+            string type = ExtractString(elemStr, "type");
+            if (string.IsNullOrEmpty(type)) type = "beam";
+            elements.Add((ni, nj, type));
+            idx = end + 1;
+        }
+
+        builder.BuildFrameFromData(nodes, elements);
+    }
+
+    private float ExtractFloat(string json, string key)
+    {
+        int keyIdx = json.IndexOf("\"" + key + "\"");
+        if (keyIdx < 0) return 0f;
+        int colon = json.IndexOf(':', keyIdx);
+        if (colon < 0) return 0f;
+        int start = colon + 1;
+        while (start < json.Length && (json[start] == ' ' || json[start] == '\t')) start++;
+        int end = start;
+        while (end < json.Length && (char.IsDigit(json[end]) || json[end] == '.' || json[end] == '-')) end++;
+        if (end > start && float.TryParse(json.Substring(start, end - start),
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out float val))
+            return val;
+        return 0f;
+    }
+
+    private string ExtractString(string json, string key)
+    {
+        int keyIdx = json.IndexOf("\"" + key + "\"");
+        if (keyIdx < 0) return "";
+        int colon = json.IndexOf(':', keyIdx);
+        if (colon < 0) return "";
+        int q1 = json.IndexOf('"', colon);
+        if (q1 < 0) return "";
+        int q2 = json.IndexOf('"', q1 + 1);
+        if (q2 < 0) return "";
+        return json.Substring(q1 + 1, q2 - q1 - 1);
     }
 
     /// <summary>
@@ -204,13 +308,67 @@ public class SimulationController : MonoBehaviour
     /// </summary>
     private void DemolishElements(int[] failedElementIds, float forceMultiplier)
     {
-        if (forceMultiplier <= 0f) forceMultiplier = 1.5f;
+        if (forceMultiplier <= 0f) forceMultiplier = 1f;
 
         Debug.Log($"[XuanwuAI] Demolishing elements: [{string.Join(", ", failedElementIds)}] " +
-                  $"with force multiplier {forceMultiplier:F1}x");
+                  $"style={demolitionStyle}, multiplier={forceMultiplier:F1}x");
 
         var indicesToRemove = new HashSet<int>(failedElementIds);
 
+        if (demolitionStyle == DemolitionStyle.Collapse)
+        {
+            DemolishCollapse(indicesToRemove, forceMultiplier);
+        }
+        else
+        {
+            DemolishExplosive(indicesToRemove, forceMultiplier);
+        }
+
+        Debug.Log($"[XuanwuAI] Demolition executed on {failedElementIds.Length} element(s).");
+    }
+
+    private void DemolishCollapse(HashSet<int> indicesToRemove, float forceMultiplier)
+    {
+        for (int i = 0; i < structuralElements.Count; i++)
+        {
+            var element = structuralElements[i];
+            if (element == null) continue;
+
+            if (indicesToRemove.Contains(i))
+            {
+                var joints = element.GetComponents<Joint>();
+                foreach (var joint in joints)
+                    Destroy(joint);
+
+                element.SetActive(false);
+                Destroy(element, 0.5f);
+            }
+            else
+            {
+                foreach (var failId in indicesToRemove)
+                {
+                    if (failId >= structuralElements.Count) continue;
+                    var failedElement = structuralElements[failId];
+                    if (failedElement == null) continue;
+
+                    var distance = Vector3.Distance(element.transform.position, failedElement.transform.position);
+                    if (distance < explosionRadius)
+                    {
+                        var rb = element.GetComponent<Rigidbody>();
+                        if (rb != null)
+                        {
+                            float aboveAmount = Mathf.Max(0, (failedElement.transform.position.y - element.transform.position.y));
+                            float gravityAssist = aboveAmount > 0.1f ? 1f + aboveAmount * 0.3f : 1f;
+                            rb.AddForce(Vector3.down * defaultExplosionForce * 0.03f * forceMultiplier * gravityAssist, ForceMode.Force);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private void DemolishExplosive(HashSet<int> indicesToRemove, float forceMultiplier)
+    {
         for (int i = 0; i < structuralElements.Count; i++)
         {
             var element = structuralElements[i];
@@ -220,55 +378,40 @@ public class SimulationController : MonoBehaviour
 
             if (indicesToRemove.Contains(i))
             {
-                // Disable joints on the failed element to detach from structure
                 var joints = element.GetComponents<Joint>();
                 foreach (var joint in joints)
-                {
                     Destroy(joint);
-                }
 
-                // Apply strong outward force
                 if (rb != null)
                 {
                     var direction = (element.transform.position - GetStructureCenter()).normalized;
                     if (direction.sqrMagnitude < 0.01f)
                         direction = Vector3.right + Vector3.up * 0.3f;
 
-                    rb.AddForce(direction * defaultExplosionForce * forceMultiplier, forceMode);
-                    rb.AddTorque(UnityEngine.Random.insideUnitSphere * defaultExplosionForce * 0.3f, forceMode);
-
-                    // Briefly increase mass effect
+                    rb.AddForce(direction * defaultExplosionForce * 5f * forceMultiplier, forceMode);
+                    rb.AddTorque(UnityEngine.Random.insideUnitSphere * defaultExplosionForce * 2f, forceMode);
                     rb.mass *= 0.5f;
                 }
             }
             else
             {
-                // Nearby elements get shockwave effect
-                foreach (var failId in failedElementIds)
+                foreach (var failId in indicesToRemove)
                 {
-                    if (failId < structuralElements.Count)
+                    if (failId >= structuralElements.Count) continue;
+                    var failedElement = structuralElements[failId];
+                    if (failedElement == null) continue;
+
+                    var distance = Vector3.Distance(element.transform.position, failedElement.transform.position);
+                    if (distance < explosionRadius && rb != null)
                     {
-                        var failedElement = structuralElements[failId];
-                        if (failedElement == null) continue;
-
-                        var distance = Vector3.Distance(
-                            element.transform.position,
-                            failedElement.transform.position);
-
-                        if (distance < explosionRadius && rb != null)
-                        {
-                            var shockwaveDir = (element.transform.position -
-                                failedElement.transform.position).normalized;
-                            var attenuatedForce = defaultExplosionForce * forceMultiplier *
-                                (1f - distance / explosionRadius) * 0.5f;
-                            rb.AddForce(shockwaveDir * attenuatedForce, forceMode);
-                        }
+                        var shockwaveDir = (element.transform.position - failedElement.transform.position).normalized;
+                        var attenuatedForce = defaultExplosionForce * 5f * forceMultiplier *
+                            (1f - distance / explosionRadius) * 0.5f;
+                        rb.AddForce(shockwaveDir * attenuatedForce, forceMode);
                     }
                 }
             }
         }
-
-        Debug.Log($"[XuanwuAI] Demolition executed on {failedElementIds.Length} element(s).");
     }
 
     /// <summary>
@@ -338,6 +481,8 @@ public class SimulationController : MonoBehaviour
         public string action;
         public int[] failed_elements;
         public float force_multiplier = 1.5f;
+        public string style;
+        public string _rawJson;
     }
 
     private static DemolitionCommand TryParseManually(string json)
