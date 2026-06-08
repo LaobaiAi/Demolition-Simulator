@@ -28,11 +28,17 @@ function saveProfiles(profiles: Record<string, { api_key: string; base_url: stri
 }
 
 export function useLlmSettings() {
-  const [lang, setLang] = useState<Lang>(() => {
+  const [lang, setLang] = useState<Lang>("en");
+  const [langReady, setLangReady] = useState(false);
+
+  useEffect(() => {
     const saved = getSavedLang();
-    if (typeof document !== "undefined") document.documentElement.setAttribute("data-lang", saved);
-    return saved;
-  });
+    if (saved !== "en") {
+      setLang(saved);
+    }
+    document.documentElement.setAttribute("data-lang", saved);
+    setLangReady(true);
+  }, []);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState("llm");
   const [llmApiKey, setLlmApiKey] = useState("");

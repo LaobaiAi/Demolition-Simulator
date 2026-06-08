@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Loader2, Send, Square, Zap, Settings, ListOrdered } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +51,8 @@ interface ChatPanelProps {
   onLaunchVisualDemolition: () => void;
   onTriggerDemolition: () => void;
   onQuickAction: (action: string) => void;
+  analysisMode: "analysis" | "fast";
+  setAnalysisMode: (v: "analysis" | "fast") => void;
 }
 
 export function ChatPanel({
@@ -60,11 +63,22 @@ export function ChatPanel({
   animSpeed, setAnimSpeed, setAnimEffects,
   vdConfigOpen, setVdConfigOpen, setDemolishDialogOpen,
   quickActions, onSend, onStop, onLaunchVisualDemolition,
+  analysisMode, setAnalysisMode,
 }: ChatPanelProps) {
   return (
     <div className="flex w-[30%] min-w-[300px] flex-col border-r border-border">
-      <div className="flex items-center justify-center border-b border-border px-4 py-2.5">
+      <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
         <span className="text-sm font-semibold text-foreground">{t("chat.title", lang)}</span>
+        <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-0.5">
+          <button onClick={() => setAnalysisMode("analysis")}
+            className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${analysisMode === "analysis" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+            {t("chat.mode_analysis", lang)}
+          </button>
+          <button onClick={() => setAnalysisMode("fast")}
+            className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${analysisMode === "fast" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+            {t("chat.mode_fast", lang)}
+          </button>
+        </div>
       </div>
       <div className="min-h-0 flex-1">
         <ScrollArea className="h-full p-4">
@@ -159,7 +173,7 @@ export function ChatPanel({
         </div>
       )}
 
-      {frameStructure && !pipelineActive && (
+      {frameStructure && !pipelineActive && analysisMode !== "fast" && (
         <div className="px-4 pb-2">
           <div>
             <div className="flex gap-1.5">
@@ -254,7 +268,7 @@ export function ChatPanel({
       <div className="border-t border-border p-3">
         <div className="flex gap-2">
           <Input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }}
-            placeholder={t("chat.placeholder", lang)} className="flex-1" disabled={status === "loading"} />
+            placeholder={analysisMode === "fast" ? t("chat.placeholder_fast", lang) : t("chat.placeholder", lang)} className="flex-1" disabled={status === "loading"} />
           {status === "loading" ? (
             <Button onClick={onStop} size="icon" variant="destructive" className="shrink-0" title={t("chat.stop", lang)}>
               <Square className="h-4 w-4" />

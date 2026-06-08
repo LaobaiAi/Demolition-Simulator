@@ -456,12 +456,12 @@ export function useWebSocket(callbacks: WebSocketCallbacks) {
     };
   }, []);
 
-  const sendMessage = useCallback((content: string) => {
+  const sendMessage = useCallback((content: string, analysisMode?: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "message", content }));
+      wsRef.current.send(JSON.stringify({ type: "message", content, analysisMode }));
       return true;
     }
-    msgQueueRef.current.push(JSON.stringify({ type: "message", content }));
+    msgQueueRef.current.push(JSON.stringify({ type: "message", content, analysisMode }));
     return true;
   }, []);
 

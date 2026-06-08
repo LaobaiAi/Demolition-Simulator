@@ -108,6 +108,7 @@ export default function Home() {
   const [vdStrategy, setVdStrategy] = useState("top_down");
   const [vdEffectsPreset, setVdEffectsPreset] = useState<"minimal" | "standard" | "cinematic">("standard");
   const [animSpeed, setAnimSpeed] = useState(1);
+  const [analysisMode, setAnalysisMode] = useState<"analysis" | "fast">("analysis");
   const [animEffects, setAnimEffects] = useState<Record<string, boolean>>({
     cascade: true, explosion: true, dust: true, shake: true,
     buckling: true, fracture: true, flash: true, trail: true, bounce: true,
@@ -125,17 +126,14 @@ export default function Home() {
   const [frameStructure, setFrameStructure] = useState<FrameStructure | null>(null);
   const [nodeDisplacements, setNodeDisplacements] = useState<NodeDisp[] | null>(null);
   const [analysisSolver, setAnalysisSolver] = useState<string | null>(null);
-  const [vizMode, setVizMode] = useState<"svg" | "webgl" | "unity" | "ifc">("webgl");
+  const [vizMode, setVizMode] = useState<"svg" | "webgl" | "unity" | "blender" | "ifc" | "abaqus">("webgl");
   const [autoPlaying, setAutoPlaying] = useState(false);
   const [animRequest, setAnimRequest] = useState<{key: number; targets: number[]} | null>(null);
   const [animPlaying, setAnimPlaying] = useState(false);
   const [animatingRound, setAnimatingRound] = useState(-1);
   const autoPlayQueueRef = useRef<number[]>([]);
   const { theme, setTheme } = useTheme();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    try { return localStorage.getItem("xuanwu_sidebar_collapsed") === "true"; }
-    catch { return false; }
-  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [demoLibraryOpen, setDemoLibraryOpen] = useState(false);
   const [demoRunning, setDemoRunning] = useState(false);
   const [runningDemoKey, setRunningDemoKey] = useState<string | null>(null);
@@ -163,7 +161,19 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("xuanwu_sidebar_collapsed", String(sidebarCollapsed));
+    try {
+      const saved = localStorage.getItem("xuanwu_sidebar_collapsed");
+      if (saved !== null) setSidebarCollapsed(saved === "true");
+    } catch { /* SSR guard */ }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const current = localStorage.getItem("xuanwu_sidebar_collapsed");
+      if (current !== String(sidebarCollapsed)) {
+        localStorage.setItem("xuanwu_sidebar_collapsed", String(sidebarCollapsed));
+      }
+    } catch { /* SSR guard */ }
   }, [sidebarCollapsed]);
 
   useEffect(() => {
@@ -227,10 +237,20 @@ export default function Home() {
     const saved = safeGetItem(CONV_STORAGE);
     const active = safeGetItem(CONV_ACTIVE);
     if (saved) {
-      const parsed = safeParseJson<Array<{id: string; title: string; pinned: boolean; createdAt: number; messages: ChatMessage[]}>>(saved, []);
+      const raw = safeParseJson<Array<{id: string; title: string; pinned: boolean; createdAt: number; messages: ChatMessage[]}>>(saved, []);
+      const parsed = Array.isArray(raw) ? raw.filter((c) => {
+        if (!c || typeof c !== "object") return false;
+        if (typeof c.id !== "string" || !c.id) return false;
+        if (typeof c.title !== "string") c.title = "Untitled";
+        if (!Array.isArray(c.messages)) c.messages = [];
+        return true;
+      }) : [];
+      if (parsed.length !== raw.length) {
+        localStorage.setItem(CONV_STORAGE, JSON.stringify(parsed));
+      }
       conv.setConversations(parsed.map((c) => ({
-        id: c.id, title: c.title, pinned: c.pinned,
-        createdAt: c.createdAt, messageCount: c.messages.length,
+        id: c.id, title: c.title, pinned: c.pinned ?? false,
+        createdAt: c.createdAt ?? Date.now(), messageCount: c.messages?.length ?? 0,
       })));
       if (active) {
         const activeConv = parsed.find((c) => c.id === active);
@@ -390,11 +410,11 @@ export default function Home() {
     setInput("");
     setStatus("loading");
     pendingStepsRef.current = [];
-    if (!wsSend(userMsg)) {
+    if (!wsSend(userMsg, analysisMode)) {
       setMessages((prev) => [...prev, { role: "ai", content: "WebSocket not connected. Please try again." }]);
       setStatus("idle");
     }
-  }, [input, status, wsSend]);
+  }, [input, status, wsSend, analysisMode]);
 
   const handleStop = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -414,8 +434,8 @@ export default function Home() {
     setDemolishReady(false);
     setDemolishDialogOpen(false);
     pendingStepsRef.current = [];
-    wsSend(msg);
-  }, [structuralMetrics, wsSend]);
+    wsSend(msg, analysisMode);
+  }, [structuralMetrics, wsSend, analysisMode]);
 
   const launchVisualDemolition = useCallback(() => {
     if (!frameStructure) return;
@@ -455,7 +475,7 @@ export default function Home() {
         if (full?.speed) fullSpeed = full.speed;
         if (full?.effects) setAnimEffects(full.effects as Record<string, boolean>);
       } catch { /* use defaults */ }
-      if (scenario.viz_mode) setVizMode(scenario.viz_mode as "svg" | "webgl" | "unity" | "ifc");
+      if (scenario.viz_mode) setVizMode(scenario.viz_mode as "svg" | "webgl" | "unity" | "blender" | "ifc" | "abaqus");
       const buildingType = structureParams.building_type as string | undefined;
       const pipeline = buildingType === "steam_turbine" ? "steam_turbine_demolition" : "visual_demolition";
       wsRef.current.send(JSON.stringify({
@@ -598,19 +618,17 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [demolishReady, structuralMetrics]);
 
-  const quickActions = [
-    t("quick.2x2", llm.lang), t("quick.3x3", llm.lang),
-    t("quick.2x4", llm.lang), t("quick.4x3", llm.lang),
-    t("quick.1x2", llm.lang),
-  ];
+  const quickActions = analysisMode === "fast"
+    ? []
+    : [t("quick.2x2", llm.lang), t("quick.3x3", llm.lang), t("quick.2x4", llm.lang), t("quick.4x3", llm.lang), t("quick.1x2", llm.lang)];
 
   const sendQuickAction = useCallback((action: string) => {
     if (status === "loading") return;
     setMessages((prev) => [...prev, { role: "user", content: action }]);
     setStatus("loading");
     pendingStepsRef.current = [];
-    wsSend(action);
-  }, [status, wsSend]);
+    wsSend(action, analysisMode);
+  }, [status, wsSend, analysisMode]);
 
   const handleUnityConnected = useCallback(() => setVizMode("unity"), []);
 
@@ -690,6 +708,8 @@ export default function Home() {
             onLaunchVisualDemolition={launchVisualDemolition}
             onTriggerDemolition={triggerDemolition}
             onQuickAction={(action) => setInput(action)}
+            analysisMode={analysisMode}
+            setAnalysisMode={setAnalysisMode}
           />
         </ErrorBoundary>
 

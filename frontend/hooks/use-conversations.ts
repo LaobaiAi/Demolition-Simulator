@@ -42,7 +42,17 @@ export function useConversations() {
 
   const loadConversationsFromStorage = useCallback((): StoredConv[] => {
     const saved = safeGetItem(CONV_STORAGE);
-    return safeParseJson<StoredConv[]>(saved, []);
+    const raw = safeParseJson<StoredConv[]>(saved, []);
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((c) => {
+      if (!c || typeof c !== "object") return false;
+      if (typeof c.id !== "string" || !c.id) return false;
+      if (typeof c.title !== "string") c.title = "Untitled";
+      if (typeof c.createdAt !== "number") c.createdAt = Date.now();
+      if (typeof c.pinned !== "boolean") c.pinned = false;
+      if (!Array.isArray(c.messages)) c.messages = [];
+      return true;
+    });
   }, []);
 
   const newConversation = useCallback(() => {

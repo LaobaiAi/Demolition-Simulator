@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Wifi, WifiOff, Monitor, Play, Loader2, ArrowRight, RotateCw, Radio, AlertTriangle } from "lucide-react";
+import { Wifi, WifiOff, Monitor, Play, Pause, Loader2, ArrowRight, RotateCw, Radio, AlertTriangle } from "lucide-react";
+import type { FrameStructure } from "@/lib/state-restore";
 
 const GATEWAY = "http://localhost:8000";
 const WS_URL = "ws://localhost:5006";
@@ -26,6 +27,7 @@ type Transport = "ws" | "http" | "none";
 
 interface Props {
   onStreamConnected?: () => void;
+  frameStructure?: FrameStructure | null;
 }
 
 function validateBmp(data: ArrayBuffer): boolean {
@@ -34,13 +36,14 @@ function validateBmp(data: ArrayBuffer): boolean {
   return view.getUint8(0) === 0x42 && view.getUint8(1) === 0x4D;
 }
 
-export function UnityVideoPanel({ onStreamConnected }: Props) {
+export function UnityVideoPanel({ onStreamConnected, frameStructure }: Props) {
   const [phase, setPhase] = useState<Phase>("checking");
   const [statusText, setStatusText] = useState("Detecting Unity...");
   const [videoScale, setVideoScale] = useState(1);
   const [imgUrl, setImgUrl] = useState("");
   const [transport, setTransport] = useState<Transport>("none");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(true);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -56,6 +59,44 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
   const wsFailureCountRef = useRef(0);
   const transportRef = useRef<Transport>("none");
   const pollAbortRef = useRef<AbortController | null>(null);
+  const frameStructureRef = useRef<FrameStructure | null | undefined>(null);
+  const isPlayingRef = useRef(true);
+  const lastFrameRef = useRef<string>("");
+
+  useEffect(() => {
+    frameStructureRef.current = frameStructure;
+  }, [frameStructure]);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  const displayFrame = useCallback((url: string) => {
+    lastFrameRef.current = url;
+    if (isPlayingRef.current) {
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = url;
+      setImgUrl(url);
+    }
+  }, []);
+
+  const syncToUnity = useCallback(async () => {
+    const fs = frameStructureRef.current;
+    if (!fs?.nodes?.length || !fs?.elements?.length) return;
+    try {
+      await fetch(GATEWAY + "/unity/build-frame", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ structure: fs }),
+      });
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (frameStructure?.nodes?.length && transportRef.current !== "none") {
+      syncToUnity();
+    }
+  }, [frameStructure, syncToUnity]);
 
   const setTransportBoth = useCallback((t: Transport) => {
     transportRef.current = t;
@@ -98,6 +139,7 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
     setTransportBoth("http");
     setPhase("connected");
     setStatusText("Live (HTTP)");
+    syncToUnity();
 
     const poll = async () => {
       if (!mountedRef.current || transportRef.current !== "http") return;
@@ -113,9 +155,7 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
         if (validateBmp(buf)) {
           const blob = new Blob([buf], { type: "image/bmp" });
           const url = URL.createObjectURL(blob);
-          if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
-          blobUrlRef.current = url;
-          setImgUrl(url);
+          displayFrame(url);
           wsFailureCountRef.current = 0;
         }
       } catch (e: unknown) {
@@ -213,6 +253,7 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
           hasConnected.current = true;
           onStreamConnected?.();
         }
+        syncToUnity();
       };
 
       ws.onmessage = (event) => {
@@ -223,9 +264,7 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
             if (validateBmp(buf)) {
               const bmpBlob = new Blob([buf], { type: "image/bmp" });
               const url = URL.createObjectURL(bmpBlob);
-              if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
-              blobUrlRef.current = url;
-              setImgUrl(url);
+              displayFrame(url);
               wsFailureCountRef.current = 0;
             } else {
               wsFailureCountRef.current++;
@@ -394,6 +433,23 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
                 onClick={() => setVideoScale((s) => Math.min(2, s + 0.1))}
                 className="px-1.5 py-0.5 rounded text-[10px] text-muted-foreground hover:text-foreground border border-border hover:border-primary/50 cursor-pointer"
               >+</button>
+              <button
+                onClick={() => {
+                  setIsPlaying((p) => {
+                    const next = !p;
+                    if (next && lastFrameRef.current) {
+                      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+                      blobUrlRef.current = lastFrameRef.current;
+                      setImgUrl(lastFrameRef.current);
+                    }
+                    return next;
+                  });
+                }}
+                className="px-2 py-0.5 rounded text-[10px] text-muted-foreground hover:text-foreground border border-border hover:border-primary/50 cursor-pointer flex items-center gap-1"
+                title={isPlaying ? "Pause stream" : "Resume stream"}
+              >
+                {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+              </button>
             </>
           )}
         </div>
@@ -495,9 +551,17 @@ export function UnityVideoPanel({ onStreamConnected }: Props) {
         )}
 
         {phase === "connected" && (
-          <div className="absolute bottom-3 right-3 bg-black/60 rounded-md px-2.5 py-1.5 text-[10px] text-emerald-400 border border-emerald-500/20 pointer-events-none flex items-center gap-1.5">
-            {transport === "ws" ? <Wifi className="h-3 w-3" /> : <Radio className="h-3 w-3" />}
-            {transport === "ws" ? "WebSocket" : "HTTP Polling"}
+          <div className="absolute bottom-3 right-3 flex items-center gap-2">
+            {!isPlaying && (
+              <div className="bg-black/60 rounded-md px-2.5 py-1.5 text-[10px] text-amber-400 border border-amber-500/20 pointer-events-none flex items-center gap-1.5">
+                <Pause className="h-3 w-3" />
+                Paused
+              </div>
+            )}
+            <div className="bg-black/60 rounded-md px-2.5 py-1.5 text-[10px] text-emerald-400 border border-emerald-500/20 pointer-events-none flex items-center gap-1.5">
+              {transport === "ws" ? <Wifi className="h-3 w-3" /> : <Radio className="h-3 w-3" />}
+              {transport === "ws" ? "WebSocket" : "HTTP Polling"}
+            </div>
           </div>
         )}
       </div>

@@ -8,6 +8,8 @@ import { t, type Lang } from "@/lib/i18n";
 import { getLogIcon, formatLogEntry } from "@/lib/log-format";
 import { FrameVisualization } from "@/components/frame-visualization";
 import { UnityVideoPanel } from "@/components/unity-video-panel";
+import { BlenderVideoPanel } from "@/components/blender-video-panel";
+import { AbaqusVideoPanel } from "@/components/abaqus-video-panel";
 import { VerificationPanel } from "@/components/verification-panel";
 import { DemolitionController } from "@/components/demolition-controller";
 import { WebGLErrorBoundary } from "@/components/webgl-error-boundary";
@@ -29,8 +31,8 @@ function LoadingFallback({ label }: { label: string }) {
 
 interface VizPanelProps {
   lang: Lang;
-  vizMode: "svg" | "webgl" | "unity" | "ifc";
-  setVizMode: (v: "svg" | "webgl" | "unity" | "ifc") => void;
+  vizMode: "svg" | "webgl" | "unity" | "blender" | "ifc" | "abaqus";
+  setVizMode: (v: "svg" | "webgl" | "unity" | "blender" | "ifc" | "abaqus") => void;
   frameStructure: FrameStructure | null;
   nodeDisplacements: NodeDisp[] | null;
   analysisResult: Record<string, unknown> | null;
@@ -91,7 +93,7 @@ export function VisualizationPanel({
           {t(`viz.mode_${vizMode}`, lang)}
         </span>
         <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-0.5">
-          {(["webgl", "svg", "unity", "ifc"] as const).map((mode) => (
+          {(["webgl", "svg", "unity", "blender", "ifc", "abaqus"] as const).map((mode) => (
             <button key={mode} onClick={() => setVizMode(mode)}
               className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${vizMode === mode ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
               {t(`viz.tab_${mode}`, lang)}
@@ -138,7 +140,10 @@ export function VisualizationPanel({
           </WebGLErrorBoundary>
         </div>
         <div className={`absolute inset-0 ${vizMode === "unity" ? "" : "invisible pointer-events-none"}`}>
-          <UnityVideoPanel onStreamConnected={onUnityConnected} />
+          <UnityVideoPanel onStreamConnected={onUnityConnected} frameStructure={frameStructure} />
+        </div>
+        <div className={`absolute inset-0 ${vizMode === "blender" ? "" : "invisible pointer-events-none"}`}>
+          <BlenderVideoPanel onStreamConnected={onUnityConnected} frameStructure={frameStructure} />
         </div>
         <div className={`absolute inset-0 flex flex-col ${vizMode === "ifc" ? "" : "invisible pointer-events-none"}`}>
           <Suspense fallback={<LoadingFallback label="IFC viewer" />}>
@@ -146,6 +151,9 @@ export function VisualizationPanel({
               highlightedElements={structuralMetrics?.criticalElementId ? [structuralMetrics.criticalElementId] : []}
               removedElements={displayFailedElements} />
           </Suspense>
+        </div>
+        <div className={`absolute inset-0 ${vizMode === "abaqus" ? "" : "invisible pointer-events-none"}`}>
+          <AbaqusVideoPanel />
         </div>
       </div>
 

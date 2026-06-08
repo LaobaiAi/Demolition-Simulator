@@ -50,7 +50,7 @@ interface Props {
 
 export function Sidebar({
   lang,
-  conversations,
+  conversations = [],
   activeId,
   collapsed,
   onNew,
@@ -72,6 +72,7 @@ export function Sidebar({
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const editRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const convs = Array.isArray(conversations) ? conversations : [];
 
   useEffect(() => {
     if (editingId && editRef.current) {
@@ -108,14 +109,14 @@ export function Sidebar({
   }, []);
 
   const filtered = search.trim()
-    ? conversations.filter(
+    ? convs.filter(
         (c) =>
-          c.title.toLowerCase().includes(search.toLowerCase())
+          c?.title?.toLowerCase()?.includes(search.toLowerCase())
       )
-    : conversations;
+    : convs;
 
-  const pinnedConvs = filtered.filter((c) => c.pinned);
-  const unpinnedConvs = filtered.filter((c) => !c.pinned);
+  const pinnedConvs = filtered.filter((c) => c?.pinned);
+  const unpinnedConvs = filtered.filter((c) => !c?.pinned);
 
   if (collapsed) {
     return (
@@ -135,7 +136,7 @@ export function Sidebar({
           <Plus className="h-5 w-5 text-primary" />
         </button>
         <div className="flex-1 flex flex-col items-center gap-2 overflow-y-auto">
-          {conversations.filter((c) => c.pinned).slice(0, 5).map((conv) => (
+          {convs.filter((c) => c?.pinned).slice(0, 5).map((conv) => (
             <button
               key={conv.id}
               onClick={() => onSelect(conv.id)}
