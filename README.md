@@ -68,9 +68,11 @@ XuanwuAI is part of the **Four Symbols AI** (四象AI) family, each embodying a 
 
 ## What is XuanwuAI Demolition Simulator?
 
-XuanwuAI Demolition Simulator is an intelligent structural engineering simulator that combines **LLM-driven agent workflows** with **physics-based simulation engines**. You describe a building frame in natural language, and the AI autonomously generates it, analyzes structural mechanics, identifies the most critical load-bearing column, and simulates progressive demolition — with both 2D SVG and 3D Unity physics visualization.
+XuanwuAI Demolition Simulator is an intelligent structural engineering simulator that combines **LLM-driven agent workflows** with **physics-based simulation engines**. You describe a building frame in natural language, and the AI autonomously generates it, analyzes structural mechanics, identifies the most critical load-bearing column, and simulates progressive demolition — with 2D SVG, 3D Unity physics, and **photorealistic Blender animation** visualization.
 
-The system follows a **multi-round progressive demolition** workflow: after each column removal, the remaining structure is re-analyzed and the next critical column is identified, continuing until total collapse.
+The system supports a **multi-engine pipeline**: fast 2D linear analysis (anaStruct), high-fidelity nonlinear (OpenSeesPy), 3D FEM (PyNite/FAPP), industrial-grade **Abaqus CAE** solvers, and a full **Blender automation pipeline** that procedurally builds environments, integrates machinery models, animates demolition sequences, and renders from multiple camera angles.
+
+The workflow follows **multi-round progressive demolition**: after each column removal, the remaining structure is re-analyzed and the next critical column is identified, continuing until total collapse. The unified **CAIAO protocol** connects 30+ tool servers, and the **Blender frame server** streams rendered frames directly to the browser.
 
 > UI supports **bilingual Chinese/English** switching via the settings panel (`frontend/lib/i18n.ts`).
 
@@ -79,35 +81,45 @@ The system follows a **multi-round progressive demolition** workflow: after each
 ## Architecture
 
 ```
-┌──────────┐    WebSocket   ┌────────────────────────────────────────┐
-│          │◄──────────────►│          Gateway (FastAPI)             │
-│ Frontend │                │                                        │
-│ (Next.js)│                │  ┌──────────┐  ┌───────┐  ┌─────────┐  │
-│          │                │  │LLM Engine│  │Agent  │  │ Memory  │  │
-│ • Chat   │                │  │(OpenAI   │  │Loop   │  │ (mem0 + │  │
-│ • 2D SVG │                │  │ SDK)     │  │(ReAct)│  │ local)  │  │
-│ • Unity  │                │  └──────────┘  └───────┘  └─────────┘  │
-│   WebRTC │                │         │                              │
-│          │                │    CAIAO Hub (stdio subprocesses)      │
-│          │                │         │                              │
-└──────────┘                └─────────┼──────────────────────────────┘
+┌──────────┐    WebSocket   ┌──────────────────────────────────────────────────┐
+│          │◄──────────────►│                Gateway (FastAPI)                 │
+│ Frontend │                │                                                  │
+│ (Next.js)│                │  ┌──────────┐  ┌───────┐  ┌─────────┐           │
+│          │                │  │LLM Engine│  │Agent  │  │ Memory  │           │
+│ • Chat   │                │  │(OpenAI   │  │Loop   │  │ (mem0 + │           │
+│ • 2D SVG │                │  │ SDK)     │  │(ReAct)│  │ local)  │           │
+│ • Unity  │                │  └──────────┘  └───────┘  └─────────┘           │
+│   WebRTC │                │         │                                        │
+│ • Blender│                │    CAIAO Hub (stdio subprocesses)                │
+│   Output │                │         │                                        │
+└──────────┘                └─────────┼────────────────────────────────────────┘
                                       │
-                    ┌─────────────────┼──────────────────┐
-                    ▼                 ▼                  ▼
-            ┌──────────────┐ ┌──────────────┐ ┌────────────────┐
-            │anaStruct     │ │OpenSees      │ │Unity Simulator │
-            │Server        │ │Server        │ │(TCP :5005)     │
-            │(fast linear) │ │(hi-fi nonlin)│ │                │
-            └──────────────┘ └──────────────┘ └───────┬────────┘
-                                                      │
-                                                      ▼
-                                           ┌──────────────────┐
-                                           │ Unity 3D Engine  │
-                                           │ • Rigidbody phys │
-                                           │ • Configurable   │
-                                           │   Joint          │
-                                           │ • WebRTC stream  │
-                                           └──────────────────┘
+          ┌───────────────────────────┼───────────────────────────────┐
+          │                           │                               │
+          ▼                           ▼                               ▼
+  ┌───────────────┐   ┌───────────────────────┐   ┌────────────────────────┐
+  │ Analysis      │   │ Simulation & Physics  │   │ Visualization Pipeline │
+  │               │   │                       │   │                        │
+  │ • anaStruct   │   │ • Unity Simulator     │   │ • Blender Pipeline     │
+  │ • OpenSeesPy  │   │   (TCP :5005)         │   │   (frame_server.py)   │
+  │ • PyNite 3D   │   │                       │   │   • Environmental      │
+  │ • FAPP 3D     │   │ • Abaqus Solvers      │   │     scene building     │
+  │               │   │   (session + env)     │   │   • Machinery models   │
+  │ • Quick       │   │                       │   │   • Demolition anim    │
+  │   Analysis ⚡  │   │ • Physics Engine      │   │   • Multi-angle render │
+  │ • Full 3D ⚡   │   │   (Rigidbody)         │   │                        │
+  └───────────────┘   └───────────────────────┘   └────────────────────────┘
+          │                       │                           │
+          ▼                       ▼                           ▼
+  ┌───────────────┐   ┌───────────────────┐   ┌──────────────────────────┐
+  │ BIM / IFC     │   │ Unity 3D Engine   │   │ Output: JPG / MP4 /      │
+  │ Model Server  │   │ • Rigidbody phys  │   │ WebRTC / stream frames   │
+  │               │   │ • Config Joint    │   │                          │
+  │ Scenario      │   │ • WebRTC stream   │   │ Frontend Panels:         │
+  │ Planner       │   │                   │   │ • Unity Video            │
+  │               │   │                   │   │ • Blender Video          │
+  └───────────────┘   └───────────────────┘   │ • Abaqus Video           │
+                                               └──────────────────────────┘
 ```
 
 ### CAIAO Protocol
@@ -122,10 +134,14 @@ The CAIAO protocol is the project's **unified server abstraction** — every sol
 |-------|-----------|
 | **Frontend** | Next.js 16, TypeScript, Tailwind CSS, shadcn/ui, Recharts |
 | **Gateway** | FastAPI, WebSocket, OpenAI SDK, ReAct agent loop |
-| **CAIAO Bus** | CAIAO protocol (MCP SDK stdio transport), 5 tool servers, 10+ tools |
+| **CAIAO Bus** | CAIAO protocol (MCP SDK stdio transport), 30+ tool servers, 60+ tools |
 | **2D Analysis** | anaStruct (linear elastic), OpenSeesPy (nonlinear) |
+| **3D FEM** | PyNite (3D), FAPP (3D), multi-solver deep verify |
 | **3D Physics** | Unity 2021.3 LTS, C# Rigidbody + ConfigurableJoint |
-| **Streaming** | WebRTC (Unity → browser), WebSocket (agent steps) |
+| **Blender Pipeline** | Blender 4.x headless, scripted scene building, demolition animation, multi-angle rendering |
+| **Abaqus** | Abaqus CAE session management, environment solver, structural analysis |
+| **BIM** | IFC model import, BIM-to-simulation bridge |
+| **Streaming** | WebRTC (Unity → browser), WebSocket (agent steps), frame server (Blender → browser) |
 | **Memory** | mem0 (SQLite) with local JSON fallback |
 
 ---
@@ -201,8 +217,13 @@ The CAIAO protocol is the project's **unified server abstraction** — every sol
 - **SVG Frame Visualization** — 2D structure view with deformation overlay, node/element labels, and stress-ratio heatmap (green <30% → yellow 30-60% → orange 60-85% → red >85%)
 - **SVG Physics Collapse Animation** — `requestAnimationFrame`-driven collapse with gravity, velocity, and ground-impact physics
 - **Unity 3D Stream** — Real-time WebRTC video of the 3D Rigidbody-based demolition (with automatic 2D SVG fallback)
+- **Blender Video Panel** — Photorealistic rendered demolition animations streamed from the Blender frame server
+- **Abaqus Video Panel** — Industrial-grade FEA output visualization from Abaqus CAE
+- **3D Frame Visualization** — Interactive WebGL-based 3D structure viewer with rotation and zoom
+- **IFC Model Viewer** — Import and inspect BIM models in IFC format
 - **Dark-Themed UI** — Slate (#0f172a) background with cyan (#22d3ee) accents
 - **Agent Log Stream** — Real-time terminal-style log viewer with pause/resume
+- **Animation Timeline Editor** — Visual timeline for controlling demolition animation sequences
 
 ### Data & Persistence
 - **Full Session Restoration** — Switching or reloading a conversation recovers structure model, analysis results, collapse animation, and stress heatmap
@@ -214,6 +235,17 @@ The CAIAO protocol is the project's **unified server abstraction** — every sol
 - **Critical Column Identification** — Geometry-based column detection + axial force ranking
 - **Mechanical Summary Panel** — Live display of max displacement, max axial force, critical column, and demolition targets
 - **Multi-Solver Deep Verify** — Compare results from up to 4 solvers: anaStruct (2D), OpenSees (2D), PyNite (3D), FAPP (3D), with consensus value and outlier detection
+- **Abaqus CAE Integration** — Industrial-grade finite element analysis via Abaqus session + environment solvers
+- **BIM/IFC Bridge** — Import IFC building models and convert to simulation-ready geometry
+- **Scenario Planning** — Define demolition sequences, demolition targets, and simulation parameters
+
+### Blender Pipeline
+- **Procedural Scene Building** — Auto-generate detailed 3D environments from simulation data
+- **Machinery Integration** — Place demolition excavators, cranes, and equipment
+- **Demolition Animation** — Physics-informed collapse animation with dust/debris effects
+- **Multi-Angle Rendering** — Render from multiple camera positions simultaneously
+- **Frame Server** — Stream rendered frames to the browser in real-time (`frame_server.py`)
+- **Steam Turbine Building** — Complete industrial demolition demo project
 
 ---
 
@@ -281,59 +313,19 @@ curl http://localhost:8000/tools    # list of registered CAIAO tools
 
 ## Project Structure
 
-```
-├── gateway/                  FastAPI backend + agent loop + CAIAO hub
-│   ├── main.py               REST API + WebSocket + WebRTC signaling
-│   ├── llm_engine.py         OpenAI SDK + system prompt
-│   ├── agent_loop.py         ReAct agent (think → act → observe)
-│   ├── memory.py             mem0 + local JSON fallback
-│   ├── caiao_config.py       Auto-discovery of CAIAO server manifests
-│   ├── llm_config.json       LLM settings (gitignored)
-│   ├── requirements.txt
-│   └── tests/                33 pytest tests
-│
-├── caiao_servers/              CAIAO tool servers (stdio transport)
-│   ├── anastruct_server/     Frame generation + linear analysis + critical selection
-│   ├── opensees_server/      High-fidelity nonlinear analysis
-│   ├── pynite_server/        3D FEM analysis (PyNite)
-│   ├── fapp_server/          3D FEM analysis (FAPP)
-│   ├── unity_simulator/      Demolition commands → TCP relay to Unity
-│   ├── frame_generator/      Parametric frame generation (2D + 3D)
-│   └── quick_analysis_server/  ⚡ First CAIAOServerizer merge: Pipeline A
-│
-├── frontend/                 Next.js 16 SPA
-│   ├── app/
-│   │   ├── page.tsx          Main page (session restore, WebSocket, layout)
-│   │   ├── layout.tsx        Root layout + theme provider
-│   │   └── globals.css       Tailwind + custom utilities
-│   ├── components/
-│   │   ├── frame-visualization.tsx    SVG rendering, stress heatmap, collapse anim
-│   │   ├── verification-panel.tsx     Dual-track verification + multi-solver tabs
-│   │   ├── unity-video-panel.tsx      WebRTC video panel for Unity stream
-│   │   ├── mechanical-summary.tsx     Live structural metrics
-│   │   ├── floating-toolbar.tsx       Draggable toolbar (connection status, quick actions)
-│   │   └── ...
-│   ├── lib/
-│   │   ├── api.ts            REST + WebSocket client
-│   │   └── i18n.ts           Chinese/English translations (150+ keys)
-│   └── __tests__/            16 vitest tests
-│
-├── unity_project/            Unity C# scripts
-│   └── Assets/Scripts/
-│       ├── Runtime/
-│       │   ├── SimulationController.cs   TCP listener, demolition physics
-│       │   ├── FrameBuilder.cs           Procedural frame construction
-│       │   └── WebRTC*.cs               Camera capture + streaming
-│       └── Editor/
-│           └── XuanwuAISceneSetup.cs     One-click scene builder
-│
-├── tests/                    Integration tests
-├── .github/workflows/        CI (pytest + tsc + lint + vitest + build)
-├── CLAUDE.md                 AI agent project record
-├── PROJECT_STATUS.md         Detailed status report
-├── CONTRIBUTING.md           Contributor guidelines
-└── TROUBLESHOOTING.md        Common issues
-```
+| Directory | Description |
+|-----------|-------------|
+| `gateway/` | FastAPI backend — REST API, WebSocket, LLM engine, ReAct agent loop, CAIAO hub, routers, services |
+| `caiao_servers/` | 30+ CAIAO tool servers — structural analysis (anaStruct, OpenSees, PyNite, FAPP), Blender pipeline (build, animate, render, environment, machinery), Abaqus (session, environment), Unity simulation, BIM/IFC, scenario planning, physics, etc. |
+| `blender_pipeline/` | Blender automation — portable Blender 4.x, procedural building generation, demolition animation, multi-angle rendering, frame streaming server |
+| `frontend/` | Next.js 16 SPA — 3D/SVG visualization, Unity/Blender/Abaqus video panels, agent chat, IFC viewer, timeline editor, server manager, bilingual i18n |
+| `unity_project/` | Unity C# scripts — SimulationController (TCP), FrameBuilder (procedural), WebRTC streaming, one-click scene setup |
+| `scripts/` | Utility scripts — encoding fix, optimizer, resource guard |
+| `tests/` | Integration tests |
+| `docs/` | Design & planning documents |
+| `demos/` | Demo scripts & examples |
+
+Key docs: [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`CAIAO_PROTOCOL.md`](CAIAO_PROTOCOL.md) · [`PROJECT_STATUS.md`](PROJECT_STATUS.md) · [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ---
 
@@ -375,8 +367,18 @@ cd frontend && npx vitest run                # 16 tests
 | Persistent LLM config | Done |
 | Local memory fallback | Done |
 | Multi-solver deep verify (4 solvers) | Done |
-| ⚡ CAIAOServerizer server merge #1 (Pipeline A) | Done — `quick_analysis` replaces 3 calls with 1 |
-| ⚡ CAIAOServerizer server merge #2 (Pipeline B) | Done — `full_analysis_3d`: 3D geometry → UnifiedFrame → PyNite analysis → critical |
+| ⚡ CAIAOServerizer merge #1 (Pipeline A) | Done — `quick_analysis`: 3 calls → 1 |
+| ⚡ CAIAOServerizer merge #2 (Pipeline B) | Done — `full_analysis_3d`: 3D geometry → PyNite → critical |
+| Blender pipeline — building generation | Done |
+| Blender pipeline — demolition animation | Done |
+| Blender pipeline — multi-angle rendering | Done |
+| Blender frame server (stream to browser) | Done |
+| Abaqus CAE session + environment solver | Done |
+| BIM / IFC model import | Done |
+| Scenario planner + demolition planning | Done |
+| Steam turbine building demo project | Done |
+| CAIAO server manager (lifecycle UI) | Done |
+| Animation timeline editor | Done |
 | Mobile responsive layout | Planned |
 | Multi-user session isolation | Planned |
 
