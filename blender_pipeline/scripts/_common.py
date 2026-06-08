@@ -207,6 +207,58 @@ def compute_scene_bounds(exclude_ground=True):
     }
 
 
+def setup_gradient_sky():
+    """SketchUp-style sky/ground backdrop via view-direction gradient.
+
+    Looking up → sky blue. Looking down → ground gray-green. Horizon blends.
+    Uses Geometry.Incoming Z to split hemisphere — not scene bounding box.
+    Returns the world data block.
+    """
+    world = bpy.context.scene.world
+    if not world:
+        world = bpy.data.worlds.new('World')
+        bpy.context.scene.world = world
+    world.use_nodes = True
+    wn = world.node_tree.nodes
+    wl = world.node_tree.links
+    wn.clear()
+
+    geom = wn.new(type='ShaderNodeNewGeometry')
+    sep = wn.new(type='ShaderNodeSeparateXYZ')
+    wl.new(geom.outputs['Incoming'], sep.inputs['Vector'])
+
+    map_range = wn.new(type='ShaderNodeMapRange')
+    map_range.inputs['From Min'].default_value = -1.0
+    map_range.inputs['From Max'].default_value = 1.0
+    map_range.inputs['To Min'].default_value = 0.0
+    map_range.inputs['To Max'].default_value = 1.0
+    wl.new(sep.outputs['Z'], map_range.inputs['Value'])
+
+    ramp = wn.new(type='ShaderNodeValToRGB')
+    ramp.color_ramp.interpolation = 'B_SPLINE'
+    while len(ramp.color_ramp.elements) < 5:
+        ramp.color_ramp.elements.new(0.0)
+    ramp.color_ramp.elements[0].position = 0.00
+    ramp.color_ramp.elements[0].color = (0.475, 0.490, 0.451, 1.0)
+    ramp.color_ramp.elements[1].position = 0.35
+    ramp.color_ramp.elements[1].color = (0.627, 0.651, 0.608, 1.0)
+    ramp.color_ramp.elements[2].position = 0.48
+    ramp.color_ramp.elements[2].color = (0.820, 0.863, 0.925, 1.0)
+    ramp.color_ramp.elements[3].position = 0.55
+    ramp.color_ramp.elements[3].color = (0.702, 0.820, 0.949, 1.0)
+    ramp.color_ramp.elements[4].position = 1.00
+    ramp.color_ramp.elements[4].color = (0.478, 0.675, 0.925, 1.0)
+    wl.new(map_range.outputs['Result'], ramp.inputs['Fac'])
+
+    bg = wn.new(type='ShaderNodeBackground')
+    bg.inputs['Strength'].default_value = 1.0
+    wl.new(ramp.outputs['Color'], bg.inputs['Color'])
+
+    out = wn.new(type='ShaderNodeOutputWorld')
+    wl.new(bg.outputs['Background'], out.inputs['Surface'])
+    return world
+
+
 def save_blend(filename):
     """Save current blend file to BLEND_DIR. Operator — unavoidable for .blend I/O."""
     path = os.path.join(BLEND_DIR, filename)

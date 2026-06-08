@@ -10,7 +10,7 @@ from datetime import datetime
 
 import bpy
 
-from _common import compute_scene_bounds, OUTPUT_DIR
+from _common import compute_scene_bounds, OUTPUT_DIR, setup_gradient_sky
 
 
 def load_config():
@@ -33,12 +33,8 @@ def setup_viewport():
 
 
 def setup_sky(config):
-    world = bpy.context.scene.world
-    if world is None:
-        world = bpy.data.worlds.new("World")
-        bpy.context.scene.world = world
-    world.color = (0.45, 0.60, 0.85)
-    print(f"  [OK] 天空: 淡蓝色")
+    setup_gradient_sky()
+    print(f"  [OK] 天空: 淡蓝渐变")
 
 
 def setup_lighting():

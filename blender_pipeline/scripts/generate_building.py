@@ -80,12 +80,16 @@ def build_frame(config):
     created_count = {"COL": 0, "BMX": 0, "BMY": 0, "SLAB": 0, "FND": 0}
     all_objects = []
 
+    total_steps = stories * 4 + 1  # COL+BMX+BMY+SLAB per floor + FND
+    step = 0
+
     for f_idx in range(stories):
         floor_num = f_idx + 1
         floor_label = floor_num
         z_bottom = f_idx * story_h
         z_top = z_bottom + story_h
 
+        col_count = 0
         for ix in range(bays_x + 1):
             for iy in range(bays_y + 1):
                 x = grid_x[ix]
@@ -97,7 +101,11 @@ def build_frame(config):
                 set_element_props(obj, "COL", floor_label, ix, iy, -1, -1, imp["column"])
                 all_objects.append(obj)
                 created_count["COL"] += 1
+                col_count += 1
+        step += 1
+        print(f"[BUILD_STEP] {step}/{total_steps} 柱子 {floor_label}F ({col_count}根) 完成")
 
+        bmx_count = 0
         for bx in range(bays_x):
             for iy in range(bays_y + 1):
                 x0 = grid_x[bx] + col_sz / 2.0
@@ -114,7 +122,11 @@ def build_frame(config):
                 set_element_props(obj, "BMX", floor_label, -1, iy, bx, -1, imp["beam_x"])
                 all_objects.append(obj)
                 created_count["BMX"] += 1
+                bmx_count += 1
+        step += 1
+        print(f"[BUILD_STEP] {step}/{total_steps} X向梁 {floor_label}F ({bmx_count}根) 完成")
 
+        bmy_count = 0
         for by in range(bays_y):
             for ix in range(bays_x + 1):
                 y0 = grid_y[by] + col_sz / 2.0
@@ -131,6 +143,9 @@ def build_frame(config):
                 set_element_props(obj, "BMY", floor_label, ix, -1, -1, by, imp["beam_y"])
                 all_objects.append(obj)
                 created_count["BMY"] += 1
+                bmy_count += 1
+        step += 1
+        print(f"[BUILD_STEP] {step}/{total_steps} Y向梁 {floor_label}F ({bmy_count}根) 完成")
 
         name = f"SLAB_{floor_label}F"
         obj = add_cube(name,
@@ -139,7 +154,10 @@ def build_frame(config):
         set_element_props(obj, "SLAB", floor_label, -1, -1, -1, -1, imp["slab"])
         all_objects.append(obj)
         created_count["SLAB"] += 1
+        step += 1
+        print(f"[BUILD_STEP] {step}/{total_steps} 楼板 {floor_label}F 完成")
 
+    fnd_count = 0
     for ix in range(bays_x + 1):
         for iy in range(bays_y + 1):
             x = grid_x[ix]
@@ -150,6 +168,9 @@ def build_frame(config):
             set_element_props(obj, "FND", 0, ix, iy, -1, -1, imp["foundation"])
             all_objects.append(obj)
             created_count["FND"] += 1
+            fnd_count += 1
+    step += 1
+    print(f"[BUILD_STEP] {step}/{total_steps} 基础 ({fnd_count}个) 完成")
 
     add_cube("Ground", (total_wx / 2.0, total_wy / 2.0, -0.05),
              (25, 25, 0.01), mats["GROUND"])

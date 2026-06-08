@@ -9,7 +9,7 @@ from datetime import datetime
 
 import bpy
 
-from _common import compute_scene_bounds, OUTPUT_DIR
+from _common import compute_scene_bounds, OUTPUT_DIR, setup_gradient_sky
 
 
 def load_scene_info(bounds):
@@ -73,11 +73,7 @@ def setup_viewport_and_scene(info):
                         space.shading.type = 'SOLID'
                         space.shading.color_type = 'MATERIAL'
                         space.shading.light = 'STUDIO'
-    world = scene.world
-    if world is None:
-        world = bpy.data.worlds.new("World")
-        scene.world = world
-    world.color = (0.45, 0.60, 0.85)
+    setup_gradient_sky()
     bpy.ops.object.light_add(type='SUN', location=(info["cx"] + info["total_w"],
                                                      info["cy"] - info["total_d"],
                                                      info["cz"] + info["total_h"] * 2))

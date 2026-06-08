@@ -79,11 +79,12 @@ def run_blender_script(script_name, blend_input=None, env_extra=None, timeout=30
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
                            encoding='utf-8', errors='replace', env=env)
         output_lines = [l.strip() for l in r.stdout.split('\n') if l.strip()]
+        progress_lines = [l for l in output_lines if l.startswith("[BUILD_STEP]") or l.startswith("[ANIM_STEP]")]
         if r.returncode != 0:
             error_lines = [l.strip() for l in r.stderr.split('\n') if l.strip()][:10]
             return {"success": False, "error": f"Blender exited with code {r.returncode}",
-                    "stderr": error_lines, "stdout": output_lines[-20:]}
-        return {"success": True, "returncode": 0, "output": output_lines}
+                    "stderr": error_lines, "stdout": output_lines[-20:], "progress": progress_lines}
+        return {"success": True, "returncode": 0, "output": output_lines, "progress": progress_lines}
     except subprocess.TimeoutExpired:
         return {"success": False, "error": f"Blender script timed out ({timeout}s)"}
     except Exception as e:

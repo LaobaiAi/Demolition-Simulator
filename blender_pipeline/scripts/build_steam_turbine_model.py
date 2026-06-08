@@ -48,7 +48,7 @@ def load_config():
 def render_preview(out):
     """Render a viewport preview image using Eevee."""
     scene = bpy.context.scene
-    scene.render.engine = 'BLENDER_EEVEE'
+    scene.render.engine = 'BLENDER_WORKBENCH'
     scene.render.resolution_x = 1280
     scene.render.resolution_y = 720
     scene.render.image_settings.file_format = 'JPEG'

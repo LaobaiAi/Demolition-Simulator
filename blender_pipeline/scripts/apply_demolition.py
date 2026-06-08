@@ -264,6 +264,13 @@ if __name__ == "__main__":
 
     config = load_config()
     strategy = config["demolition_strategy"]
+    anim_override_path = os.environ.get("BLENDER_ANIM_OVERRIDE", "")
+    if anim_override_path and os.path.exists(anim_override_path):
+        with open(anim_override_path, "r", encoding="utf-8") as f:
+            anim_override = json.load(f)
+        if "demolition_strategy" in anim_override:
+            strategy.update(anim_override["demolition_strategy"])
+        print("  [INFO] 已应用拆除策略覆盖")
     fps = config["fps"]
 
     print(f"  策略: {strategy['order']} | 同层排序: {strategy['within_floor_sort']}")
@@ -282,11 +289,16 @@ if __name__ == "__main__":
         exit(1)
 
     ordered = compute_demolition_order(elements, strategy)
+    print(f"[ANIM_STEP] 拆除排序完成：{len(ordered)}个构件 按{strategy['order']}+{strategy['within_floor_sort']}排序")
     schedule, groups = assign_frames(ordered, strategy)
+    print(f"[ANIM_STEP] 帧分配完成：{len(groups)}组 {len(schedule)}步")
+    for i, (label, elems) in enumerate(groups):
+        print(f"[ANIM_STEP] {i+1}/{len(groups)} {label} ({len(elems)}个构件)")
     print_schedule_summary(schedule, groups)
 
     print(f"\n  应用动画关键帧...")
     total_frames = apply_animation(schedule, config)
+    print(f"[ANIM_STEP] 动画关键帧设置完成：{len(schedule)}个构件 {total_frames}帧")
 
     export_schedule_csv(schedule, strategy)
     save_blend()
