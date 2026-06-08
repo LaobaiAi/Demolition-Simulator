@@ -108,7 +108,12 @@ def resolve_pipeline_args(
             "analysis_result": analysis,
         }
     if tool_name == "build_frame_model":
-        args: dict[str, Any] = {"building_type": structure_params.get("building_type", "standard")}
+        btype = structure_params.get("building_type", "standard")
+        if not btype or btype == "standard":
+            srv_name = (structure_params.get("_pipeline") or "")
+            if "steam_turbine" in srv_name:
+                btype = "steam_turbine"
+        args: dict[str, Any] = {"building_type": btype}
         od = structure_params.get("output_dir")
         if od:
             args["output_dir"] = od

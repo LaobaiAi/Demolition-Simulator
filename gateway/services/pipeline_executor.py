@@ -47,6 +47,10 @@ async def execute_pipeline_streaming(
         }
         return
 
+    if not structure_params:
+        structure_params = {}
+    structure_params["_pipeline"] = pipeline_name
+
     yield {
         "type": "pipeline_start",
         "pipeline": pipeline_name,

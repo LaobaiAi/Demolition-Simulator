@@ -5,5 +5,6 @@ from routers.verify import router as verify_router
 from routers.servers import router as servers_router
 from routers.settings import router as settings_router
 from routers.unity import router as unity_router
+from routers.blender import router as blender_router
 
-routers = [tools_router, verify_router, servers_router, settings_router, unity_router]
+routers = [tools_router, verify_router, servers_router, settings_router, unity_router, blender_router]

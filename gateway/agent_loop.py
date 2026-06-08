@@ -65,7 +65,7 @@ def _filter_tools_by_message(
     if not matched:
         return llm_tools
 
-    filtered = [t for t in llm_tools if t.get("name") in matched]
+    filtered = [t for t in llm_tools if t["function"]["name"] in matched]
     if len(filtered) < 3:
         return llm_tools
 
@@ -156,15 +156,21 @@ class AgentLoop:
         user_message: str,
         history: list[dict[str, Any]] | None = None,
         memory_context: str = "",
+        analysis_mode: str = "analysis",
     ) -> AsyncGenerator[dict[str, Any], None]:
         if self._cached_tools is None:
             self._cached_tools = await self.hub.list_tools()
             logger.info(f"Cached {len(self._cached_tools)} tools from hub")
         tools_list = self._cached_tools
         llm_tools = self.llm.format_tools_for_llm(tools_list) if tools_list else None
-        llm_tools = _filter_tools_by_message(user_message, llm_tools)
+        if analysis_mode == "fast" and llm_tools:
+            fast_tools = {"run_full_pipeline", "run_pipeline_stage", "check_blender_environment", "build_frame_model", "list_scenarios", "get_scenario", "steam_turbine_demolition", "visual_demolition"}
+            llm_tools = [t for t in llm_tools if t["function"]["name"] in fast_tools]
+            logger.info(f"Fast mode: filtered to {len(llm_tools)} blender pipeline tools")
+        else:
+            llm_tools = _filter_tools_by_message(user_message, llm_tools)
 
-        system_content = build_system_prompt(user_message, has_tools=llm_tools is not None)
+        system_content = build_system_prompt(user_message, has_tools=llm_tools is not None, analysis_mode=analysis_mode)
         if memory_context:
             system_content = f"{system_content}\n\n{memory_context}"
 

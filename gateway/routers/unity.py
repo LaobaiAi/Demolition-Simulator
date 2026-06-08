@@ -157,3 +157,22 @@ async def reconnect_unity(request: Request):
     if unity_exe:
         return {"status": "launch_required", "message": "Unity not responding. Click Launch Unity to start."}
     return {"status": "error", "message": "Unity not found and not running."}
+
+
+@router.post("/unity/build-frame")
+async def build_frame(request: Request):
+    body = await request.json()
+    structure = body.get("structure") or body
+    nodes = structure.get("nodes", [])
+    elements = structure.get("elements", [])
+
+    if not nodes or not elements:
+        return JSONResponse({"status": "error", "message": "nodes and elements required"}, status_code=400)
+
+    command = {
+        "action": "build_frame",
+        "nodes": nodes,
+        "elements": elements,
+    }
+    result = _send_tcp_command(command)
+    return result

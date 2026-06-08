@@ -157,6 +157,10 @@ async def lifespan(app: FastAPI):
     app.state.unity_monitor_task = None
     app.state.unity_restart_backoff = 0
     app.state.unity_auto_restart = True
+    app.state.blender_process = None
+    app.state.blender_monitor_task = None
+    app.state.blender_restart_backoff = 0
+    app.state.blender_auto_restart = True
 
     # Register all routers
     for router in _all_routers:
@@ -187,6 +191,33 @@ async def lifespan(app: FastAPI):
                 logger.info(f"Auto-launched Unity (PID {proc.pid})")
         except Exception as e:
             logger.warning(f"Auto-launch Unity failed: {e}")
+
+    # Auto-launch Blender if installed and not running
+    def _port_open(port: int) -> bool:
+        import socket as _sock
+        try:
+            s = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
+            s.settimeout(1.0)
+            r = s.connect_ex(("127.0.0.1", port)) == 0
+            s.close()
+            return r
+        except Exception:
+            return False
+
+    if not _port_open(5007):
+        try:
+            from routers.blender import _find_blender_exe, _get_frame_server_script
+            blender_exe = _find_blender_exe()
+            script = _get_frame_server_script()
+            if blender_exe and script:
+                proc = subprocess.Popen(
+                    [blender_exe, "--python", script],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                app.state.blender_process = proc
+                logger.info(f"Auto-launched Blender (PID {proc.pid})")
+        except Exception as e:
+            logger.warning(f"Auto-launch Blender failed: {e}")
 
     # Start Unity process health monitor
     async def _monitor_unity():
@@ -237,11 +268,82 @@ async def lifespan(app: FastAPI):
     monitor_task = asyncio.create_task(_monitor_unity())
     app.state.unity_monitor_task = monitor_task
 
+    # Start Blender process health monitor
+    async def _monitor_blender():
+        _consecutive_dead = 0
+        while True:
+            await asyncio.sleep(10)
+            try:
+                proc = app.state.blender_process
+                port_alive = _port_open(5007)
+
+                if port_alive:
+                    _consecutive_dead = 0
+                    if proc is None:
+                        app.state.blender_restart_backoff = 0
+                    continue
+
+                if proc is not None and proc.poll() is None:
+                    _consecutive_dead += 1
+                    if _consecutive_dead < 3:
+                        continue
+                    logger.warning("Blender process alive but TCP dead for 30s — killing stale process")
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+                    app.state.blender_process = None
+                else:
+                    _consecutive_dead += 1
+                    app.state.blender_process = None
+
+                if not app.state.blender_auto_restart:
+                    _consecutive_dead = 0
+                    continue
+
+                backoff = app.state.blender_restart_backoff
+                if backoff > 5:
+                    if _consecutive_dead < 10:
+                        continue
+                    logger.error("Blender restart backoff limit reached — giving up")
+                    continue
+
+                delay = min(10 * (2 ** backoff), 300)
+                app.state.blender_restart_backoff = backoff + 1
+                logger.info(f"Restarting Blender in {delay}s (attempt {backoff + 1})")
+                await asyncio.sleep(delay)
+
+                if _port_open(5007):
+                    logger.info("Blender already running on port 5007 — skipping restart")
+                    app.state.blender_restart_backoff = 0
+                    _consecutive_dead = 0
+                    continue
+
+                from routers.blender import _find_blender_exe, _get_frame_server_script
+                blender_exe = _find_blender_exe()
+                script = _get_frame_server_script()
+                if blender_exe and script:
+                    proc = subprocess.Popen(
+                        [blender_exe, "--python", script],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    )
+                    app.state.blender_process = proc
+                    _consecutive_dead = 0
+                    logger.info(f"Auto-restarted Blender (PID {proc.pid})")
+            except Exception as e:
+                logger.warning(f"Blender monitor error: {e}")
+
+    blender_monitor_task = asyncio.create_task(_monitor_blender())
+    app.state.blender_monitor_task = blender_monitor_task
+
     yield
     logger.info("Shutting down...")
     app.state.unity_auto_restart = False
+    app.state.blender_auto_restart = False
     if app.state.unity_monitor_task:
         app.state.unity_monitor_task.cancel()
+    if app.state.blender_monitor_task:
+        app.state.blender_monitor_task.cancel()
     unity_proc = app.state.unity_process
     if unity_proc and unity_proc.poll() is None:
         logger.info("Terminating Unity process...")
@@ -250,6 +352,14 @@ async def lifespan(app: FastAPI):
             unity_proc.wait(timeout=5)
         except Exception:
             unity_proc.kill()
+    blender_proc = app.state.blender_process
+    if blender_proc and blender_proc.poll() is None:
+        logger.info("Terminating Blender process...")
+        blender_proc.terminate()
+        try:
+            blender_proc.wait(timeout=5)
+        except Exception:
+            blender_proc.kill()
     if hub:
         await hub.stop_all()
     logger.info("Gateway stopped")
@@ -291,6 +401,11 @@ app.mount("/exports", StaticFiles(directory=_exports_dir), name="exports")
 # WebSocket handler + pipeline execution remain below.
 
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 # --- WebSocket for Chat ---
 
 @app.websocket("/ws/chat")
@@ -320,13 +435,13 @@ async def ws_chat(websocket: WebSocket):
     history: list[dict[str, Any]] = []
     agent_task: asyncio.Task | None = None
 
-    async def _run_agent(user_message: str, memory_context: str) -> None:
+    async def _run_agent(user_message: str, memory_context: str, analysis_mode: str = "analysis") -> None:
         """Run the agent loop as a background task, sending steps to frontend."""
         nonlocal history
         try:
             final_content = ""
             new_history: list[dict[str, Any]] = []
-            async for step in agent.run(user_message, history, memory_context):
+            async for step in agent.run(user_message, history, memory_context, analysis_mode):
                 if step["type"] == "history":
                     new_history = step["messages"]
                     continue
@@ -372,6 +487,7 @@ async def ws_chat(websocket: WebSocket):
 
             if msg_type == "message":
                 user_message = msg.get("content", "").strip()
+                analysis_mode = msg.get("analysisMode", "analysis")
                 if not user_message:
                     continue
 
@@ -399,7 +515,7 @@ async def ws_chat(websocket: WebSocket):
                         except asyncio.CancelledError:
                             pass
 
-                    agent_task = asyncio.create_task(_run_agent(user_message, memory_context))
+                    agent_task = asyncio.create_task(_run_agent(user_message, memory_context, analysis_mode))
                 else:
                     await _safe_send({
                         "type": "response",
