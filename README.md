@@ -84,11 +84,11 @@ The workflow follows **multi-round progressive demolition**: after each column r
 ┌──────────┐    WebSocket   ┌──────────────────────────────────────────────────┐
 │          │◄──────────────►│                Gateway (FastAPI)                 │
 │ Frontend │                │                                                  │
-│ (Next.js)│                │  ┌──────────┐  ┌───────┐  ┌─────────┐           │
-│          │                │  │LLM Engine│  │Agent  │  │ Memory  │           │
-│ • Chat   │                │  │(OpenAI   │  │Loop   │  │ (mem0 + │           │
-│ • 2D SVG │                │  │ SDK)     │  │(ReAct)│  │ local)  │           │
-│ • Unity  │                │  └──────────┘  └───────┘  └─────────┘           │
+│ (Next.js)│                │  ┌──────────┐  ┌───────┐  ┌─────────┐            │
+│          │                │  │LLM Engine│  │Agent  │  │ Memory  │            │
+│ • Chat   │                │  │(OpenAI   │  │Loop   │  │ (mem0 + │            │
+│ • 2D SVG │                │  │ SDK)     │  │(ReAct)│  │ local)  │            │
+│ • Unity  │                │  └──────────┘  └───────┘  └─────────┘            │
 │   WebRTC │                │         │                                        │
 │ • Blender│                │    CAIAO Hub (stdio subprocesses)                │
 │   Output │                │         │                                        │
@@ -101,13 +101,13 @@ The workflow follows **multi-round progressive demolition**: after each column r
   │ Analysis      │   │ Simulation & Physics  │   │ Visualization Pipeline │
   │               │   │                       │   │                        │
   │ • anaStruct   │   │ • Unity Simulator     │   │ • Blender Pipeline     │
-  │ • OpenSeesPy  │   │   (TCP :5005)         │   │   (frame_server.py)   │
+  │ • OpenSeesPy  │   │   (TCP :5005)         │   │   (frame_server.py)    │
   │ • PyNite 3D   │   │                       │   │   • Environmental      │
   │ • FAPP 3D     │   │ • Abaqus Solvers      │   │     scene building     │
   │               │   │   (session + env)     │   │   • Machinery models   │
   │ • Quick       │   │                       │   │   • Demolition anim    │
-  │   Analysis ⚡  │   │ • Physics Engine      │   │   • Multi-angle render │
-  │ • Full 3D ⚡   │   │   (Rigidbody)         │   │                        │
+  │   Analysis ⚡ │   │ • Physics Engine      │   │   • Multi-angle render │
+  │ • Full 3D ⚡  │   │   (Rigidbody)         │   │                        │
   └───────────────┘   └───────────────────────┘   └────────────────────────┘
           │                       │                           │
           ▼                       ▼                           ▼
@@ -119,7 +119,7 @@ The workflow follows **multi-round progressive demolition**: after each column r
   │ Planner       │   │                   │   │ • Unity Video            │
   │               │   │                   │   │ • Blender Video          │
   └───────────────┘   └───────────────────┘   │ • Abaqus Video           │
-                                               └──────────────────────────┘
+                                              └──────────────────────────┘
 ```
 
 ### CAIAO Protocol
@@ -148,25 +148,25 @@ The CAIAO protocol is the project's **unified server abstraction** — every sol
 
 ## ⚡ CAIAOServerizer Paradigm
 
-> **CAIAO Server 是系统的最小原子单元，类比 LLM 的 token。**
+> **The CAIAO Server is the smallest atomic unit of the system, analogous to an LLM's token.**
 
 ### The Server Merge
 
-就像 BPE 把高频 token 对合并为新 token一样，我们把高频的 Server 调用序列合并为新的原子 Server。
+Just as BPE merges high-frequency token pairs into new tokens, we merge high-frequency Server call sequences into new atomic Servers.
 
 ```
                      ┌──────────────────┐
-                     │     TOKEN 1      │
+                     │     SERVER 1     │
                      │  generate_frame  │
                      └────────┬─────────┘
                               │
                      ┌────────▼─────────┐
-                     │     TOKEN 2      │
+                     │     SERVER 2     │
                      │  analyze_frame   │
                      └────────┬─────────┘
                               │
                      ┌────────▼─────────┐
-                     │     TOKEN 3      │
+                     │     SERVER 3     │
                      │select_critical   │
                      └────────┬─────────┘
                               │
@@ -185,23 +185,23 @@ The CAIAO protocol is the project's **unified server abstraction** — every sol
                      └──────────────────┘
 ```
 
-**Pipeline A** (`quick_analysis_server`) 是 CAIAOServerizer 的第一个产物：
-`generate_frame` + `analyze_frame` + `select_critical_element` 三个原子 Server
-被合并为一个调用。不仅减少了 LLM 的决策成本，更消除了两次子进程通信和 JSON 序列化。
+**Pipeline A** (`quick_analysis_server`) is the first product of CAIAOServerizer:
+The three atomic Servers — `generate_frame` + `analyze_frame` + `select_critical_element` —
+are merged into a single call. This not only reduces the LLM's decision cost, but also eliminates two rounds of subprocess IPC and JSON serialization.
 
-| 对比维度 | 合并前 (3 次调用) | 合并后 (1 次调用) |
+| Dimension | Before Merge (3 calls) | After Merge (1 call) |
 |---------|-----------------|-----------------|
-| 子进程通信 | 3 次 stdio round-trip | 1 次 |
-| JSON 序列化 | 3 次 | 1 次 |
-| 延迟估算 | ~900ms + IPC 开销 | ~300ms |
-| 原子性 | 部分步骤可能失败 | 全有或全无 |
-| LLM 决策 | 3 次 tool call | 1 次 |
+| Subprocess IPC | 3 stdio round-trips | 1 round-trip |
+| JSON Serialization | 3 times | 1 time |
+| Estimated Latency | ~900ms + IPC overhead | ~300ms |
+| Atomicity | Partial steps may fail | All or nothing |
+| LLM Decisions | 3 tool calls | 1 tool call |
 
-> **Roadmap:** Pipeline A 只是第一步。接下来将合并 3D 全分析管线（`generate_frame_3d → pynite_analysis`）、
-> 多求解器验证套件（4 求解器共识）、以及拆除循环（`apply_demolition → re-analyze → select_critical`）。
+> **Roadmap:** Pipeline A is just the first step. Next up: merging the 3D full analysis pipeline (`generate_frame_3d → pynite_analysis`),
+> the multi-solver verification suite (4-solver consensus), and the demolition loop (`apply_demolition → re-analyze → select_critical`).
 >
-> 详见 [`CAIAO_PROTOCOL.md`](CAIAO_PROTOCOL.md)（完整参考）、[`ARCHITECTURE.md`](ARCHITECTURE.md#caiaoserverizer-paradigm-token-merge)
-> 和 `dev-notes/architecture/2026-05-25-caiaoserverizer-first-merge.md`
+> See [`CAIAO_PROTOCOL.md`](CAIAO_PROTOCOL.md) (full reference), [`ARCHITECTURE.md`](ARCHITECTURE.md#caiaoserverizer-paradigm-token-merge),
+> and `dev-notes/architecture/2026-05-25-caiaoserverizer-first-merge.md`
 
 ---
 
