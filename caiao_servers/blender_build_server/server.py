@@ -100,6 +100,17 @@ def _handle_build_frame_model(arguments):
         result["blend_file"] = blend_path if os.path.exists(blend_path) else None
         result["output_dir"] = output_dir
         result["building_type"] = building_type
+        # Notify frame_server Blender GUI to open the generated blend file
+        if result["blend_file"] and os.path.exists(result["blend_file"]):
+            try:
+                import socket
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(3.0)
+                sock.connect(("127.0.0.1", 5007))
+                sock.sendall(json.dumps({"action": "load_blend", "path": result["blend_file"]}).encode("utf-8"))
+                sock.close()
+            except Exception:
+                pass
         # Extract base64 preview image from Blender output
         output_lines = result.get("output", [])
         capturing, b64_parts = False, []

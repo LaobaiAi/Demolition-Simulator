@@ -131,7 +131,8 @@ def _handle_apply_demolition(arguments: dict) -> dict:
     command = {
         "action": "demolish",
         "failed_elements": failed_elements,
-        "force_multiplier": arguments.get("force_multiplier", 1.5),
+        "force_multiplier": arguments.get("force_multiplier", 1.0),
+        "style": arguments.get("style", "collapse"),
     }
     unity_result = _send_to_unity(command)
 

@@ -106,6 +106,10 @@ TOOLS = [
                     "type": "string",
                     "description": "Custom output directory.",
                 },
+                "config_override": {
+                    "type": "object",
+                    "description": "Override project_config.json parameters. For build stage: building + demolition_strategy. For animate stage: demolition_strategy.",
+                },
             },
             "required": ["stage"],
         },
@@ -235,6 +239,7 @@ def _handle_run_pipeline_stage(arguments):
     stage = arguments["stage"]
     blend_input = arguments.get("blend_input")
     output_dir = arguments.get("output_dir")
+    config_override = arguments.get("config_override")
 
     stage_config = _get_stage_config(stage)
     if not stage_config:
@@ -246,14 +251,46 @@ def _handle_run_pipeline_stage(arguments):
         return {"error": f"blend_input is required for stage '{stage}'"}
 
     if not output_dir:
-        output_dir = os.path.dirname(blend_input) if blend_input else os.path.join(OUTPUT_BASE, "blend")
+        if blend_input:
+            output_dir = os.path.dirname(blend_input)
+        else:
+            config = load_project_config()
+            proj_name = config.get("project_name", "demolition") if config else None
+            proj_dir, blend_dir = make_project_dir(proj_name)
+            output_dir = blend_dir
     os.makedirs(output_dir, exist_ok=True)
 
     env = {"BLENDER_OUTPUT_DIR": output_dir}
+    if config_override and stage == "build":
+        config = load_project_config()
+        config["building"].update(config_override.get("building", {}))
+        if "demolition_strategy" in config_override:
+            config["demolition_strategy"].update(config_override["demolition_strategy"])
+        tmp_path = os.path.join(output_dir, "_runtime_config.json")
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        env["BLENDER_CONFIG_OVERRIDE"] = tmp_path
+    elif config_override and stage == "animate":
+        tmp_path = os.path.join(output_dir, "_runtime_anim_config.json")
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(config_override, f, ensure_ascii=False, indent=2)
+        env["BLENDER_ANIM_OVERRIDE"] = tmp_path
+
     result = run_blender_script(script, blend_input=blend_input, env_extra=env, timeout=timeout, background=bg)
 
     stage_result = {"stage": stage, "success": result.get("success", False), "output_dir": output_dir}
     stage_result.update({k: v for k, v in result.items() if k != "success"})
+
+    if stage == "build":
+        progress = result.get("progress", [])
+        if progress:
+            stage_result["build_progress"] = progress
+            stage_result["progress_summary"] = f"建模完成：共{len(progress)}个步骤"
+        # Extract element counts from output
+        output_lines = result.get("output", [])
+        for line in output_lines:
+            if "总计:" in line:
+                stage_result["element_total"] = line.split("总计:")[-1].strip()
 
     if stage in STAGE_BLEND_FILES:
         path = os.path.join(output_dir, STAGE_BLEND_FILES[stage])
