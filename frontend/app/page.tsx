@@ -133,7 +133,13 @@ export default function Home() {
   const [animatingRound, setAnimatingRound] = useState(-1);
   const autoPlayQueueRef = useRef<number[]>([]);
   const { theme, setTheme } = useTheme();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("xuanwu_sidebar_collapsed") === "true";
+    } catch {
+      return true;
+    }
+  });
   const [demoLibraryOpen, setDemoLibraryOpen] = useState(false);
   const [demoRunning, setDemoRunning] = useState(false);
   const [runningDemoKey, setRunningDemoKey] = useState<string | null>(null);
@@ -158,13 +164,6 @@ export default function Home() {
     setRunningDemoKey(null);
     setDemoStatus("");
     setPipelineActive(false);
-  }, []);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("xuanwu_sidebar_collapsed");
-      if (saved !== null) setSidebarCollapsed(saved === "true");
-    } catch { /* SSR guard */ }
   }, []);
 
   useEffect(() => {

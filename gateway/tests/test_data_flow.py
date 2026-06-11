@@ -101,7 +101,7 @@ class TestServiceImports:
 
     def test_router_imports(self):
         from routers import routers
-        assert len(routers) == 5
+        assert len(routers) == 6
 
     def test_llm_engine_import(self):
         from llm_engine import LLMEngine, SYSTEM_PROMPT

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Loader2, Send, Square, Zap, Settings, ListOrdered } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
