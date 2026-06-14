@@ -115,6 +115,7 @@
   │               │   │                   │   │ • Unity 视频             │
   └───────────────┘   └───────────────────┘   │ • Blender 视频           │
                                                │ • Abaqus 视频            │
+                                               │ • Effects AI (视频/图片) │
                                                └──────────────────────────┘
 ```
 
@@ -137,6 +138,8 @@ CAIAO 协议是本项目的**统一服务抽象**——每个求解器、模拟�
 | **Blender 管线** | Blender 4.x 无头模式, 脚本化场景构建, 拆除动画, 多角度渲染 |
 | **Abaqus** | Abaqus CAE 会话管理, 环境求解器, 结构分析 |
 | **BIM** | IFC 模型导入, BIM-to-模拟 桥接 |
+| **AI 视频/图片** | Agnes AI API — 图生视频, 图生图真实渲染 |
+| **3D 查看器** | Three.js / @react-three/fiber 交互式 WebGL 3D 查看器, 自定义 H 型钢几何 |
 | **流传输** | WebRTC (Unity → 浏览器), WebSocket (Agent 步骤), 帧服务器 (Blender → 浏览器) |
 | **记忆** | mem0 (SQLite) + 本地 JSON 回退 |
 
@@ -239,6 +242,16 @@ CAIAO 协议是本项目的**统一服务抽象**——每个求解器、模拟�
 - **帧服务器** — 将渲染帧实时传输到浏览器（`frame_server.py`）
 - **蒸汽轮机建筑** — 完整的工业拆除演示项目
 
+### AI 特效管线（视频与图片）
+- **Agnes AI 视频生成** — 基于多视角模型截图的图生视频，支持画质预设（低/中/高/电影）和实时进度追踪
+- **Agnes AI 图片渲染** — 图生图真实渲染：将线框模型截图转为照片级建筑可视化，基于 Agnes Image 2.1 Flash
+- **多角度截图采集** — 自动采集正面、侧面、45° 和俯视图作为参考帧
+- **交互式 3D 查看器** — 基于 Three.js 的 WebGL 3D 模型查看器，支持轨道控制、着色/线框/X-Ray 显示模式、点击选柱
+- **自定义 H 型钢几何** — 精确的 HW/HM 钢截面网格，实现真实的结构可视化
+- **自动保存到项目** — 生成的视频和图片自动保存到每个任务的项目文件夹，附带元数据
+- **历史记录与回放** — 从 localStorage 浏览、重命名、删除和回放已生成的视频和图片
+- **画质预设** — 低（384p，最快）→ 中（512p）→ 高（768p，推荐）→ 电影（1080p，最慢）
+
 ---
 
 ## 快速开始
@@ -308,9 +321,9 @@ curl http://localhost:8000/tools    # 列出已注册的 CAIAO 工具
 | 目录 | 描述 |
 |------|------|
 | `gateway/` | FastAPI 后端 — REST API、WebSocket、LLM 引擎、ReAct Agent Loop、CAIAO Hub、路由、服务 |
-| `caiao_servers/` | 30+ 个 CAIAO 工具服务器 — 结构分析 (anaStruct、OpenSees、PyNite、FAPP)、Blender 管线 (构建、动画、渲染、环境、机械)、Abaqus (会话、环境)、Unity 模拟、BIM/IFC、场景规划、物理引擎 等 |
+| `caiao_servers/` | 30+ 个 CAIAO 工具服务器 — 结构分析 (anaStruct、OpenSees、PyNite、FAPP)、Blender 管线 (构建、动画、渲染、环境、机械)、Abaqus (会话、环境)、Unity 模拟、BIM/IFC、场景规划、物理引擎、**Agnes 视频/图片生成**、**钢框架 3D 生成器** 等 |
 | `blender_pipeline/` | Blender 自动化 — 便携 Blender 4.x、程序化建筑生成、拆除动画、多角度渲染、帧流服务器 |
-| `frontend/` | Next.js 16 SPA — 3D/SVG 可视化、Unity/Blender/Abaqus 视频面板、Agent 对话、IFC 查看器、时间线编辑器、服务器管理、双语 i18n |
+| `frontend/` | Next.js 16 SPA — 3D/SVG 可视化、Unity/Blender/Abaqus 视频面板、**Effects AI 视频/图片面板**、**Three.js 3D 结构查看器**、Agent 对话、IFC 查看器、时间线编辑器、服务器管理、双语 i18n |
 | `unity_project/` | Unity C# 脚本 — SimulationController (TCP)、FrameBuilder (程序化)、WebRTC 流、一键场景搭建 |
 | `scripts/` | 工具脚本 — 编码修复、优化、资源守护 |
 | `tests/` | 集成测试 |
@@ -368,6 +381,12 @@ cd frontend && npx vitest run                # 16 个测试
 | 蒸汽轮机建筑演示项目 | 已完成 |
 | CAIAO 服务器管理器 (生命周期 UI) | 已完成 |
 | 动画时间线编辑器 | 已完成 |
+| **Effects AI 视频生成 (Agnes)** | **已完成** |
+| **Effects AI 图片渲染 (img2img)** | **已完成** |
+| **交互式 3D 结构查看器 (Three.js)** | **已完成** |
+| **自定义 H 型钢几何** | **已完成** |
+| **钢框架 3D 生成器** | **已完成** |
+| **Demo 项目 (exports)** | **已完成** |
 | 移动端响应式布局 | 计划中 |
 | 多用户会话隔离 | 计划中 |
 

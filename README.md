@@ -118,7 +118,7 @@ The workflow follows **multi-round progressive demolition**: after each column r
   │ Scenario      │   │ • WebRTC stream   │   │ Frontend Panels:         │
   │ Planner       │   │                   │   │ • Unity Video            │
   │               │   │                   │   │ • Blender Video          │
-  └───────────────┘   └───────────────────┘   │ • Abaqus Video           │
+  └───────────────┘   └───────────────────┘   │ • Effects AI (Video/Img) │
                                               └──────────────────────────┘
 ```
 
@@ -141,6 +141,8 @@ The CAIAO protocol is the project's **unified server abstraction** — every sol
 | **Blender Pipeline** | Blender 4.x headless, scripted scene building, demolition animation, multi-angle rendering |
 | **Abaqus** | Abaqus CAE session management, environment solver, structural analysis |
 | **BIM** | IFC model import, BIM-to-simulation bridge |
+| **AI Video/Image** | Agnes AI API — image-to-video generation, image-to-image realistic rendering |
+| **3D Viewer** | Three.js / @react-three/fiber interactive WebGL 3D viewer with custom H-beam geometry |
 | **Streaming** | WebRTC (Unity → browser), WebSocket (agent steps), frame server (Blender → browser) |
 | **Memory** | mem0 (SQLite) with local JSON fallback |
 
@@ -247,6 +249,16 @@ are merged into a single call. This not only reduces the LLM's decision cost, bu
 - **Frame Server** — Stream rendered frames to the browser in real-time (`frame_server.py`)
 - **Steam Turbine Building** — Complete industrial demolition demo project
 
+### AI Effects Pipeline (Video & Image)
+- **Agnes AI Video Generation** — Image-to-video generation from multi-angle model screenshots, with quality presets (low/medium/high/cinematic) and real-time progress tracking
+- **Agnes AI Image Rendering** — Image-to-image realistic rendering: convert wireframe model screenshots into photorealistic architectural visualizations via Agnes Image 2.1 Flash
+- **Multi-Angle Screenshot Capture** — Automatic capture of front, side, 45°, and top-down views as reference frames
+- **Interactive 3D Viewer** — Three.js-based WebGL 3D model viewer with orbit controls, shaded/wireframe/x-ray display modes, and column selection by clicking
+- **Custom H-Beam Geometry** — Precise HW/HM steel section meshes for realistic structural visualization
+- **Auto-Save to Project** — Generated videos and images are automatically saved to per-task project folders with metadata
+- **History & Playback** — Browse, rename, delete, and replay generated videos and images from localStorage history
+- **Quality Presets** — Low (384p, fastest) → Medium (512p) → High (768p, recommended) → Cinematic (1080p, slowest)
+
 ---
 
 ## Quick Start
@@ -316,9 +328,9 @@ curl http://localhost:8000/tools    # list of registered CAIAO tools
 | Directory | Description |
 |-----------|-------------|
 | `gateway/` | FastAPI backend — REST API, WebSocket, LLM engine, ReAct agent loop, CAIAO hub, routers, services |
-| `caiao_servers/` | 30+ CAIAO tool servers — structural analysis (anaStruct, OpenSees, PyNite, FAPP), Blender pipeline (build, animate, render, environment, machinery), Abaqus (session, environment), Unity simulation, BIM/IFC, scenario planning, physics, etc. |
+| `caiao_servers/` | 30+ CAIAO tool servers — structural analysis (anaStruct, OpenSees, PyNite, FAPP), Blender pipeline (build, animate, render, environment, machinery), Abaqus (session, environment), Unity simulation, BIM/IFC, scenario planning, physics, **Agnes video/image generation**, **steel frame 3D generator**, etc. |
 | `blender_pipeline/` | Blender automation — portable Blender 4.x, procedural building generation, demolition animation, multi-angle rendering, frame streaming server |
-| `frontend/` | Next.js 16 SPA — 3D/SVG visualization, Unity/Blender/Abaqus video panels, agent chat, IFC viewer, timeline editor, server manager, bilingual i18n |
+| `frontend/` | Next.js 16 SPA — 3D/SVG visualization, Unity/Blender/Abaqus video panels, **Effects AI video/image panel**, **Three.js 3D structure viewer**, agent chat, IFC viewer, timeline editor, server manager, bilingual i18n |
 | `unity_project/` | Unity C# scripts — SimulationController (TCP), FrameBuilder (procedural), WebRTC streaming, one-click scene setup |
 | `scripts/` | Utility scripts — encoding fix, optimizer, resource guard |
 | `tests/` | Integration tests |
@@ -379,6 +391,12 @@ cd frontend && npx vitest run                # 16 tests
 | Steam turbine building demo project | Done |
 | CAIAO server manager (lifecycle UI) | Done |
 | Animation timeline editor | Done |
+| **Effects AI video generation (Agnes)** | **Done** |
+| **Effects AI image rendering (img2img)** | **Done** |
+| **Interactive 3D structure viewer (Three.js)** | **Done** |
+| **Custom H-beam geometry** | **Done** |
+| **Steel frame 3D generator** | **Done** |
+| **Demo project (exports)** | **Done** |
 | Mobile responsive layout | Planned |
 | Multi-user session isolation | Planned |
 
