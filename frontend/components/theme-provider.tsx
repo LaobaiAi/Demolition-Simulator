@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, useLayoutEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useLayoutEffect, type ReactNode } from "react";
 
 export interface Theme {
   key: string;
@@ -68,12 +68,7 @@ export function useTheme() {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      return saved && THEMES.some((t) => t.key === saved) ? saved : DEFAULT_THEME;
-    } catch { return DEFAULT_THEME; }
-  });
+  const [theme, setThemeState] = useState(DEFAULT_THEME);
 
   // Apply theme classes on mount
   useLayoutEffect(() => {
@@ -83,6 +78,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     else root.classList.remove("dark");
     root.classList.add(theme);
   }, [theme]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved && THEMES.some((t) => t.key === saved)) setThemeState(saved);
+    } catch {}
+  }, []);
 
   const setTheme = useCallback((key: string) => {
     setThemeState(key);

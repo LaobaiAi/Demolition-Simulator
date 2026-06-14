@@ -133,13 +133,7 @@ export default function Home() {
   const [animatingRound, setAnimatingRound] = useState(-1);
   const autoPlayQueueRef = useRef<number[]>([]);
   const { theme, setTheme } = useTheme();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem("xuanwu_sidebar_collapsed") === "true";
-    } catch {
-      return true;
-    }
-  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [demoLibraryOpen, setDemoLibraryOpen] = useState(false);
   const [demoRunning, setDemoRunning] = useState(false);
   const [runningDemoKey, setRunningDemoKey] = useState<string | null>(null);
@@ -174,6 +168,13 @@ export default function Home() {
       }
     } catch { /* SSR guard */ }
   }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    try {
+      const val = localStorage.getItem("xuanwu_sidebar_collapsed");
+      if (val !== null) setSidebarCollapsed(val === "true");
+    } catch {}
+  }, []);
 
   useEffect(() => {
     const id = ++scenariosFetchId.current;
