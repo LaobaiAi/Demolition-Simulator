@@ -1,0 +1,34 @@
+name: agnes_video_server
+version: 0.1.0
+kind: atomic-mcp
+description: "Agnes AI video generation server. Creates AI cinematic demolition collapse videos from 3D model frames using Image-to-Video API."
+status: active
+since: "2026-06-14"
+start_mode: eager
+command:
+  python: auto
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+health:
+  timeout_ms: 5000
+  restart_on_crash: false
+  max_restarts: 3
+  health_check_interval_s: 0
+tools:
+  - name: generate_video
+    description: "Create an AI video from reference frames via Agnes API. Returns a task ID for polling."
+    tags: [video, ai, agnes, generation]
+  - name: check_video_status
+    description: "Poll Agnes API for video generation progress. Returns status + video URL when done."
+    tags: [video, ai, agnes, status]
+  - name: save_api_key
+    description: "Save the Agnes AI API key for reuse across calls."
+    tags: [configuration, api-key]
+  - name: list_scene_prompts
+    description: "List built-in cinematic demolition scene prompt templates."
+    tags: [prompts, scenes, templates]
+capabilities: [video-generation, ai-video, agnes-integration, prompt-templates]
+dependencies:
+  python: []
+  system: []
