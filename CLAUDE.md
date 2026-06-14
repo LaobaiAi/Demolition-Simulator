@@ -57,7 +57,21 @@ Adding a new solver/feature = writing one new CAIAO Server file + registering it
 - 编辑已有文件优先于新建文件
 - 不改动不相关代码
 
-### 5. 国际化
+### 5. 核心工作原则
+
+#### 5.1 Think Before Coding（先思考，再编码）
+动手前先说明对需求的理解、不确定的地方和可能的替代方案。通过提问消除歧义，而不是默默做错误假设直接开干。
+
+#### 5.2 Simplicity First（简单至上）
+用最简单直接的方式解决问题。避免不必要的抽象层、设计模式和功能扩展。不要为"将来可能用"而提前复杂化。
+
+#### 5.3 Surgical Changes（外科手术式修改）
+只修改任务所必需的文件和代码行。禁止顺手"优化"、重构或改动无关代码。每处修改都应有明确的必要性。
+
+#### 5.4 Goal-Driven & Verifiable（目标驱动且可验证）
+动手前将模糊指令转化为可验证的目标。例如"加个校验"→"先为非法输入写测试，再让测试通过"。明确什么是"完成"的标准。
+
+### 6. 国际化
 - 中英文双语支持，翻译文件：frontend/lib/i18n.ts
 - **所有用户可见文字必须走 `t(key, lang)` 调用**，禁止在 JSX 中硬编码英文或中文
 - 英文作为源语言（source language），中文翻译按需补齐
@@ -205,7 +219,7 @@ frame_generator + anastruct + postprocess = full_analysis  （新复合 Server�
 - [x] ⚡ 第二个 CAIAOServerizer server merge: full_analysis_3d_server
   （3D 生成 → UnifiedFrame 转换 → PyNite 3D 分析 → 选关键柱）
 
-### 6. 对话记录到 dev-notes
+### 7. 对话记录到 dev-notes
 - **每次有重要技术决策、架构变更、Bug 根因分析、或用户明确要求时**，将关键对话内容输出到 `dev-notes/` 目录
 - 子文件夹结构：
   - `dev-notes/decisions/` — 技术决策、方案对比、API 设计讨论

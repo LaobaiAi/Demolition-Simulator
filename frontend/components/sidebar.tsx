@@ -18,6 +18,7 @@ import {
   Library,
   Wrench,
   Brain,
+  Clapperboard,
 } from "lucide-react";
 import { t, type Lang } from "@/lib/i18n";
 
@@ -44,6 +45,7 @@ interface Props {
   onOpenDemoLibrary: () => void;
   onOpenTools?: () => void;
   onOpenMemory?: () => void;
+  onOpenEffectsVideo?: () => void;
   toolsCount?: number;
   scenariosCount?: number;
 }
@@ -63,6 +65,7 @@ export function Sidebar({
   onOpenDemoLibrary,
   onOpenTools,
   onOpenMemory,
+  onOpenEffectsVideo,
   toolsCount,
   scenariosCount,
 }: Props) {
@@ -173,6 +176,13 @@ export function Sidebar({
             title={`${t("sidebar.demo_library", lang)} (${scenariosCount ?? 0})`}
           >
             <Library className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+          </button>
+          <button
+            onClick={onOpenEffectsVideo}
+            className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-muted transition-colors cursor-pointer"
+            title={t("sidebar.effects_video", lang)}
+          >
+            <Clapperboard className="h-4 w-4 text-muted-foreground hover:text-foreground" />
           </button>
           <button
             onClick={onOpenSettings}
@@ -335,6 +345,13 @@ export function Sidebar({
         >
           <Library className="h-3.5 w-3.5" />
           {t("sidebar.demo_library", lang)} ({scenariosCount ?? 0})
+        </button>
+        <button
+          onClick={onOpenEffectsVideo}
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
+        >
+          <Clapperboard className="h-3.5 w-3.5" />
+          {t("sidebar.effects_video", lang)}
         </button>
         <button
           onClick={onOpenSettings}

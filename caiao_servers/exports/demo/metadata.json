@@ -1,0 +1,18 @@
+{
+  "task_id": "task_YSUY551YMLaIdLBESMQmmenNk26TDFoB",
+  "created_at": "2026-06-14T14:47:58.839428",
+  "quality": "high",
+  "width": 1152,
+  "height": 768,
+  "num_frames": 121,
+  "frame_rate": 24,
+  "prompt": "",
+  "marked_columns": [
+    15,
+    14
+  ],
+  "scene": "mechanical_demolition",
+  "frames_saved": 4,
+  "status": "queued",
+  "video_url": ""
+}

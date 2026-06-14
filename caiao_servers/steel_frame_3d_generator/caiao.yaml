@@ -1,0 +1,25 @@
+name: steel_frame_3d_generator
+version: 0.1.0
+kind: atomic-mcp
+description: "Parametric 3D steel frame generation with GB/T 11263 H-beam sections"
+status: active
+since: "2026-06-14"
+start_mode: eager
+command:
+  python: auto
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+health:
+  timeout_ms: 5000
+  restart_on_crash: false
+  max_restarts: 3
+  health_check_interval_s: 0
+tools:
+  - name: generate_3d_frame
+    description: "Generate a 3D steel frame from parametric grid input. Returns nodes, elements, sections, materials"
+    tags: [generation, 3d, steel-frame, parametric]
+capabilities: [3d-generation, parametric, steel-frame]
+dependencies:
+  python: []
+  system: []

@@ -77,3 +77,6 @@ blender_pipeline/blender_portable/
 *.blend
 *.blend1
 *.mp4
+
+# Effects projects (generated artifacts)
+caiao_servers/exports/effects/*

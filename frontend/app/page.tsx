@@ -21,6 +21,7 @@ import { type StructuralMetrics, type DemolitionRound } from "@/components/mecha
 import { FloatingToolbar } from "@/components/floating-toolbar";
 import { Sidebar } from "@/components/sidebar";
 import ServerManager from "@/components/server-manager";
+import { EffectsVideoPanel } from "@/components/effects-video-panel";
 import { ScenarioPicker } from "@/components/scenario-picker";
 import SettingsPanel from "@/components/settings-panel";
 import { ChatPanel } from "@/components/chat-panel";
@@ -134,12 +135,16 @@ export default function Home() {
   const autoPlayQueueRef = useRef<number[]>([]);
   const { theme, setTheme } = useTheme();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  useEffect(() => {
+    try { setSidebarCollapsed(localStorage.getItem("xuanwu_sidebar_collapsed") === "true"); } catch { /* ignore */ }
+  }, []);
   const [demoLibraryOpen, setDemoLibraryOpen] = useState(false);
   const [demoRunning, setDemoRunning] = useState(false);
   const [runningDemoKey, setRunningDemoKey] = useState<string | null>(null);
   const [demoStatus, setDemoStatus] = useState("");
   const demoRef = useRef<{ running: boolean; phase: string }>({ running: false, phase: "" });
   const [steamTurbinePreview, setSteamTurbinePreview] = useState<string | null>(null);
+  const [effectsVideoOpen, setEffectsVideoOpen] = useState(false);
   const pipelineBuildResultRef = useRef<Record<string, unknown> | null>(null);
 
   const [demolitionRounds, setDemolitionRounds] = useState<DemolitionRound[]>([]);
@@ -168,13 +173,6 @@ export default function Home() {
       }
     } catch { /* SSR guard */ }
   }, [sidebarCollapsed]);
-
-  useEffect(() => {
-    try {
-      const val = localStorage.getItem("xuanwu_sidebar_collapsed");
-      if (val !== null) setSidebarCollapsed(val === "true");
-    } catch {}
-  }, []);
 
   useEffect(() => {
     const id = ++scenariosFetchId.current;
@@ -672,6 +670,7 @@ export default function Home() {
         onOpenMemory={() => setMemoryDialogOpen(true)}
         toolsCount={tools.length}
         scenariosCount={scenariosCount}
+        onOpenEffectsVideo={() => setEffectsVideoOpen(true)}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -952,6 +951,14 @@ export default function Home() {
       )}
 
       {toolsDialogOpen && <ServerManager lang={llm.lang} onClose={() => setToolsDialogOpen(false)} />}
+
+      {effectsVideoOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setEffectsVideoOpen(false)}>
+          <div className="relative w-[95vw] h-[90vh] max-w-7xl" onClick={e => e.stopPropagation()}>
+            <EffectsVideoPanel lang={llm.lang} onClose={() => setEffectsVideoOpen(false)} />
+          </div>
+        </div>
+      )}
 
       <FloatingToolbar lang={llm.lang} wsConnected={wsConnected} toolsCount={tools.length}
         demolitionMode={demolitionMode} onOpenSettings={() => llm.setSettingsOpen(true)}

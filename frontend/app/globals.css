@@ -416,3 +416,9 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgb(71 85 105 / 0.8);
 }
+
+/* Select dropdown options: dark text on white bg (SFD fix for readability) */
+select option {
+  color: #1a1a2e;
+  background: #ffffff;
+}
