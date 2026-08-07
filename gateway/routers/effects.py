@@ -99,6 +99,9 @@ async def generate_frame(request: Request):
 
     result = await hub.call_tool("generate_3d_frame", body)
     if isinstance(result, dict):
+        # Propagate server errors explicitly
+        if "error" in result:
+            return JSONResponse({"error": result["error"]}, status_code=502)
         raw = result.get("result", "")
         if isinstance(raw, str):
             try:
@@ -182,6 +185,8 @@ async def export_video(request: Request):
     # Parse Agnes response
     agnes_data = None
     if isinstance(agnes_result, dict):
+        if "error" in agnes_result:
+            return JSONResponse({"error": agnes_result["error"]}, status_code=502)
         raw = agnes_result.get("result", "{}")
         if isinstance(raw, str):
             try:
@@ -296,6 +301,8 @@ async def generate_image(request: Request):
     # Parse result
     agnes_data = None
     if isinstance(result, dict):
+        if "error" in result:
+            return JSONResponse({"error": result["error"]}, status_code=502)
         raw = result.get("result", "{}")
         if isinstance(raw, str):
             try:
