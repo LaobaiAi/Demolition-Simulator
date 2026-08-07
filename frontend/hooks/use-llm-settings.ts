@@ -142,7 +142,7 @@ export function useLlmSettings() {
       setLlmStatus("error");
       setTimeout(() => setLlmStatus("idle"), 3000);
     }
-  }, [llmModel, llmApiKey, llmBaseUrl]);
+  }, [llmModel, llmApiKey, llmBaseUrl, thinkingEnabled]);
 
   const testLlmConnection = useCallback(async () => {
     setLlmTestStatus("testing");
@@ -169,7 +169,7 @@ export function useLlmSettings() {
       setLlmTestStatus("error");
       setLlmTestMsg(err instanceof Error ? err.message : "Connection failed");
     }
-  }, [llmModel, llmApiKey, llmBaseUrl]);
+  }, [llmModel, llmApiKey, llmBaseUrl, thinkingEnabled]);
 
   return {
     lang, setLang,
