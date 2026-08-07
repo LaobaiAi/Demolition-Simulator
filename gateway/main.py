@@ -140,12 +140,18 @@ async def lifespan(app: FastAPI):
     )
     await hub.start_all()
     saved = _load_llm_config()
-    llm_engine = LLMEngine(
-        model=saved.get("model", "gpt-4o"),
-        api_key=saved.get("api_key"),
-        base_url=saved.get("base_url"),
-    )
-    agent = AgentLoop(llm_engine, hub)
+    try:
+        llm_engine = LLMEngine(
+            model=saved.get("model", "gpt-4o"),
+            api_key=saved.get("api_key"),
+            base_url=saved.get("base_url"),
+            thinking_enabled=saved.get("thinking_enabled", False),
+        )
+        agent = AgentLoop(llm_engine, hub)
+    except Exception as e:
+        logger.warning(f"LLM engine not available (no API key configured): {e}")
+        llm_engine = None
+        agent = None
     memory = SessionMemory()
 
     # Expose singletons via app.state for router access

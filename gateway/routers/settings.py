@@ -25,7 +25,7 @@ class LLMSettingsRequest(BaseModel):
 async def get_llm_config(request: Request):
     llm = request.app.state.llm_engine
     if llm is None:
-        return JSONResponse({"status": "error", "message": "LLM engine not initialized"}, status_code=503)
+        return {"model": "", "base_url": "", "has_api_key": False, "api_key_masked": "", "thinking_enabled": False}
     masked = ""
     key = llm.api_key or ""
     if key and len(key) > 4:
@@ -43,10 +43,34 @@ async def get_llm_config(request: Request):
 async def configure_llm(req: LLMSettingsRequest, request: Request):
     llm = request.app.state.llm_engine
     memory = request.app.state.memory
+    hub = request.app.state.hub
     if llm is None:
-        return JSONResponse({"status": "error", "message": "LLM engine not initialized"}, status_code=503)
-    llm.configure(model=req.model, api_key=req.api_key, base_url=req.base_url, thinking_enabled=req.thinking_enabled)
+        # Lazy init: create LLMEngine on first save
+        from gateway.llm_engine import LLMEngine
+        try:
+            llm = LLMEngine(
+                model=req.model or "gpt-4o",
+                api_key=req.api_key,
+                base_url=req.base_url,
+                thinking_enabled=req.thinking_enabled,
+            )
+            request.app.state.llm_engine = llm
+            logger.info("LLM engine initialized via settings save")
+        except Exception as e:
+            logger.error(f"Failed to initialize LLM engine: {e}")
+            return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
+    else:
+        llm.configure(model=req.model, api_key=req.api_key, base_url=req.base_url, thinking_enabled=req.thinking_enabled)
 
+    # ── Recreate agent + reconfigure memory (kept in sync with LLM config) ──
+    from gateway.agent_loop import AgentLoop
+    agent = AgentLoop(llm, hub)
+    request.app.state.agent = agent
+
+    if memory and (req.api_key or req.base_url):
+        memory.reconfigure(api_key=req.api_key, base_url=req.base_url)
+
+    # ── Persist LLM config to disk ──
     config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "llm_config.json")
     try:
         with open(config_file, "w") as f:
@@ -54,8 +78,13 @@ async def configure_llm(req: LLMSettingsRequest, request: Request):
     except Exception as e:
         logger.warning(f"Failed to save LLM config: {e}")
 
-    if memory and (req.api_key or req.base_url):
-        memory.reconfigure(api_key=req.api_key, base_url=req.base_url)
+    # ── Sync main module globals (used by WebSocket handler directly) ──
+    import gateway.main as main_module
+    main_module.agent = agent
+    main_module.llm_engine = llm
+    main_module.memory = memory
+
+    logger.info(f"LLM agent recreated — model={llm.model}")
     return {
         "status": "ok",
         "config": {
