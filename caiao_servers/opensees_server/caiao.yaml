@@ -14,7 +14,7 @@ start_mode: lazy
 
 # ── Command ───────────────────────────────────────────────────────────────
 command:
-  python: auto
+  python: "venv/Scripts/python.exe"
   args: ["server.py"]
   cwd: "."
   env: {}
