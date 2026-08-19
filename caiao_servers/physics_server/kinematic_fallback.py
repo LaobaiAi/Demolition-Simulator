@@ -123,6 +123,7 @@ class KinematicSimulator:
                 "rotation": _vec_copy(body["rotation"]),
                 "velocity": _vec_copy(body["velocity"]),
                 "angular_velocity": _vec_copy(body["angular_velocity"]),
+                "mass": body.get("mass", 1.0),
                 "active": body["active"],
             }
         return {
@@ -132,6 +133,7 @@ class KinematicSimulator:
                 "rotation": _vec_copy(b["rotation"]),
                 "velocity": _vec_copy(b["velocity"]),
                 "angular_velocity": _vec_copy(b["angular_velocity"]),
+                "mass": b.get("mass", 1.0),
                 "active": b["active"],
             }
             for eid, b in self.bodies.items()
