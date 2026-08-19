@@ -2,6 +2,9 @@
 title XuanwuAI Dev
 cd /d "%~dp0"
 
+echo [CLEANUP] Removing leftovers from previous runs...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0_cleanup.ps1"
+
 echo === XuanwuAI Gateway + Frontend ===
 echo.
 
@@ -40,6 +43,19 @@ curl -s http://localhost:8000/health >nul 2>&1
 if errorlevel 1 goto wait_gateway
 echo Gateway ready.
 
+REM ---- Auto-detect Node.js ----
+set "NODE_DIR=%USERPROFILE%\.workbuddy\binaries\node\versions\22.22.2"
+if not exist "%NODE_DIR%\npm.cmd" (
+    for %%n in (npm) do (
+        where %%n >nul 2>&1 && goto :have_npm
+    )
+    echo [ERROR] Node.js / npm not found.
+    pause
+    exit /b 1
+)
+:have_npm
+if exist "%NODE_DIR%\npm.cmd" set "PATH=%NODE_DIR%;%PATH%"
+
 echo Starting Frontend...
 if not exist "%~dp0frontend\node_modules\next" (
     echo [INSTALL] Installing frontend dependencies...
@@ -50,7 +66,8 @@ if not exist "%~dp0frontend\node_modules\next" (
         exit /b
     )
 )
-start "Frontend" cmd /c "cd /d "%~dp0frontend" && npm run dev"
+set "NODE_OPTIONS=--max-old-space-size=2048"
+start "Frontend" /MIN cmd /c "set PATH=%NODE_DIR%;%%PATH%% && set NODE_OPTIONS=--max-old-space-size=2048 && cd /d "%~dp0frontend" && npx next dev -p 3000"
 
 REM Background Resource Monitor
 start /MIN "ResourceMonitor" powershell -NoProfile -ExecutionPolicy Bypass -Command "& '%~dp0_resource_guard.ps1' -mode monitor -checkIntervalSeconds 30"
@@ -61,3 +78,7 @@ echo Frontend: http://localhost:3000
 echo.
 echo Close the terminal windows to stop, or press any key to quit this launcher.
 pause >nul
+
+echo Stopping services...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0_cleanup.ps1"
+echo All stopped. Goodbye!

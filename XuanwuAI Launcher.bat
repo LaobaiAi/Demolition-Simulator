@@ -2,6 +2,9 @@
 title XuanwuAI Demolition Simulator
 cd /d "%~dp0"
 
+echo [CLEANUP] Removing leftovers from previous runs...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0_cleanup.ps1"
+
 setlocal enabledelayedexpansion
 
 echo ============================================
@@ -50,6 +53,8 @@ goto gateway_frontend
 :unity_only
 call :launch_unity
 pause
+echo Stopping services...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0_cleanup.ps1"
 exit /b
 
 :gateway_frontend
@@ -79,6 +84,8 @@ echo.
 echo [TIP] All windows launched minimized to reduce system load.
 echo.
 pause
+echo Stopping services...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0_cleanup.ps1"
 exit /b
 
 :launch_unity
