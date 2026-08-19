@@ -135,9 +135,9 @@ The CAIAO protocol is the project's **unified server abstraction** — every sol
 | **Frontend** | Next.js 16, TypeScript, Tailwind CSS, shadcn/ui, Recharts |
 | **Gateway** | FastAPI, WebSocket, OpenAI SDK, ReAct agent loop |
 | **CAIAO Bus** | CAIAO protocol (MCP SDK stdio transport), 30+ tool servers, 60+ tools |
-| **2D Analysis** | anaStruct (linear elastic), OpenSeesPy (nonlinear) |
+| **2D Analysis** | anaStruct (linear elastic), OpenSeesPy (nonlinear, requires Python 3.10-3.12 on Windows) |
 | **3D FEM** | PyNite (3D), FAPP (3D), multi-solver deep verify |
-| **3D Physics** | Unity 2021.3 LTS, C# Rigidbody + ConfigurableJoint |
+| **3D Physics** | `kinematic_fallback.py` (pure Python) or Rapier (Rust, optional) — rigid body collapse sim; Unity 2021.3 LTS, C# Rigidbody + ConfigurableJoint |
 | **Blender Pipeline** | Blender 4.x headless, scripted scene building, demolition animation, multi-angle rendering |
 | **Abaqus** | Abaqus CAE session management, environment solver, structural analysis |
 | **BIM** | IFC model import, BIM-to-simulation bridge |
@@ -263,11 +263,20 @@ are merged into a single call. This not only reduces the LLM's decision cost, bu
 
 ## Quick Start
 
+### One-Click Launch (Windows)
+
+```bat
+start.bat
+```
+
+Double-click `start.bat` — auto-detects Python & Node.js, launches Gateway + Frontend, opens browser. No IDE required.
+
 ### Prerequisites
 
-- **Python 3.11+** with `venv`
-- **Node.js 20+**
+- **Python 3.14** (Gateway) + **Python 3.12** (OpenSees Server, Windows 下 openseespy 仅支持 3.10-3.12)
+- **Node.js 22+**
 - **Unity Editor 2021.3 LTS** (optional, for 3D simulation)
+- **Blender 4.2.8 LTS** (optional, for photorealistic rendering pipeline)
 
 ### 1. Clone & Configure
 
@@ -286,16 +295,30 @@ cp gateway/llm_config.example.json gateway/llm_config.json
 
 > You can also configure LLM settings via the in-app UI after starting both services.
 
-### 2. Start Backend
+### 2. Install Dependencies & Start Backend
 
+**Gateway (Python 3.14):**
 ```bash
 cd gateway
-python -m venv venv
+python3.14 -m venv venv
 venv\Scripts\activate        # Windows
 # source venv/bin/activate   # Linux/macOS
 pip install -r requirements.txt
 python main.py               # → http://localhost:8000
 ```
+
+**OpenSees Server (Python 3.12, Windows only):**
+> On Windows, `openseespy` requires Python 3.10–3.12. The OpenSees server uses its own independent venv.
+```bash
+cd caiao_servers/opensees_server
+python3.12 -m venv venv
+venv\Scripts\pip install openseespy mcp
+# Server auto-starts with Gateway via CAIAO hub — no manual launch needed
+```
+
+**Blender Pipeline (optional):**
+> Download Blender 4.2.8 LTS portable and extract to `blender_pipeline/blender_portable/`.
+> The expected path is `blender_pipeline/blender_portable/blender-4.2.8-windows-x64/blender.exe`.
 
 ### 3. Start Frontend
 
@@ -417,9 +440,10 @@ cd frontend && npx vitest run                # 16 tests
 
 ## Known Limitations
 
-- **OpenSees on Windows**: `openseespy` DLL dependency issues — the server degrades gracefully with `"unavailable"` status. Use Linux/macOS or WSL2 for full fidelity.
+- **OpenSees on Windows**: Requires Python 3.10–3.12 (not 3.13+). The OpenSees server runs in its own Python 3.12 venv, managed automatically by the CAIAO hub.
 - **Unity scripts**: C# scripts written and structured but not yet validated inside Unity Editor with a full scene.
 - **Single-user**: No multi-tenant session isolation — agent and memory are single-instance.
+- **3D Physics Engine**: The default physics backend is `kinematic_fallback.py` (pure Python, zero dependencies). Optional high-performance upgrade: install Rust toolchain (`winget install Rustlang.Rustup`) and `pip install rapier3d` for the Rapier Rust-based rigid body engine.
 - **No authentication**: WebSocket and REST endpoints are unprotected — not for production exposure without auth.
 - See [PROJECT_STATUS.md](PROJECT_STATUS.md) for full details.
 
