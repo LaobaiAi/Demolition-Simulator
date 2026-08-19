@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import platform
+import re
 import subprocess
 from contextlib import asynccontextmanager
 from typing import Any
@@ -594,7 +595,44 @@ async def ws_chat(websocket: WebSocket):
         heartbeat_task.cancel()
 
 
+def _ps_run(script: str, capture: bool = False) -> str:
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+            capture_output=capture, text=True, timeout=30,
+        )
+        return result.stdout.strip() if capture else ""
+    except Exception:
+        return ""
+
+
+def _parent_is_watchdog() -> bool:
+    script = (
+        "Get-CimInstance Win32_Process -Filter \"ProcessId=%d\" "
+        "| Select-Object -ExpandProperty CommandLine" % os.getppid()
+    )
+    return bool(re.search(r"watchdog\.py", _ps_run(script, capture=True), re.IGNORECASE))
+
+
+def _startup_self_heal() -> None:
+    if not _parent_is_watchdog():
+        _ps_run(
+            "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'watchdog\\.py' } "
+            "| ForEach-Object { taskkill /F /T /PID $_.ProcessId 2>$null }"
+        )
+    killed = _ps_run(
+        "Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue "
+        "| ForEach-Object { $_.OwningProcess; taskkill /F /T /PID $_.OwningProcess 2>$null }",
+        capture=True,
+    )
+    if killed:
+        print("[startup] killed stale process on port 8000")
+    else:
+        print("[startup] port 8000 free")
+
+
 if __name__ == "__main__":
     import uvicorn
+    _startup_self_heal()
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=False,
                 ws_ping_interval=25, ws_ping_timeout=10)
