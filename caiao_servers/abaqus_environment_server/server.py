@@ -60,35 +60,40 @@ def _load_env():
         return json.load(f)
 
 
+def _resolve_launcher(paths):
+    """Find the actual Abaqus batch launcher: paths.launcher first, then commands dir."""
+    launcher = paths.get("launcher")
+    if launcher and os.path.isfile(launcher):
+        return launcher
+    commands_dir = paths.get("commands")
+    if commands_dir:
+        for name in ("abq2026.bat", "abaqus.bat"):
+            candidate = os.path.join(commands_dir, name)
+            if os.path.isfile(candidate):
+                return candidate
+    return None
+
+
 def _handle_resolve_abaqus_path(_arguments):
     env = _load_env()
     paths = env.get("paths", {})
 
     commands_dir = paths.get("commands")
     product_root = paths.get("product_root")
-    python_dir = paths.get("python")
-    abaqus_python = os.path.join(python_dir, "python.exe") if python_dir else None
+    launcher = _resolve_launcher(paths)
 
     result = {
-        "abaqus_command": os.path.join(commands_dir, "abaqus.bat") if commands_dir else None,
-        "abaqus_python": abaqus_python,
+        "abaqus_command": launcher,
+        "abaqus_launcher": launcher,
+        "abaqus_python": None,  # integrated build has no standalone python.exe
         "commands_dir": commands_dir,
         "product_root": product_root,
-        "python_dir": python_dir,
+        "python_dir": paths.get("python"),
         "version": env.get("product", {}).get("version"),
     }
 
-    if abaqus_python and os.path.exists(abaqus_python):
-        result["python_exists"] = True
-    else:
-        result["python_exists"] = False
-
-    if commands_dir and os.path.isdir(commands_dir):
-        abaqus_bat = os.path.join(commands_dir, "abaqus.bat")
-        result["command_exists"] = os.path.exists(abaqus_bat)
-    else:
-        result["command_exists"] = False
-
+    result["launcher_exists"] = launcher is not None
+    result["command_exists"] = launcher is not None
     return result
 
 
@@ -103,22 +108,16 @@ def _handle_validate_environment(_arguments):
         "path": commands_dir,
     }
 
-    abaqus_bat = os.path.join(commands_dir, "abaqus.bat") if commands_dir else None
-    checks["abaqus_bat"] = {
-        "pass": abaqus_bat is not None and os.path.exists(abaqus_bat),
-        "path": abaqus_bat,
+    launcher = _resolve_launcher(paths)
+    checks["launcher"] = {
+        "pass": launcher is not None,
+        "path": launcher,
     }
 
     python_dir = paths.get("python")
     checks["python_dir"] = {
         "pass": python_dir is not None and os.path.isdir(python_dir),
         "path": python_dir,
-    }
-
-    abaqus_python = os.path.join(python_dir, "python.exe") if python_dir else None
-    checks["abaqus_python"] = {
-        "pass": abaqus_python is not None and os.path.exists(abaqus_python),
-        "path": abaqus_python,
     }
 
     license_server = env.get("license", {}).get("server")

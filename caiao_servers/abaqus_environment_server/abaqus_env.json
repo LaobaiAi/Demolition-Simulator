@@ -1,15 +1,16 @@
 {
-  "_description": "本机 Abaqus 2026 环境信息，请根据实际安装路径修改",
+  "_description": "本机 Abaqus 2026 环境信息（3DEXPERIENCE 整合版：无独立 python.exe，统一通过 abq*.bat noGUI 批跑联动）",
   "product": {
     "name": "SIMULIA Established Products 2026",
     "version": "2026 (6.26-1)"
   },
   "paths": {
     "commands": "D:\\Program Files\\SIMULIA\\Commands",
+    "launcher": "D:\\Program Files\\SIMULIA\\Commands\\abq2026.bat",
     "product_root": "D:\\Program Files\\SIMULIA\\EstProducts\\2026",
     "win_b64": "D:\\Program Files\\SIMULIA\\EstProducts\\2026\\win_b64",
     "bin": "D:\\Program Files\\SIMULIA\\EstProducts\\2026\\win_b64\\code\\bin",
-    "python": "D:\\Program Files\\SIMULIA\\EstProducts\\2026\\win_b64\\code\\python3.10",
+    "python": "D:\\Program Files\\SIMULIA\\Commands",
     "license_file": "C:\\License\\ABAQUSLM.lic"
   },
   "license": {
