@@ -6,11 +6,15 @@ The single Abaqus process persists across tool calls, sharing one model database
 """
 
 import asyncio
+import glob
 import json
 import logging
 import os
 import subprocess
 import sys
+import tempfile
+import time
+import uuid
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -234,106 +238,176 @@ TOOLS = [
 ]
 
 
-def _find_abaqus_python():
-    """Read abaqus_env.json to find the Abaqus Python executable."""
+def _find_abaqus_launcher():
+    """Read abaqus_env.json to locate the Abaqus command launcher (abq*.bat).
+
+    Abaqus 2026 (3DEXPERIENCE integrated build) has NO standalone python.exe —
+    the only valid entry point is `abq2026.bat cae noGUI=script.py`.
+    """
     env_json = os.path.join(
         _PROJECT_DIR, "caiao_servers", "abaqus_environment_server", "abaqus_env.json"
     )
+    env = {}
     try:
         with open(env_json, "r", encoding="utf-8") as f:
             env = json.load(f)
-        python_dir = env.get("paths", {}).get("python")
-        if python_dir:
-            python_exe = os.path.join(python_dir, "python.exe")
-            if os.path.exists(python_exe):
-                return python_exe, env
     except Exception as e:
         logger.warning(f"Failed to read {env_json}: {e}")
-    return None, {}
+
+    paths = env.get("paths", {})
+    candidates = []
+    launcher = paths.get("launcher")
+    if launcher:
+        candidates.append(launcher)
+    commands_dir = paths.get("commands")
+    if commands_dir:
+        candidates.extend([
+            os.path.join(commands_dir, "abq2026.bat"),
+            os.path.join(commands_dir, "abaqus.bat"),
+        ])
+    # Fallback: scan PATH for any abq*.bat
+    for p in os.environ.get("PATH", "").split(os.pathsep):
+        if not p:
+            continue
+        try:
+            candidates.extend(glob.glob(os.path.join(p, "abq*.bat")))
+        except OSError:
+            pass
+
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate):
+            return candidate, env
+    return None, env
 
 
 class AbaqusSession:
-    """Manages a persistent Abaqus Python subprocess for tool execution."""
+    """Manages a persistent Abaqus CAE noGUI kernel process with a file-based IPC channel.
+
+    The Abaqus kernel is launched once as:
+        cmd /c <abq2026.bat> cae noGUI=<abaqus_driver.py>
+    The driver keeps the kernel alive (shared `mdb` model database) and polls task files.
+    Each tool call writes task_<id>.json and waits for result_<id>.json.
+    """
+
+    # Solver jobs (setup_collapse) can run for many minutes.
+    _TOOL_TIMEOUT_S = 3600
 
     def __init__(self):
         self._process = None
         self._lock = asyncio.Lock()
+        self._workdir = None
+        self._kernel_log = None
 
     def _ensure_started(self):
         if self._process is not None and self._process.poll() is None:
             return
 
-        abaqus_python, env_data = _find_abaqus_python()
-        if not abaqus_python:
+        launcher, env_data = _find_abaqus_launcher()
+        if not launcher:
             raise RuntimeError(
-                "Abaqus Python not found. Check abaqus_env.json in abaqus_environment_server."
+                "Abaqus launcher (abq*.bat) not found. "
+                "Check abaqus_env.json in abaqus_environment_server."
             )
 
-        session_script = os.path.join(_SERVER_DIR, "abaqus_session.py")
+        driver_script = os.path.join(_SERVER_DIR, "abaqus_driver.py")
+        self._workdir = tempfile.mkdtemp(prefix="abaqus_session_")
+        self._kernel_log = open(
+            os.path.join(self._workdir, "kernel.log"),
+            "w",
+            encoding="utf-8",
+            errors="replace",
+        )
+
         env = os.environ.copy()
         license_server = env_data.get("license", {}).get("server", "")
         if license_server:
             env["ABAQUSLM_LICENSE_FILE"] = license_server
+        env["ABAQUS_DRIVER_WORKDIR"] = self._workdir
+        env["ABAQUS_DRIVER_SERVERDIR"] = _SERVER_DIR
 
-        logger.info(f"Starting Abaqus session: {abaqus_python} {session_script}")
+        # shell=True hands the raw command string to cmd.exe with interactive cmd
+        # quoting rules — this is the exact form that works when run by hand:
+        #     abq2026.bat cae noGUI="path with spaces\script.py"
+        # (subprocess list-args + ["cmd","/c",...] double-escapes the quotes.)
+        cmdline = f'"{launcher}" cae noGUI="{driver_script}"'
+        logger.info(f"Starting Abaqus kernel: {cmdline} (workdir={self._workdir})")
         self._process = subprocess.Popen(
-            [abaqus_python, session_script],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
+            cmdline,
+            cwd=self._workdir,
+            stdout=self._kernel_log,
+            stderr=subprocess.STDOUT,
             env=env,
+            shell=True,
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
-        logger.info(f"Abaqus session started (pid={self._process.pid})")
+        logger.info(f"Abaqus kernel started (pid={self._process.pid})")
 
     async def call_tool(self, tool_name: str, arguments: dict) -> dict:
         async with self._lock:
             self._ensure_started()
 
-            request = json.dumps({
-                "id": tool_name,
-                "tool": tool_name,
-                "arguments": arguments,
-            }, ensure_ascii=False)
+            req_id = uuid.uuid4().hex
+            task_path = os.path.join(self._workdir, f"task_{req_id}.json")
+            result_path = os.path.join(self._workdir, f"result_{req_id}.json")
+            request = {"id": req_id, "tool": tool_name, "arguments": arguments}
 
             try:
-                self._process.stdin.write(request + "\n")
-                self._process.stdin.flush()
-            except (BrokenPipeError, OSError) as e:
-                logger.warning(f"Abaqus subprocess died, restarting: {e}")
+                with open(task_path, "w", encoding="utf-8") as f:
+                    json.dump(request, f, ensure_ascii=False)
+            except OSError as e:
+                logger.warning(f"Failed to write task file, restarting kernel: {e}")
                 self._process = None
                 self._ensure_started()
-                self._process.stdin.write(request + "\n")
-                self._process.stdin.flush()
+                with open(task_path, "w", encoding="utf-8") as f:
+                    json.dump(request, f, ensure_ascii=False)
 
-            response_line = self._process.stdout.readline()
-            if not response_line:
-                raise RuntimeError("Abaqus subprocess returned empty response")
+            deadline = time.monotonic() + self._TOOL_TIMEOUT_S
+            while time.monotonic() < deadline:
+                if self._process.poll() is not None:
+                    raise RuntimeError(
+                        "Abaqus kernel exited unexpectedly. "
+                        f"See {os.path.join(self._workdir, 'kernel.log')}"
+                    )
+                if os.path.exists(result_path):
+                    with open(result_path, "r", encoding="utf-8") as f:
+                        response = json.load(f)
+                    try:
+                        os.remove(result_path)
+                    except OSError:
+                        pass
+                    if "error" in response:
+                        out = {"error": response["error"]}
+                        if response.get("traceback"):
+                            out["traceback"] = response["traceback"]
+                        return out
+                    return response.get("result", {})
+                await asyncio.sleep(0.5)
 
-            try:
-                response = json.loads(response_line)
-            except json.JSONDecodeError:
-                stderr_output = ""
-                try:
-                    stderr_output = self._process.stderr.read()
-                except Exception:
-                    pass
-                raise RuntimeError(f"Invalid JSON from Abaqus: {response_line[:200]}... stderr: {stderr_output[:500]}")
-
-            if "error" in response:
-                return {"error": response["error"]}
-            return response.get("result", {})
+            raise TimeoutError(
+                f"Tool {tool_name} timed out after {self._TOOL_TIMEOUT_S}s. "
+                f"Kernel log: {os.path.join(self._workdir, 'kernel.log')}"
+            )
 
     def stop(self):
-        if self._process:
+        if self._process is not None:
             try:
-                self._process.stdin.close()
-                self._process.terminate()
-                self._process.wait(timeout=10)
+                if self._workdir:
+                    exit_flag = os.path.join(self._workdir, "exit.flag")
+                    with open(exit_flag, "w", encoding="utf-8") as f:
+                        f.write("exit")
+                self._process.wait(timeout=30)
             except Exception:
-                self._process.kill()
+                try:
+                    self._process.kill()
+                except Exception:
+                    pass
             self._process = None
+        if self._kernel_log is not None:
+            try:
+                self._kernel_log.close()
+            except Exception:
+                pass
+            self._kernel_log = None
 
 
 _session = AbaqusSession()
