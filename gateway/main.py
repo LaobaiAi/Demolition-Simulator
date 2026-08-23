@@ -606,20 +606,11 @@ def _ps_run(script: str, capture: bool = False) -> str:
         return ""
 
 
-def _parent_is_watchdog() -> bool:
-    script = (
-        "Get-CimInstance Win32_Process -Filter \"ProcessId=%d\" "
-        "| Select-Object -ExpandProperty CommandLine" % os.getppid()
-    )
-    return bool(re.search(r"watchdog\.py", _ps_run(script, capture=True), re.IGNORECASE))
-
-
 def _startup_self_heal() -> None:
-    if not _parent_is_watchdog():
-        _ps_run(
-            "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'watchdog\\.py' } "
-            "| ForEach-Object { taskkill /F /T /PID $_.ProcessId 2>$null }"
-        )
+    # NOTE: Do NOT kill watchdog.py processes here — that previously ended up
+    # killing this gateway's own parent watchdog (taskkill /F /T kills the
+    # whole tree), which made the gateway unable to start under the watchdog.
+    # Port cleanup below is sufficient for stale-instance conflicts.
     killed = _ps_run(
         "Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue "
         "| ForEach-Object { $_.OwningProcess; taskkill /F /T /PID $_.OwningProcess 2>$null }",
