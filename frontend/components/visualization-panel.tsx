@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, Suspense, lazy } from "react";
-import { Terminal, Pause, PlayCircle, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, Suspense, lazy } from "react";
+import { Terminal, Pause, PlayCircle, Loader2, Maximize, Minimize } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { t, type Lang } from "@/lib/i18n";
@@ -81,28 +81,54 @@ export function VisualizationPanel({
   onStepForward, onStepBackward, onReset, onSpeedChange, onEffectToggle, onPause,
   onLogPauseToggle, onCanvasCallback, onUnityConnected,
 }: VizPanelProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(document.fullscreenElement === panelRef.current);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement === panelRef.current) {
+      void document.exitFullscreen();
+    } else {
+      void panelRef.current?.requestFullscreen().catch(() => {});
+    }
+  };
+
   const stepLabels = useMemo(() =>
     demolitionRounds.map(r => `Round ${r.round + 1}: ${r.elementIds.length} elements`),
     [demolitionRounds]
   );
 
   return (
-    <div className="flex w-[50%] flex-col border-r border-border bg-[#0a0f1a]">
+    <div ref={panelRef}
+      className={`flex flex-col border-r border-border bg-[#0a0f1a] ${isFullscreen ? "w-full h-full" : "w-[50%]"} [&:fullscreen]:w-full`}>
       <div className="flex items-center justify-between border-b border-border px-4 py-1.5">
         <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
           {t(`viz.mode_${vizMode}`, lang)}
         </span>
-        <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-0.5">
-          {(["webgl", "svg", "unity", "blender", "ifc", "abaqus"] as const).map((mode) => (
-            <button key={mode} onClick={() => setVizMode(mode)}
-              className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${vizMode === mode ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
-              {t(`viz.tab_${mode}`, lang)}
-            </button>
-          ))}
-          <div className="ml-1.5 pl-1.5 border-l border-border/60">
-            <AnimationExporter lang={lang} canvasRef={{ current: canvas3dRef }}
-              fileName="demolition-animation" disabled={vizMode !== "webgl" || demolitionRounds.length === 0} />
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-0.5">
+            {(["webgl", "svg", "unity", "blender", "ifc", "abaqus"] as const).map((mode) => (
+              <button key={mode} onClick={() => setVizMode(mode)}
+                className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${vizMode === mode ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+                {t(`viz.tab_${mode}`, lang)}
+              </button>
+            ))}
+            <div className="ml-1.5 pl-1.5 border-l border-border/60">
+              <AnimationExporter lang={lang} canvasRef={{ current: canvas3dRef }}
+                fileName="demolition-animation" disabled={vizMode !== "webgl" || demolitionRounds.length === 0} />
+            </div>
           </div>
+          <button onClick={toggleFullscreen}
+            title={isFullscreen ? (lang === "zh" ? "退出全屏" : "Exit Fullscreen") : (lang === "zh" ? "全屏" : "Fullscreen")}
+            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer bg-secondary/50 hover:bg-primary/20 text-muted-foreground hover:text-primary">
+            {isFullscreen ? <Minimize className="h-3.5 w-3.5" /> : <Maximize className="h-3.5 w-3.5" />}
+            <span className="hidden xl:inline">{isFullscreen ? (lang === "zh" ? "退出全屏" : "Exit Fullscreen") : (lang === "zh" ? "全屏" : "Fullscreen")}</span>
+          </button>
         </div>
       </div>
 
@@ -168,7 +194,7 @@ export function VisualizationPanel({
           stepLabels={stepLabels} />
       )}
 
-      <div className="border-t border-border bg-[#060a12]">
+      <div className={`border-t border-border bg-[#060a12] ${isFullscreen ? "hidden" : ""}`}>
         <div className="flex items-center justify-between px-4 py-2 border-b border-border">
           <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
             <Terminal className="h-3.5 w-3.5" />{t("log.header", lang)}
