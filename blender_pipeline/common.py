@@ -49,6 +49,24 @@ def find_blender():
     return None
 
 
+def _decode_blender_output(data: bytes) -> str:
+    """Decode Blender subprocess output bytes robustly.
+
+    Blender's embedded Python emits text using the OS console codepage (GBK on
+    Chinese Windows) regardless of PYTHONIOENCODING, so strict UTF-8 decoding
+    corrupts CJK text. Try UTF-8 first, fall back to the local codepage.
+    """
+    if not data:
+        return ""
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            return data.decode("gbk", errors="replace")
+        except (LookupError, UnicodeDecodeError):
+            return data.decode("latin-1", errors="replace")
+
+
 def run_blender_script(script_name, blend_input=None, env_extra=None, timeout=300, background=True):
     """Run a Blender Python script via subprocess.
 
@@ -64,30 +82,67 @@ def run_blender_script(script_name, blend_input=None, env_extra=None, timeout=30
     if not os.path.exists(script_path):
         return {"success": False, "error": f"Script not found: {script_path}"}
 
+    # Blender --python does NOT add the script's dir (nor the pipeline dir) to sys.path,
+    # so scripts that `from _common import ...` would fail with ModuleNotFoundError.
+    # Inject both dirs via --python-expr before running the script, and force the
+    # embedded Python's stdout/stderr to UTF-8 (PYTHONIOENCODING is ignored by Blender
+    # on Windows, whose console defaults to the local codepage e.g. GBK).
+    # NOTE: --python-expr accepts a SINGLE line only (multi-line/indented code is a
+    # SyntaxError). Use a list comprehension for the reconfigure attempts.
+    pyexpr = (
+        "import sys;"
+        "sys.path.insert(0, %r); sys.path.insert(0, %r);"
+        "[getattr(_s, 'reconfigure', lambda **k: None)(encoding='utf-8', errors='replace') "
+        "for _s in (sys.stdout, sys.stderr)]"
+    ) % (paths["scripts_dir"], paths["pipeline_dir"])
+
     cmd = [blender_exe]
     if background:
         cmd.append("--background")
     if blend_input and os.path.exists(blend_input):
         cmd.append(blend_input)
-    cmd.extend(["--python", script_path])
+    cmd.extend(["--python-expr", pyexpr, "--python", script_path])
 
     env = os.environ.copy()
     if env_extra:
         env.update(env_extra)
+    # Force Blender's embedded Python to emit UTF-8 on stdout/stderr (Windows console
+    # otherwise uses the local codepage, e.g. GBK, producing mojibake when decoded).
+    env.setdefault("PYTHONIOENCODING", "utf-8")
 
+    proc = None
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
-                           encoding='utf-8', errors='replace', env=env)
-        output_lines = [l.strip() for l in r.stdout.split('\n') if l.strip()]
+        # stdin=DEVNULL is critical: when invoked from a long-lived server (e.g. MCP
+        # stdio transport), Blender inherits the pipe as stdin and, if the script
+        # errors, blocks waiting for input -> spurious timeout.
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                stdin=subprocess.DEVNULL, env=env)
+        try:
+            out, err = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            # communicate() timeout does NOT kill the child; do it explicitly so we
+            # don't leak a hung Blender process.
+            proc.kill()
+            out, err = proc.communicate()
+            return {"success": False, "error": f"Blender script timed out ({timeout}s)",
+                    "stderr": [l.strip() for l in _decode_blender_output(err).split('\n') if l.strip()][:10],
+                    "stdout": [l.strip() for l in _decode_blender_output(out).split('\n') if l.strip()][-20:]}
+
+        stdout_text = _decode_blender_output(out)
+        stderr_text = _decode_blender_output(err)
+        output_lines = [l.strip() for l in stdout_text.split('\n') if l.strip()]
         progress_lines = [l for l in output_lines if l.startswith("[BUILD_STEP]") or l.startswith("[ANIM_STEP]")]
-        if r.returncode != 0:
-            error_lines = [l.strip() for l in r.stderr.split('\n') if l.strip()][:10]
-            return {"success": False, "error": f"Blender exited with code {r.returncode}",
+
+        # Blender exits 0 even when the script raised; detect failure via stderr.
+        failed = proc.returncode != 0 or "Traceback" in stderr_text or "Error:" in stderr_text
+        if failed:
+            error_lines = [l.strip() for l in stderr_text.split('\n') if l.strip()][:10]
+            return {"success": False, "error": f"Blender script failed (code {proc.returncode})",
                     "stderr": error_lines, "stdout": output_lines[-20:], "progress": progress_lines}
-        return {"success": True, "returncode": 0, "output": output_lines, "progress": progress_lines}
-    except subprocess.TimeoutExpired:
-        return {"success": False, "error": f"Blender script timed out ({timeout}s)"}
+        return {"success": True, "returncode": proc.returncode, "output": output_lines, "progress": progress_lines}
     except Exception as e:
+        if proc is not None and proc.poll() is None:
+            proc.kill()
         return {"success": False, "error": str(e)}
 
 
