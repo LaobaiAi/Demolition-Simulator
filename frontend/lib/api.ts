@@ -90,6 +90,17 @@ export async function fetchScenario(name: string): Promise<ScenarioFull | null> 
   return raw as ScenarioFull;
 }
 
+export async function fetchScenarioPrompt(name: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${API_BASE}/prompts/${name}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data.content as string) || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function callTool(
   toolName: string,
   arguments_: Record<string, unknown>

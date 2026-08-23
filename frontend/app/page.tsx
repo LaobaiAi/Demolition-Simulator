@@ -6,7 +6,11 @@ import {
   Zap,
   Library,
   LayoutGrid,
+  FileText,
+  Heart,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { fetchTools, fetchScenarios, fetchScenario, type Tool, type ScenarioSummary, API_BASE } from "@/lib/api";
+import { fetchTools, fetchScenarios, fetchScenario, fetchScenarioPrompt, type Tool, type ScenarioSummary, API_BASE } from "@/lib/api";
 import { type StructuralMetrics, type DemolitionRound } from "@/components/mechanical-summary";
 import { FloatingToolbar } from "@/components/floating-toolbar";
 import { Sidebar } from "@/components/sidebar";
@@ -40,6 +44,7 @@ import {
 } from "@/lib/state-restore";
 import { safeGetItem, safeParseJson } from "@/lib/safe-storage";
 import { useConversations } from "@/hooks/use-conversations";
+import { useDemoFavorites } from "@/hooks/use-demo-favorites";
 import { useLlmSettings } from "@/hooks/use-llm-settings";
 import { useWebSocket, type WebSocketCallbacks } from "@/hooks/use-websocket";
 import { useErrorToast } from "@/hooks/use-error-toast";
@@ -63,6 +68,9 @@ const DEMOLISH_STRATEGIES: DemolishStrategy[] = [
   { key: "sequential", category: "topology" },
   { key: "llm", category: "mechanics" },
 ];
+
+// 内置 Demo（框架生成器流水线 / 3D 全流程 / BIM 拆除管线）不在后端 /scenarios 中，需单独计入实例库统计
+const BUILTIN_DEMO_COUNT = 3;
 
 const CONV_STORAGE = "xuanwu_conversations";
 const CONV_ACTIVE = "xuanwu_active_conv";
@@ -109,7 +117,7 @@ export default function Home() {
   const [vdStrategy, setVdStrategy] = useState("top_down");
   const [vdEffectsPreset, setVdEffectsPreset] = useState<"minimal" | "standard" | "cinematic">("standard");
   const [animSpeed, setAnimSpeed] = useState(1);
-  const [analysisMode, setAnalysisMode] = useState<"analysis" | "fast">("analysis");
+  const [analysisMode, setAnalysisMode] = useState<"analysis" | "fast" | "simulation">("analysis");
   const [animEffects, setAnimEffects] = useState<Record<string, boolean>>({
     cascade: true, explosion: true, dust: true, shake: true,
     buckling: true, fracture: true, flash: true, trail: true, bounce: true,
@@ -144,6 +152,10 @@ export default function Home() {
   const [demoStatus, setDemoStatus] = useState("");
   const demoRef = useRef<{ running: boolean; phase: string }>({ running: false, phase: "" });
   const [steamTurbinePreview, setSteamTurbinePreview] = useState<string | null>(null);
+  const [demoPromptName, setDemoPromptName] = useState<string | null>(null);
+  const [demoPromptContent, setDemoPromptContent] = useState<string | null>(null);
+  const [demoPromptLoading, setDemoPromptLoading] = useState(false);
+  const [demoPromptError, setDemoPromptError] = useState(false);
   const [effectsVideoOpen, setEffectsVideoOpen] = useState(false);
   const pipelineBuildResultRef = useRef<Record<string, unknown> | null>(null);
 
@@ -182,12 +194,12 @@ export default function Home() {
       .then((data) => {
         if (id !== scenariosFetchId.current) return;
         setScenarios(data);
-        setScenariosCount(data.length);
+        setScenariosCount(data.length + BUILTIN_DEMO_COUNT);
       })
       .catch(() => {
         if (id !== scenariosFetchId.current) return;
         setScenarios([]);
-        setScenariosCount(0);
+        setScenariosCount(BUILTIN_DEMO_COUNT);
       })
       .finally(() => {
         if (id === scenariosFetchId.current) setScenariosLoading(false);
@@ -197,6 +209,7 @@ export default function Home() {
   const conv = useConversations();
   const llm = useLlmSettings();
   const { ToastContainer } = useErrorToast();
+  const { favorites, isFavorite, toggleFavorite } = useDemoFavorites();
 
   useEffect(() => { langRef.current = llm.lang; }, [llm.lang]);
 
@@ -595,6 +608,17 @@ export default function Home() {
     }
   }, []);
 
+  const openDemoPrompt = useCallback(async (name: string) => {
+    setDemoPromptName(name);
+    setDemoPromptContent(null);
+    setDemoPromptError(false);
+    setDemoPromptLoading(true);
+    const content = await fetchScenarioPrompt(name);
+    setDemoPromptLoading(false);
+    if (content === null) setDemoPromptError(true);
+    else setDemoPromptContent(content);
+  }, []);
+
   useEffect(() => {
     if (!demoRef.current.running) return;
     if (!demolishReady) return;
@@ -618,7 +642,9 @@ export default function Home() {
 
   const quickActions = analysisMode === "fast"
     ? []
-    : [t("quick.2x2", llm.lang), t("quick.3x3", llm.lang), t("quick.2x4", llm.lang), t("quick.4x3", llm.lang), t("quick.1x2", llm.lang)];
+    : analysisMode === "simulation"
+      ? [t("quick.sim_collapse", llm.lang), t("quick.sim_displacement", llm.lang), t("quick.sim_progressive", llm.lang)]
+      : [t("quick.2x2", llm.lang), t("quick.3x3", llm.lang), t("quick.2x4", llm.lang), t("quick.4x3", llm.lang), t("quick.1x2", llm.lang)];
 
   const sendQuickAction = useCallback((action: string) => {
     if (status === "loading") return;
@@ -860,75 +886,180 @@ export default function Home() {
           <div className="flex-1 overflow-y-auto min-h-0 space-y-3 py-2">
             <ScenarioPicker lang={llm.lang} scenarios={scenarios} loading={scenariosLoading} disabled={demoRunning}
               hasWebSocket={wsConnected === "connected"} runningKey={runningDemoKey}
-              onLaunch={launchScenarioFromDemo} onStop={handleStopDemo} />
+              onLaunch={launchScenarioFromDemo} onStop={handleStopDemo}
+              favorites={favorites} onToggleFavorite={toggleFavorite} />
 
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 hover:border-primary/40 transition-colors">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <LayoutGrid className="h-4 w-4 text-primary" />{t("demo.frame_generator", llm.lang)}
-                  </h3>
-                  <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">{t("demo.frame_generator_desc", llm.lang)}</p>
-                  <div className="mt-3 flex items-center gap-3 text-[10px] text-muted-foreground/70">
-                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-violet-400" />Generate</span>
-                    <span>→</span>
-                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-blue-400" />Analyze</span>
-                    <span>→</span>
-                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-red-400" />Demolish</span>
+            {[
+              {
+                key: "frame_generator_pipeline",
+                node: (
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 hover:border-primary/40 transition-colors">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          <LayoutGrid className="h-4 w-4 text-primary" />{t("demo.frame_generator", llm.lang)}
+                        </h3>
+                        <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">{t("demo.frame_generator_desc", llm.lang)}</p>
+                        <div className="mt-3 flex items-center gap-3 text-[10px] text-muted-foreground/70">
+                          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-violet-400" />Generate</span>
+                          <span>→</span>
+                          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-blue-400" />Analyze</span>
+                          <span>→</span>
+                          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-red-400" />Demolish</span>
+                        </div>
+                      </div>
+                      <div className="shrink-0 flex flex-row items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => toggleFavorite("frame_generator_pipeline")}
+                          className={`rounded-md p-1 -m-1 transition-colors ${
+                            isFavorite("frame_generator_pipeline")
+                              ? "text-red-500 hover:text-red-600"
+                              : "text-muted-foreground/50 hover:text-red-400"
+                          }`}
+                          title={isFavorite("frame_generator_pipeline") ? t("sp.unfavorite", llm.lang) : t("sp.favorite", llm.lang)}
+                          aria-label={isFavorite("frame_generator_pipeline") ? t("sp.unfavorite", llm.lang) : t("sp.favorite", llm.lang)}
+                        >
+                          <Heart className={`h-4 w-4 ${isFavorite("frame_generator_pipeline") ? "fill-current" : ""}`} />
+                        </button>
+                        <Button onClick={() => openDemoPrompt("frame_generator_pipeline")} variant="outline" size="sm" className="h-7 text-xs">
+                          <FileText className="h-3.5 w-3.5 mr-1.5" />{t("sp.prompt_view", llm.lang)}
+                        </Button>
+                        <Button onClick={runFrameGeneratorDemo} disabled={demoRunning} size="sm">
+                          {demoRunning ? (<><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />{t("demo.running", llm.lang)}</>)
+                            : (<><Zap className="h-3.5 w-3.5 mr-1.5" />{t("demo.run", llm.lang)}</>)}
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <Button onClick={runFrameGeneratorDemo} disabled={demoRunning} className="shrink-0" size="sm">
-                  {demoRunning ? (<><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />{t("demo.running", llm.lang)}</>)
-                    : (<><Zap className="h-3.5 w-3.5 mr-1.5" />{t("demo.run", llm.lang)}</>)}
-                </Button>
-              </div>
-            </div>
+                ),
+              },
+              {
+                key: "full_3d_frame_flow",
+                node: (
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 hover:border-primary/40 transition-colors">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          <LayoutGrid className="h-4 w-4 text-indigo-400" />{t("demo.3d_full_flow", llm.lang)}
+                        </h3>
+                        <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">{t("demo.3d_full_flow_desc", llm.lang)}</p>
+                        <div className="mt-3 flex items-center gap-3 text-[10px] text-muted-foreground/70">
+                          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />3D Model</span>
+                          <span>→</span>
+                          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-blue-400" />Analyze</span>
+                          <span>→</span>
+                          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-400" />ID Critical</span>
+                          <span>→</span>
+                          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-red-400" />Demolish</span>
+                        </div>
+                      </div>
+                      <div className="shrink-0 flex flex-row items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => toggleFavorite("full_3d_frame_flow")}
+                          className={`rounded-md p-1 -m-1 transition-colors ${
+                            isFavorite("full_3d_frame_flow")
+                              ? "text-red-500 hover:text-red-600"
+                              : "text-muted-foreground/50 hover:text-red-400"
+                          }`}
+                          title={isFavorite("full_3d_frame_flow") ? t("sp.unfavorite", llm.lang) : t("sp.favorite", llm.lang)}
+                          aria-label={isFavorite("full_3d_frame_flow") ? t("sp.unfavorite", llm.lang) : t("sp.favorite", llm.lang)}
+                        >
+                          <Heart className={`h-4 w-4 ${isFavorite("full_3d_frame_flow") ? "fill-current" : ""}`} />
+                        </button>
+                        <Button onClick={() => openDemoPrompt("full_3d_frame_flow")} variant="outline" size="sm" className="h-7 text-xs">
+                          <FileText className="h-3.5 w-3.5 mr-1.5" />{t("sp.prompt_view", llm.lang)}
+                        </Button>
+                        <Button onClick={run3dFullFlowDemo} disabled={demoRunning} size="sm">
+                          {demoRunning ? (<><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />{t("demo.running", llm.lang)}</>)
+                            : (<><Zap className="h-3.5 w-3.5 mr-1.5" />{t("demo.run", llm.lang)}</>)}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                key: "bim_demolition_pipeline",
+                node: (
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 hover:border-emerald-500/40 transition-colors">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          <Library className="h-4 w-4 text-emerald-400" />{t("demo.bim_demolition", llm.lang)}
+                        </h3>
+                        <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">{t("demo.bim_demolition_desc", llm.lang)}</p>
+                        <div className="mt-3 flex items-center gap-3 text-[10px] text-muted-foreground/70">
+                          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />BIM Model</span>
+                          <span>→</span>
+                          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-400" />Plan</span>
+                          <span>→</span>
+                          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-violet-400" />Timeline</span>
+                        </div>
+                      </div>
+                      <div className="shrink-0 flex flex-row items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => toggleFavorite("bim_demolition_pipeline")}
+                          className={`rounded-md p-1 -m-1 transition-colors ${
+                            isFavorite("bim_demolition_pipeline")
+                              ? "text-red-500 hover:text-red-600"
+                              : "text-muted-foreground/50 hover:text-red-400"
+                          }`}
+                          title={isFavorite("bim_demolition_pipeline") ? t("sp.unfavorite", llm.lang) : t("sp.favorite", llm.lang)}
+                          aria-label={isFavorite("bim_demolition_pipeline") ? t("sp.unfavorite", llm.lang) : t("sp.favorite", llm.lang)}
+                        >
+                          <Heart className={`h-4 w-4 ${isFavorite("bim_demolition_pipeline") ? "fill-current" : ""}`} />
+                        </button>
+                        <Button onClick={() => openDemoPrompt("bim_demolition_pipeline")} variant="outline" size="sm" className="h-7 text-xs">
+                          <FileText className="h-3.5 w-3.5 mr-1.5" />{t("sp.prompt_view", llm.lang)}
+                        </Button>
+                        <Button onClick={runBimDemolitionDemo} disabled={demoRunning} size="sm">
+                          {demoRunning ? (<><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />{t("demo.running", llm.lang)}</>)
+                            : (<><Zap className="h-3.5 w-3.5 mr-1.5" />{t("demo.run", llm.lang)}</>)}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ),
+              },
+            ]
+              .sort((a, b) => Number(isFavorite(b.key)) - Number(isFavorite(a.key)))
+              .map((d) => (
+                <div key={d.key}>{d.node}</div>
+              ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 hover:border-primary/40 transition-colors">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <LayoutGrid className="h-4 w-4 text-indigo-400" />{t("demo.3d_full_flow", llm.lang)}
-                  </h3>
-                  <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">{t("demo.3d_full_flow_desc", llm.lang)}</p>
-                  <div className="mt-3 flex items-center gap-3 text-[10px] text-muted-foreground/70">
-                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />3D Model</span>
-                    <span>→</span>
-                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-blue-400" />Analyze</span>
-                    <span>→</span>
-                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-400" />ID Critical</span>
-                    <span>→</span>
-                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-red-400" />Demolish</span>
-                  </div>
-                </div>
-                <Button onClick={run3dFullFlowDemo} disabled={demoRunning} className="shrink-0" size="sm">
-                  {demoRunning ? (<><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />{t("demo.running", llm.lang)}</>)
-                    : (<><Zap className="h-3.5 w-3.5 mr-1.5" />{t("demo.run", llm.lang)}</>)}
-                </Button>
+      {/* Demo prompt viewer dialog */}
+      <Dialog open={demoPromptName !== null} onOpenChange={(open) => { if (!open) setDemoPromptName(null); }}>
+        <DialogContent className="border-border max-w-3xl max-h-[80vh] flex flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-primary" />
+              {demoPromptName ? demoPromptName : ""}
+              <span className="text-muted-foreground font-normal text-sm">— {t("sp.prompt", llm.lang)}</span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1 text-sm leading-relaxed">
+            {demoPromptLoading && (
+              <div className="flex items-center justify-center py-10 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                {t("sp.prompt_loading", llm.lang)}
               </div>
-            </div>
-
-            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 hover:border-emerald-500/40 transition-colors">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <Library className="h-4 w-4 text-emerald-400" />{t("demo.bim_demolition", llm.lang)}
-                  </h3>
-                  <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">{t("demo.bim_demolition_desc", llm.lang)}</p>
-                  <div className="mt-3 flex items-center gap-3 text-[10px] text-muted-foreground/70">
-                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />BIM Model</span>
-                    <span>→</span>
-                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-400" />Plan</span>
-                    <span>→</span>
-                    <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-violet-400" />Timeline</span>
-                  </div>
-                </div>
-                <Button onClick={runBimDemolitionDemo} disabled={demoRunning} className="shrink-0" size="sm">
-                  {demoRunning ? (<><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />{t("demo.running", llm.lang)}</>)
-                    : (<><Zap className="h-3.5 w-3.5 mr-1.5" />{t("demo.run", llm.lang)}</>)}
-                </Button>
+            )}
+            {!demoPromptLoading && demoPromptError && (
+              <p className="text-sm text-muted-foreground py-10 text-center">
+                {t("sp.prompt_not_found", llm.lang)}
+              </p>
+            )}
+            {!demoPromptLoading && !demoPromptError && demoPromptContent !== null && (
+              <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{demoPromptContent}</ReactMarkdown>
               </div>
-            </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
