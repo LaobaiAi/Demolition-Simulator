@@ -83,3 +83,19 @@ caiao_servers/exports/effects/*
 
 # Simulation frame renders (generated artifacts)
 **/frames/
+
+# Abaqus runtime artifacts
+ABQcaeG.*.exception
+abq.app_cache
+*.rpy
+*.rpy.*
+
+# Abaqus probe / one-off experiment scripts
+scripts/probe_*.py
+
+# Abaqus experiment directories
+scripts/_native_render/
+scripts/_tower_frames/
+scripts/video_calibration/
+abaqus_projects/
+todo/
