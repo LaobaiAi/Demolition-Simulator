@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "powershell -NoProfile -ExecutionPolicy Bypass -File \"../_cleanup.ps1\" -Quiet",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
