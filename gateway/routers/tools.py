@@ -223,3 +223,26 @@ async def get_scenario(name: str, request: Request):
         return JSONResponse({"error": "Hub not initialized"}, status_code=503)
     result = await hub.call_tool("get_scenario", {"name": name})
     return result
+
+
+PROMPTS_DIR = PROJECT_DIR / "demos" / "实例库prompt"
+
+
+@router.get("/prompts")
+async def list_prompts():
+    """List all scenario prompt files available in demos/实例库prompt/."""
+    if not PROMPTS_DIR.exists():
+        return {"prompts": []}
+    names = sorted(p.stem for p in PROMPTS_DIR.glob("*.md"))
+    return {"prompts": names}
+
+
+@router.get("/prompts/{name}")
+async def get_prompt(name: str):
+    """Return the markdown prompt document for a scenario."""
+    if not re.fullmatch(r"[a-zA-Z0-9_-]+", name):
+        return JSONResponse({"error": "invalid prompt name"}, status_code=400)
+    fpath = PROMPTS_DIR / f"{name}.md"
+    if not fpath.exists():
+        return JSONResponse({"error": f"prompt not found: {name}"}, status_code=404)
+    return {"name": name, "content": fpath.read_text(encoding="utf-8", errors="replace")}
