@@ -40,7 +40,6 @@ json.dumps = _patched_dumps
 # ---------------------------------------------------------------------------
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -374,28 +373,93 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="XuanwuAI Gateway", version="0.2.4", lifespan=lifespan)
 
+# ── Pure-ASGI middleware (avoids Starlette BaseHTTPMiddleware's collapsing
+# task group, which conflicts with long-running MCP tool calls and crashes
+# with "Attempted to exit a cancel scope ..." on slow tools like Blender). ──
+
+
+class _CORSPureMiddleware:
+    """CORS replacement implemented as pure ASGI."""
+
+    def __init__(self, app, allow_origins=None, allow_credentials=True,
+                 allow_methods=None, allow_headers=None):
+        self.app = app
+        self.allow_origins = allow_origins or ["*"]
+        self.allow_credentials = allow_credentials
+        self.allow_methods = allow_methods or ["*"]
+        self.allow_headers = allow_headers or ["*"]
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        headers = scope.get("headers", [])
+        origin = next((v.decode("latin-1") for k, v in headers if k == b"origin"), None)
+        # Preflight request
+        if scope["method"] == "OPTIONS" and origin and any(
+            k == b"access-control-request-method" for k, _ in headers
+        ):
+            resp_headers = [
+                (b"access-control-allow-origin", origin.encode("latin-1")),
+                (b"access-control-allow-methods", ", ".join(self.allow_methods).encode()),
+                (b"access-control-allow-headers", ", ".join(self.allow_headers).encode()),
+                (b"access-control-max-age", b"600"),
+                (b"content-length", b"0"),
+            ]
+            if self.allow_credentials:
+                resp_headers.append((b"access-control-allow-credentials", b"true"))
+            await send({"type": "http.response.start", "status": 200, "headers": resp_headers})
+            await send({"type": "http.response.body", "body": b""})
+            return
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start" and origin:
+                if self.allow_origins == ["*"] or origin in self.allow_origins:
+                    new_headers = list(message.get("headers", []))
+                    if not any(k == b"access-control-allow-origin" for k, _ in new_headers):
+                        new_headers.append((b"access-control-allow-origin", origin.encode("latin-1")))
+                        if self.allow_credentials:
+                            new_headers.append((b"access-control-allow-credentials", b"true"))
+                    message["headers"] = new_headers
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+
+class _BodySizeLimitPureMiddleware:
+    """Request body size limit (10 MB) as pure ASGI."""
+
+    MAX_BODY = 10 * 1024 * 1024
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            cl = next((int(v) for k, v in scope.get("headers", []) if k == b"content-length"), 0)
+            if cl > self.MAX_BODY:
+                body = b'{"detail": "Request body too large"}'
+                await send({
+                    "type": "http.response.start",
+                    "status": 413,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"content-length", str(len(body)).encode()),
+                    ],
+                })
+                await send({"type": "http.response.body", "body": body})
+                return
+        await self.app(scope, receive, send)
+
+
 app.add_middleware(
-    CORSMiddleware,
+    _CORSPureMiddleware,
     allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ── Request body size limit (10 MB) ───────────────────────────────────────
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse as _JSONResponse
-
-
-class _BodySizeLimitMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        cl = request.headers.get("content-length")
-        if cl and int(cl) > 10 * 1024 * 1024:
-            return _JSONResponse({"detail": "Request body too large"}, status_code=413)
-        return await call_next(request)
-
-
-app.add_middleware(_BodySizeLimitMiddleware)
+app.add_middleware(_BodySizeLimitPureMiddleware)
 
 # ── Serve exported IFC files (from bim_model_server) ─────────────────────
 _exports_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "caiao_servers", "exports")
