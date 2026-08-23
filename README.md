@@ -265,11 +265,18 @@ are merged into a single call. This not only reduces the LLM's decision cost, bu
 
 ### One-Click Launch (Windows)
 
-```bat
-start.bat
+Double-click **`XuanwuAI Launcher.bat`** (recommended) — select `1` to launch Gateway + Frontend, or `2` to also launch Unity 3D. All services start minimized with memory caps; no IDE required.
+
+Or run the unified script from any shell:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\start_services.ps1          # Gateway + Frontend
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\start_services.ps1 -Unity   # + Unity 3D
 ```
 
-Double-click `start.bat` — auto-detects Python & Node.js, launches Gateway + Frontend, opens browser. No IDE required.
+Both entry points clean up leftover processes first, then start the Gateway (venv + watchdog) and the Frontend (Next.js dev), and poll health until ready.
+
+> **Memory protection:** `NODE_OPTIONS=--max-old-space-size=1024` caps each Node worker at 1GB to prevent OOM crashes on 16GB machines.
 
 ### Prerequisites
 
@@ -304,7 +311,7 @@ python3.14 -m venv venv
 venv\Scripts\activate        # Windows
 # source venv/bin/activate   # Linux/macOS
 pip install -r requirements.txt
-python main.py               # → http://localhost:8000
+python watchdog.py           # → http://localhost:8000 (auto-restarts gateway on failure)
 ```
 
 **OpenSees Server (Python 3.12, Windows only):**

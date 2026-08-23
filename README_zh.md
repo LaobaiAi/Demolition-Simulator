@@ -262,6 +262,21 @@ CAIAO 协议是本项目的**统一服务抽象**——每个求解器、模拟�
 - **Node.js 20+**
 - **Unity Editor 2021.3 LTS**（可选，用于 3D 模拟）
 
+### 一键启动（Windows 推荐）
+
+双击 **`XuanwuAI Launcher.bat`**，选择 `1` 启动 Gateway + 前端，或选择 `2` 同时启动 Unity 3D。所有服务以最小化窗口启动并带内存上限，无需 IDE。
+
+或使用统一启动脚本（任意 shell 均可运行）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\start_services.ps1          # Gateway + 前端
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\start_services.ps1 -Unity   # + Unity 3D
+```
+
+两个入口都会先清理残留进程，再启动 Gateway（venv + watchdog）和前端（Next.js dev），最后轮询健康检查直到就绪。
+
+> **内存保护：** `NODE_OPTIONS=--max-old-space-size=1024` 将每个 Node 工作进程上限设为 1GB，防止 16GB 内存机器上 Turbopack 多 worker 并发编译导致 OOM 崩溃。
+
 ### 1. 克隆与配置
 
 ```bash
@@ -287,7 +302,7 @@ python -m venv venv
 venv\Scripts\activate        # Windows
 # source venv/bin/activate   # Linux/macOS
 pip install -r requirements.txt
-python main.py               # → http://localhost:8000
+python watchdog.py           # → http://localhost:8000（失败自动重启 gateway）
 ```
 
 ### 3. 启动前端

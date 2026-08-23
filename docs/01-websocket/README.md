@@ -108,7 +108,7 @@ UI 展示：
 `gateway/watchdog.py` — 独立进程监控 gateway：
 - 每 15s 检查 `GET /health`
 - 如果进程退出或健康检查失败，自动重启
-- 启动脚本 `start_dev.bat` 和 `XuanwuAI Launcher.bat` 已集成
+- 统一启动入口 `scripts/start_services.ps1`（由 `XuanwuAI Launcher.bat` 菜单调用）已集成
 
 ```
 [watchdog] Starting gateway watchdog...

@@ -3,16 +3,16 @@
 ## 启动方式
 
 ### 开发模式（推荐）
-```bash
-start_dev.bat
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\start_services.ps1
 ```
-启动 Gateway (watchdog) + Frontend
+启动 Gateway (watchdog) + Frontend，并自动清理残留进程、轮询健康检查
 
 ### 完整模式（含 Unity）
 ```bash
 XuanwuAI Launcher.bat
 ```
-选择对应选项启动
+菜单选择：`1` = Gateway + Frontend，`2` = 再加 Unity 3D（内部委托 `scripts/start_services.ps1 -Unity`）
 
 ### 手动启动
 ```bash
