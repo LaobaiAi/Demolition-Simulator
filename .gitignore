@@ -80,3 +80,6 @@ blender_pipeline/blender_portable/
 
 # Effects projects (generated artifacts)
 caiao_servers/exports/effects/*
+
+# Simulation frame renders (generated artifacts)
+**/frames/
