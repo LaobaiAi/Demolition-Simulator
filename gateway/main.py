@@ -213,13 +213,13 @@ async def lifespan(app: FastAPI):
 
     if not _port_open(5007):
         try:
-            from routers.blender import _find_blender_exe, _get_frame_server_script
-            blender_exe = _find_blender_exe()
-            script = _get_frame_server_script()
-            if blender_exe and script:
+            from routers.blender import _build_frame_server_cmd
+            cmd = _build_frame_server_cmd()
+            if cmd:
                 proc = subprocess.Popen(
-                    [blender_exe, "--python", script],
+                    cmd,
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
                 )
                 app.state.blender_process = proc
                 logger.info(f"Auto-launched Blender (PID {proc.pid})")
@@ -326,13 +326,13 @@ async def lifespan(app: FastAPI):
                     _consecutive_dead = 0
                     continue
 
-                from routers.blender import _find_blender_exe, _get_frame_server_script
-                blender_exe = _find_blender_exe()
-                script = _get_frame_server_script()
-                if blender_exe and script:
+                from routers.blender import _build_frame_server_cmd
+                cmd = _build_frame_server_cmd()
+                if cmd:
                     proc = subprocess.Popen(
-                        [blender_exe, "--python", script],
+                        cmd,
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                        stdin=subprocess.DEVNULL,
                     )
                     app.state.blender_process = proc
                     _consecutive_dead = 0

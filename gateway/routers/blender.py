@@ -43,6 +43,24 @@ def _find_blender_exe() -> str | None:
     return find_blender()
 
 
+def _build_frame_server_cmd() -> list[str] | None:
+    """Build the Blender launch command for frame_server.py.
+
+    Blender --python does NOT add the script's dir to sys.path, so without this
+    injection `from _common import ...` would fail and frame_server would silently
+    fall back to a degraded implementation (no materials / gradient sky).
+    NOTE: --python-expr accepts a SINGLE line only.
+    """
+    blender_exe = _find_blender_exe()
+    script = _get_frame_server_script()
+    if not blender_exe or not script:
+        return None
+    _init_blender_pipeline_dir()
+    scripts_dir = os.path.join(BLENDER_PIPELINE_DIR, "scripts")
+    pyexpr = "import sys; sys.path.insert(0, %r)" % scripts_dir
+    return [blender_exe, "--python-expr", pyexpr, "--python", script]
+
+
 def _check_port(port: int) -> bool:
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -100,12 +118,15 @@ async def launch_blender(request: Request):
         )
 
     try:
-        cmd = [blender_exe, "--python", script]
+        cmd = _build_frame_server_cmd()
+        if not cmd:
+            return JSONResponse({"status": "error", "message": "Blender/frame_server not found"}, status_code=500)
         logger.info(f"Launching Blender: {' '.join(cmd)}")
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
             cwd=os.path.dirname(blender_exe),
         )
         request.app.state.blender_process = proc
