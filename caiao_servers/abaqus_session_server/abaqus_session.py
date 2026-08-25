@@ -1240,12 +1240,23 @@ def _resolve_launcher():
 
 
 def _cleanup_job_files(job_name):
+    import shutil
+    import time
+    archive = os.path.join(os.getcwd(), "archive_" + time.strftime("%Y%m%d_%H%M%S"))
+    moved = False
     for f in os.listdir(os.getcwd()):
         if f.startswith(job_name + ".") and not f.endswith(".inp"):
+            src = os.path.join(os.getcwd(), f)
             try:
-                os.remove(os.path.join(os.getcwd(), f))
+                if not moved:
+                    os.makedirs(archive, exist_ok=True)
+                    moved = True
+                shutil.move(src, os.path.join(archive, f))
             except OSError:
-                pass
+                try:
+                    os.remove(src)
+                except OSError:
+                    pass
 
 
 def _submit_job_from_inp(inp_path, job_name, cpus, memory):
@@ -1292,7 +1303,7 @@ def _handle_setup_tower_collapse(args):
         "opening_angle_deg": float(args.get("opening_angle_deg", 98.0)),
         "opening_center_angle_deg": float(args.get("opening_center_angle_deg", 0.0)),
         "settle_time": float(args.get("settle_time", 1.0)),
-        "time_period": float(args.get("time_period", 7.0)),
+        "time_period": float(args.get("time_period", 12.0)),
         "cpus": int(args.get("cpus", 4)),
         "memory": int(args.get("memory_percent", 80)),
     }
