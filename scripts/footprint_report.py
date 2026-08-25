@@ -1,8 +1,9 @@
 """Abaqus kernel noGUI script: collapse-footprint report from the final ODB frame.
 
 Tower instance only (skip the GROUND plate). Tower axis is Y: horizontal plane
-is XZ, vertical is Y. Reports max radius, P95 radius, direction of the farthest
-node, debris COM direction/distance, and final height vs initial geometry.
+is XZ, vertical is Y. Reports max radius, P95 radius, direction of the
+max-displacement node (matching server-side _compute_footprint), debris COM
+direction/distance, and final height vs initial geometry.
 
 Run: abq2026.bat cae noGUI=footprint_report.py
 """
@@ -34,6 +35,11 @@ def _radii(pts):
     return [math.hypot(x, z) for x, y, z in pts]
 
 
+def _displacements(init, last):
+    return [math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2)
+            for a, b in zip(init, last)]
+
+
 def _azimuth(pts, i):
     x, z = pts[i][0], pts[i][2]
     return (math.degrees(math.atan2(z, x)) + 360.0) % 360.0
@@ -50,9 +56,10 @@ def main():
 
     r0 = _radii(init)
     r = _radii(last)
+    disp = _displacements(init, last)
     n = len(r)
     r_max = max(r)
-    i_max = r.index(r_max)
+    i_max = disp.index(max(disp))
     p95 = sorted(r)[int(0.95 * (n - 1))]
     sx = sz = 0.0
     for p in last:
