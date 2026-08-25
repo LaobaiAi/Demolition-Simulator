@@ -479,8 +479,28 @@ async def health():
 
 # --- WebSocket for Chat ---
 
+_WS_ALLOWED_ORIGINS = {
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+}
+
+
+def _check_ws_origin(websocket: WebSocket) -> bool:
+    headers = dict(websocket.scope.get("headers") or [])
+    origin = headers.get(b"origin")
+    if origin is None:
+        return True
+    return origin.decode("latin-1") in _WS_ALLOWED_ORIGINS
+
+
 @app.websocket("/ws/chat")
 async def ws_chat(websocket: WebSocket):
+    if not _check_ws_origin(websocket):
+        logger.warning("Rejected WebSocket connection from untrusted origin")
+        await websocket.close(code=4403)
+        return
     await websocket.accept()
 
     async def _safe_send(data: dict[str, Any]) -> None:
@@ -683,16 +703,22 @@ def _startup_self_heal() -> None:
     # NOTE: Do NOT kill watchdog.py processes here — that previously ended up
     # killing this gateway's own parent watchdog (taskkill /F /T kills the
     # whole tree), which made the gateway unable to start under the watchdog.
-    # Port cleanup below is sufficient for stale-instance conflicts.
-    killed = _ps_run(
+    # Only kill processes whose command line verifiably points at this
+    # project's gateway main.py; anything else is skipped with a warning.
+    script = (
         "Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue "
-        "| ForEach-Object { $_.OwningProcess; taskkill /F /T /PID $_.OwningProcess 2>$null }",
-        capture=True,
+        "| Select-Object -ExpandProperty OwningProcess -Unique "
+        "| ForEach-Object { "
+        "$p = Get-CimInstance Win32_Process -Filter \"ProcessId=$_\" -ErrorAction SilentlyContinue; "
+        "if ($p -and $p.CommandLine -match 'main\\.py' -and $p.CommandLine -match 'Demolition-Simulator') { "
+        "Write-Output \"killed $_\"; taskkill /F /T /PID $_ 2>$null } "
+        "elseif ($p) { Write-Output \"skipped $_: $($p.CommandLine)\" } }"
     )
-    if killed:
-        print("[startup] killed stale process on port 8000")
-    else:
+    out = _ps_run(script, capture=True)
+    if not out:
         print("[startup] port 8000 free")
+    for line in out.splitlines():
+        print(f"[startup] {line}")
 
 
 if __name__ == "__main__":
