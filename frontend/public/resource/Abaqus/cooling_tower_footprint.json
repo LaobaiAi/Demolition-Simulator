@@ -1,0 +1,19 @@
+{
+  "odb": "C:\\Users\\99005\\AppData\\Local\\Temp\\tower_collapse_4shdyzvy\\tower_job_run.odb",
+  "steps": [
+    "TowerGravity",
+    "Collapse"
+  ],
+  "frame_time_s": 7.0,
+  "tower_nodes": 9563,
+  "max_radius_m": 29.741,
+  "p95_radius_m": 27.739,
+  "direction_deg": 1.97,
+  "com_radius_m": 2.162,
+  "com_direction_deg": 358.76,
+  "tower_base_radius_m": 28.5,
+  "init_height_m": 70.0,
+  "final_height_m": 69.85099792480469,
+  "ratio_max": 1.044,
+  "ratio_p95": 0.973
+}

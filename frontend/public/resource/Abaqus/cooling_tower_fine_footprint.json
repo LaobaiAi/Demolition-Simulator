@@ -1,0 +1,19 @@
+{
+  "odb": "D:\\GitHub Dev\\Demolition-Simulator\\abaqus_projects\\cooling_tower_fine\\results\\tower_job_run.odb",
+  "steps": [
+    "TowerGravity",
+    "Collapse"
+  ],
+  "frame_time_s": 7.0,
+  "tower_nodes": 37897,
+  "max_radius_m": 333.383,
+  "p95_radius_m": 61.968,
+  "direction_deg": 351.79,
+  "com_radius_m": 15.395,
+  "com_direction_deg": 359.58,
+  "tower_base_radius_m": 28.5,
+  "init_height_m": 70.0,
+  "final_height_m": 213.22900390625,
+  "ratio_max": 11.698,
+  "ratio_p95": 2.174
+}

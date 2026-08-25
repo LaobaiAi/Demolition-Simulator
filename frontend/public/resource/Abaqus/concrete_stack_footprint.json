@@ -1,0 +1,19 @@
+{
+  "odb": "D:\\GitHub Dev\\Demolition-Simulator\\abaqus_projects\\concrete_stack_run17\\results\\stack_job_run.odb",
+  "steps": [
+    "TowerGravity",
+    "Collapse"
+  ],
+  "frame_time_s": 10.0,
+  "tower_nodes": 2908,
+  "max_radius_m": 203.536,
+  "p95_radius_m": 83.578,
+  "direction_deg": 42.87,
+  "com_radius_m": 14.834,
+  "com_direction_deg": 358.52,
+  "tower_base_radius_m": 4.5,
+  "init_height_m": 100.0,
+  "final_height_m": 94.88400268554688,
+  "ratio_max": 45.23,
+  "ratio_p95": 18.573
+}
