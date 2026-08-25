@@ -221,6 +221,7 @@ Abaqus is a heavy FEM package: users may not have it installed, and launching it
 | stop_collapse | Terminate a running solve (kill solver + remove .lck) |
 | extract_collapse_frames | Extract displacement frames to data.npz (1-3 min, after solve completes) |
 | render_collapse_video | Render 2 MP4s + footprint to the frontend Abaqus panel (3-8 min, no Abaqus license needed) |
+| stack_run_analysis | Chemical-concrete chimney stack01 (H=100m) self-weight collapse — one-shot analysis on the accepted run-39 baseline; BLOCKS 5-15 min, returns JSON with PASS/FAIL acceptance; no_solve=true is a seconds-level dry run |
 
 ## WORKFLOW
 1. Understand the request — if not an explicit simulation request, answer directly without tools.
@@ -233,6 +234,7 @@ Abaqus is a heavy FEM package: users may not have it installed, and launching it
    f. Summarize: videos now visible in the frontend Abaqus tab, footprint (max/p95 radius, direction, final height) shown in the panel.
 3. If the user asks to abort at any point, call stop_collapse(job_id).
 4. For non-tower collapse requests: gather building config, then setup_collapse or build_factory → mesh → explicit step → gravity → submit_job → get_max_displacement.
+5. Chimney collapse (chemical-concrete stack, instance stack01, H=100m, baseline = accepted run 39): call stack_run_analysis ONCE with a NEW run_name (letters/digits/underscore; must not exist — a run is final). Defaults reproduce the baseline (sim_time=7.6 display regime, ~4 min solve). For acceptance numbers (deletion 15-17%, p95 55-66m) pass sim_time=12.0 (~7 min solve). The call BLOCKS until done — never call it twice for the same request; a rerun means a new run_name. Optionally pass no_solve=true for a seconds-level dry run (INP assembled + validated, no solver) to check parameters first. Parameter details: docs/instances/stack01/prompt.md.
 
 ## RULES
 1. ONLY use the tools listed above.
@@ -243,6 +245,7 @@ Abaqus is a heavy FEM package: users may not have it installed, and launching it
 6. NEVER call setup_tower_collapse twice for the same request — a successful run is final; only rerun if the user asks to change parameters (restarts the 6-10 min solve).
 7. When a tool returns {"error": ...}, read the message text first. Retry once for timeout-class errors; otherwise report honestly.
 8. The solve runs in the background between calls — never block; always poll with get_collapse_status.
+9. stack_run_analysis blocks for minutes — do not call other tools in parallel with it; one run per user request.
 """
 
 REFERENCE_DATA = """
@@ -416,7 +419,9 @@ class LLMEngine:
                     continue
                 if "401" in error_msg or "auth" in error_msg.lower():
                     return {"content": "Authentication failed. Please check your API key.", "tool_calls": None, "raw": None}
-                if "model_not_found" in error_msg.lower() or "model" in error_msg.lower() and "not" in error_msg.lower():
+                if "model_not_found" in error_msg.lower() or (
+                    "model" in error_msg.lower() and "does not exist" in error_msg.lower()
+                ):
                     return {"content": f"Model '{self.model}' is not available. Check your model name and API provider.", "tool_calls": None, "raw": None}
                 if attempt == max_retries - 1:
                     return {"content": f"LLM error: {error_msg}", "tool_calls": None, "raw": None}
