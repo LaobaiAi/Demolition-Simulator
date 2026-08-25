@@ -46,7 +46,10 @@ async def configure_llm(req: LLMSettingsRequest, request: Request):
     hub = request.app.state.hub
     if llm is None:
         # Lazy init: create LLMEngine on first save
-        from gateway.llm_engine import LLMEngine
+        try:
+            from gateway.llm_engine import LLMEngine
+        except ImportError:
+            from llm_engine import LLMEngine
         try:
             llm = LLMEngine(
                 model=req.model or "gpt-4o",
@@ -63,7 +66,10 @@ async def configure_llm(req: LLMSettingsRequest, request: Request):
         llm.configure(model=req.model, api_key=req.api_key, base_url=req.base_url, thinking_enabled=req.thinking_enabled)
 
     # ── Recreate agent + reconfigure memory (kept in sync with LLM config) ──
-    from gateway.agent_loop import AgentLoop
+    try:
+        from gateway.agent_loop import AgentLoop
+    except ImportError:
+        from agent_loop import AgentLoop
     agent = AgentLoop(llm, hub)
     request.app.state.agent = agent
 
@@ -79,7 +85,10 @@ async def configure_llm(req: LLMSettingsRequest, request: Request):
         logger.warning(f"Failed to save LLM config: {e}")
 
     # ── Sync main module globals (used by WebSocket handler directly) ──
-    import gateway.main as main_module
+    try:
+        import gateway.main as main_module
+    except ImportError:
+        import main as main_module
     main_module.agent = agent
     main_module.llm_engine = llm
     main_module.memory = memory

@@ -53,8 +53,10 @@ class SessionMemory:
                 with open(MEMORY_FILE, "r", encoding="utf-8") as f:
                     all_data = json.load(f)
             all_data[self.user_id] = self._local
-            with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+            tmp_file = MEMORY_FILE + ".tmp"
+            with open(tmp_file, "w", encoding="utf-8") as f:
                 json.dump(all_data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_file, MEMORY_FILE)
         except Exception as e:
             logger.warning(f"Failed to save local memory: {e}")
 
