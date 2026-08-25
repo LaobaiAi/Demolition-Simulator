@@ -36,6 +36,7 @@ BOOT_TIMEOUT_S = 180
 GLOBAL_BUDGET_S = 555
 SOLVE_HARD_CAP_S = 380
 MONITOR_INTERVAL_S = 30
+JOB_START_OBSERVE_S = 120
 TOTAL_SIM_TIME = 8.0
 JOB_NAME = "tower_job_run"
 TOWER_NAME = "Tower"
@@ -388,6 +389,48 @@ def _job_status(workdir):
             if len(status["details"]) >= 6:
                 break
     return status
+
+
+def _wait_job_start(workdir, deadline):
+    base = os.path.join(workdir, JOB_NAME)
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < JOB_START_OBSERVE_S and time.monotonic() < deadline:
+        p = _job_progress(workdir)
+        if p["lck"] or p["odb"] or p["msg_size"] or os.path.exists(base + ".sta"):
+            return True
+        time.sleep(10.0)
+    return False
+
+
+def _wait_primary_solve(workdir, launcher, deadline):
+    """Block until the kernel-submitted job completes or the budget expires,
+    mirroring the fallback monitor (progress log + watchdog + terminate)."""
+    last_report = 0.0
+    solve_start = None
+    while time.monotonic() < deadline:
+        if _sta_completed(workdir):
+            break
+        p = _job_progress(workdir)
+        if p["lck"] or p["odb"] or p["msg_size"]:
+            if solve_start is None:
+                solve_start = time.monotonic()
+                _log("      [solve] started (job files appeared)")
+            if time.monotonic() - last_report >= MONITOR_INTERVAL_S:
+                last_report = time.monotonic()
+                _log("      [solve] lck={} odb={} step_time={} total_time={} "
+                     "increments={} msg={}B mem={}MB".format(
+                         p["lck"], p["odb"], p["step_time"], p["total_time"],
+                         p["increments"], p["msg_size"], _mem_mb()))
+                verdict = _watchdog(time.monotonic() - solve_start, p)
+                if verdict:
+                    _log("[solve] watchdog: " + verdict)
+                    terminate_cmd = '{} terminate job={}'.format(
+                        '"' + launcher + '"', JOB_NAME)
+                    subprocess.run(terminate_cmd, cwd=workdir, shell=True,
+                                   timeout=30, capture_output=True)
+                    break
+        time.sleep(2.0)
+    return _job_status(workdir)
 
 
 def _warnings_summary(workdir):
@@ -883,19 +926,27 @@ def main():
             sanity = _inp_sanity(inp_path)
             _log("      INP sanity: " + json.dumps(sanity))
             summary["inp_sanity"] = sanity
-            jstatus = _job_status(_WORKDIR)
-            summary["job_status"] = "completed" if jstatus["completed"] else \
-                ("terminated" if jstatus["details"] else "unknown")
-            summary["job_details"] = jstatus["details"][:6]
-            summary["final_step_time"] = jstatus["final_step_time"]
-            summary["final_total_time"] = jstatus["final_total_time"]
-            if not jstatus["completed"]:
+            if _wait_job_start(_WORKDIR, deadline):
+                _log("[3] primary job started (job files appeared)")
+                summary["attempt"] = "primary"
+                jstatus = _wait_primary_solve(_WORKDIR, launcher, deadline)
+                summary["job_status"] = "completed" if jstatus["completed"] else "terminated"
+                summary["job_details"] = jstatus["details"][:6]
+                summary["final_step_time"] = jstatus["final_step_time"]
+                summary["final_total_time"] = jstatus["final_total_time"]
+                if not jstatus["completed"]:
+                    summary["notes"].append(
+                        "solver did not report successful completion; details: " +
+                        "; ".join(jstatus["details"][:4]))
+            else:
+                summary["attempt"] = "primary_no_start"
+                summary["job_status"] = "not_submitted"
                 summary["notes"].append(
-                    "solver did not report successful completion; details: " +
-                    "; ".join(jstatus["details"][:4]))
+                    "primary job showed no start evidence within {}s".format(
+                        JOB_START_OBSERVE_S))
 
-        # ---- fallback trigger ----
-        if summary["job_status"] != "completed":
+        # ---- fallback trigger: only when the primary never started ----
+        if summary["job_status"] == "not_submitted":
             remaining = deadline - time.monotonic()
             if remaining < 240:
                 summary["notes"].append(
