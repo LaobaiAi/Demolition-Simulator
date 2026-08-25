@@ -56,7 +56,7 @@ quick_result.json schema (stable machine contract, tower-quick-analysis/v1):
   pre_touch{...}, band_deletion{...}, trajectories{...}, acceptance{...},
   notes[], error, results_dir, schema
 
-Acceptance criteria (see dev-notes/abaqus/instances/coolingtower01/prompt.md
+Acceptance criteria (see docs/instances/coolingtower01/prompt.md
 section 5):
   hinge 2-6 s / fold >= 60 deg / |COM azimuth| <= 30 deg vs +X /
   min_z >= -0.1 m / pre-touch-1 s fold 40-75 deg + top ring mean > 10 m /
