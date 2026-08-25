@@ -586,6 +586,15 @@ async def ws_chat(websocket: WebSocket):
                         except asyncio.CancelledError:
                             pass
 
+                    if analysis_mode == "simulation":
+                        user_message = (
+                            "[Simulation mode is active: ONLY Abaqus tools are available. "
+                            "Abaqus is a heavy FEM package and may not be installed, so launch it "
+                            "ONLY when the user explicitly requests simulation / collapse analysis "
+                            "(e.g. 仿真/倒塌模拟/collapse/FEM); otherwise answer directly without "
+                            "calling any Abaqus tool.] " + user_message
+                        )
+
                     agent_task = asyncio.create_task(_run_agent(user_message, memory_context, analysis_mode))
                 else:
                     await _safe_send({
