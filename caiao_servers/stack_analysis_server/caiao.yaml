@@ -1,0 +1,35 @@
+# caiao.yaml — Stack Analysis Server manifest
+
+name: stack_analysis_server
+version: 0.1.0
+kind: atomic-mcp
+description: "Chemical-concrete chimney (stack01, H=100m) self-weight collapse analysis — one-shot quick analysis on the accepted run-39 baseline"
+status: active
+since: "2026-08-25"
+
+start_mode: lazy
+
+command:
+  python: auto
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+
+health:
+  timeout_ms: 5000
+  restart_on_crash: false
+  max_restarts: 3
+  health_check_interval_s: 0
+
+tools:
+  - name: stack_run_analysis
+    description: "Chemical-concrete chimney stack01 (H=100m) self-weight collapse one-shot analysis on the accepted run-39 baseline. BLOCKING call (5-15 min real solve; seconds with no_solve dry-run). Returns stable JSON (schema v1) with per-criterion PASS/FAIL acceptance. Params: run_name (new, letters/digits/underscore), sim_time (7.6 display regime / 12.0 acceptance regime), opening_height, weak_ring_elev, weak_ring_cf, output_interval, n_theta, no_solve, solve_only, metrics_only. Instance guide: docs/instances/stack01/prompt.md"
+    tags: [stack, chimney, abaqus, collapse, analysis]
+
+capabilities:
+  - stack_collapse_analysis
+  - one_shot_solve
+
+dependencies:
+  python: []
+  system: [abaqus]
