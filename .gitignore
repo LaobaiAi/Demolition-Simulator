@@ -86,6 +86,7 @@ caiao_servers/exports/effects/*
 
 # Abaqus runtime artifacts
 ABQcaeG.*.exception
+ABQcaeK.*.exception
 abq.app_cache
 *.rpy
 *.rpy.*
@@ -99,3 +100,7 @@ scripts/_tower_frames/
 scripts/video_calibration/
 abaqus_projects/
 todo/
+
+# Abaqus media / analysis exports (generated artifacts)
+*.mov
+analysis/
