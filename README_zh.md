@@ -13,12 +13,12 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/python-3.12+-blue?logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/next.js-16-black?logo=next.js" alt="Next.js">
   <img src="https://img.shields.io/badge/unity-2021.3_LTS-222?logo=unity" alt="Unity">
   <img src="https://img.shields.io/badge/fastapi-0.115-009688?logo=fastapi" alt="FastAPI">
   <img src="https://img.shields.io/badge/tailwind-css-06b6d4?logo=tailwindcss" alt="Tailwind">
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
 </p>
 
 <p align="center">
@@ -258,7 +258,7 @@ CAIAO 协议是本项目的**统一服务抽象**——每个求解器、模拟�
 
 ### 前置要求
 
-- **Python 3.11+** with `venv`
+- **Python 3.12+**（实测 3.13 通过）with `venv`
 - **Node.js 20+**
 - **Unity Editor 2021.3 LTS**（可选，用于 3D 模拟）
 
@@ -352,18 +352,18 @@ curl http://localhost:8000/tools    # 列出已注册的 CAIAO 工具
 ## 测试
 
 ```bash
-# 后端
-cd gateway && pytest tests/ -v              # 33 个测试
+# 后端 — 用例见 gateway/tests/（当前 8 个测试文件）
+cd gateway && pytest tests/ -v
 
-# CAIAO 服务器
-cd caiao_servers/anastruct_server && pytest tests/ -v   # 19 个测试
-cd caiao_servers/demo_calculator && pytest tests/ -v    # 9 个测试
+# CAIAO 服务器 — 用例见 caiao_servers/*/tests/
+cd caiao_servers/anastruct_server && pytest tests/ -v
+cd caiao_servers/demo_calculator && pytest tests/ -v
 
-# 前端
-cd frontend && npx vitest run                # 16 个测试
+# 前端 — 用例见 frontend/lib/__tests__ 与 frontend/__tests__
+cd frontend && npx vitest run
 ```
 
-**总计: 82 个测试通过** (截至 2026 年 5 月)
+用例数量随代码演进变化，请以实际执行结果为准。
 
 ---
 
@@ -443,4 +443,4 @@ cd frontend && npx vitest run                # 16 个测试
 
 ## 许可证
 
-MIT
+MIT — 见 [LICENSE](LICENSE)。第三方依赖声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

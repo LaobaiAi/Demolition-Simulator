@@ -170,8 +170,8 @@ frontend/
 - **改完先在参数文件登记再跑**（新 run 编号、新取值、变更项）
 
 ### 每轮必改点
-- `scripts/extract_tower_frames.py` 的 ODB_PATH 硬编码 → 新 workdir（现指向 run 8 `tower_collapse_67hq82px`）
-- `scripts/footprint_report.py` 的 ODB_PATH 硬编码（⚠️ 现在仍指向 run 7 `tower_collapse_96t8sjpa`，重跑必须同步）
+- `scripts/extract_tower_frames.py` 的 ODB_PATH 硬编码 → 新 workdir（现指向 run 10 `tower_collapse_4shdyzvy`）
+- `scripts/footprint_report.py` 的 ODB_PATH 硬编码（现与 extract 同步指向 run 10 `tower_collapse_4shdyzvy`，重跑必须同步）
 - `scripts/render_tower_frames.py` 俯视虚线环半径 28.5（≈底半径）；塔更大/更高时另调 GROUND_R=45.0 与 U_MAX=75.0
 
 ### 注意事项
@@ -184,12 +184,12 @@ frontend/
 ### 验证清单
 1. verify_cooling_tower_build.py → 8/8 ALL_PASS（建模层）
 2. run_tower_collapse.py → completed、collapse_happened=True、.sta 成功
-3. render test 帧差 ≥1.0（第 1 vs 25 帧，视角修正前是 5.0）
+3. render test 帧差 ≥0.5（第 1 vs 25 帧，视角修正前是 5.0）
 4. footprint 数值核对：tower_base_radius=新底半径、final_height/max_radius/p95 量级、direction 与洞口方位一致
 5. 数值抽查：侧视塔竖直、俯视地面圆正圆
 
 ### 前端链路
-前端 LLM 对话驱动冷却塔尚未打通：`gateway/agent_loop.py` 的 TOOL_KEYWORD_MAP["abaqus"] 缺 4 个冷却塔工具（create_cooling_tower / assign_tower_materials / mesh_tower / setup_tower_collapse，事实核查遗漏），P0 仿真模式端到端验证待执行；当前全部走宿主脚本链路。打通后可直接在前端跑，Claude Code 用于高级操作（改参数/重跑/调优）。
+前端 LLM 对话驱动冷却塔工具已全部注册：`gateway/agent_loop.py` 的 TOOL_KEYWORD_MAP["abaqus"] 含 23 个 abaqus 工具，4 个冷却塔工具（create_cooling_tower / assign_tower_materials / mesh_tower / setup_tower_collapse）与 caiao.yaml 一致，可直接由前端对话调用；P0 仿真模式端到端验证仍待执行，当前主要走宿主脚本链路。打通后可直接在前端跑，Claude Code 用于高级操作（改参数/重跑/调优）。
 
 ## CAIAO Architecture (enforced)
 

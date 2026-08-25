@@ -30,9 +30,9 @@ cd frontend && npm run dev
 
 | 依赖 | 版本 | 说明 |
 |------|------|------|
-| Python | 3.12+ | venv 位于 `gateway/venv/` |
+| Python | 3.12+（实测 3.13 通过） | venv 位于 `gateway/venv/` |
 | Node.js | 18+ | 用于 Next.js 前端 |
-| Unity (可选) | 2022.3+ | 3D 物理引擎 |
+| Unity (可选) | 2021.3 LTS | 3D 物理引擎（`unity_project/ProjectSettings/ProjectVersion.txt` = 2021.3.45f2c1） |
 
 ## 进程管理
 

@@ -14,12 +14,12 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/python-3.12+-blue?logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/next.js-16-black?logo=next.js" alt="Next.js">
   <img src="https://img.shields.io/badge/unity-2021.3_LTS-222?logo=unity" alt="Unity">
   <img src="https://img.shields.io/badge/fastapi-0.115-009688?logo=fastapi" alt="FastAPI">
   <img src="https://img.shields.io/badge/tailwind-css-06b6d4?logo=tailwindcss" alt="Tailwind">
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
 </p>
 
 <p align="center">
@@ -135,7 +135,7 @@ The CAIAO protocol is the project's **unified server abstraction** — every sol
 | **Frontend** | Next.js 16, TypeScript, Tailwind CSS, shadcn/ui, Recharts |
 | **Gateway** | FastAPI, WebSocket, OpenAI SDK, ReAct agent loop |
 | **CAIAO Bus** | CAIAO protocol (MCP SDK stdio transport), 30+ tool servers, 60+ tools |
-| **2D Analysis** | anaStruct (linear elastic), OpenSeesPy (nonlinear, requires Python 3.10-3.12 on Windows) |
+| **2D Analysis** | anaStruct (linear elastic), OpenSeesPy (nonlinear; requires Python >=3.10, verified on 3.12/3.13) |
 | **3D FEM** | PyNite (3D), FAPP (3D), multi-solver deep verify |
 | **3D Physics** | `kinematic_fallback.py` (pure Python) or Rapier (Rust, optional) — rigid body collapse sim; Unity 2021.3 LTS, C# Rigidbody + ConfigurableJoint |
 | **Blender Pipeline** | Blender 4.x headless, scripted scene building, demolition animation, multi-angle rendering |
@@ -280,7 +280,7 @@ Both entry points clean up leftover processes first, then start the Gateway (ven
 
 ### Prerequisites
 
-- **Python 3.14** (Gateway) + **Python 3.12** (OpenSees Server, Windows 下 openseespy 仅支持 3.10-3.12)
+- **Python 3.12+**（实测 3.13 通过；openseespy 3.8.0.0 要求 >=3.10，Windows 实测 3.12/3.13 均可用）
 - **Node.js 22+**
 - **Unity Editor 2021.3 LTS** (optional, for 3D simulation)
 - **Blender 4.2.8 LTS** (optional, for photorealistic rendering pipeline)
@@ -304,10 +304,10 @@ cp gateway/llm_config.example.json gateway/llm_config.json
 
 ### 2. Install Dependencies & Start Backend
 
-**Gateway (Python 3.14):**
+**Gateway (Python 3.12+，实测 3.13):**
 ```bash
 cd gateway
-python3.14 -m venv venv
+python3.13 -m venv venv
 venv\Scripts\activate        # Windows
 # source venv/bin/activate   # Linux/macOS
 pip install -r requirements.txt
@@ -315,7 +315,7 @@ python watchdog.py           # → http://localhost:8000 (auto-restarts gateway 
 ```
 
 **OpenSees Server (Python 3.12, Windows only):**
-> On Windows, `openseespy` requires Python 3.10–3.12. The OpenSees server uses its own independent venv.
+> `openseespy` 3.8.0.0 requires Python >=3.10 (verified on 3.12/3.13). The OpenSees server uses its own independent venv.
 ```bash
 cd caiao_servers/opensees_server
 python3.12 -m venv venv
@@ -374,21 +374,18 @@ Key docs: [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`CAIAO_PROTOCOL.md`](CAIAO_PR
 ## Testing
 
 ```bash
-# Backend
-cd gateway && pytest tests/ -v              # 33 tests
+# Backend — see gateway/tests/ (currently 8 test files)
+cd gateway && pytest tests/ -v
 
-# Gateway integration
-cd gateway && pytest tests/ -v              # API + agent + memory + CAIAO hub
+# CAIAO servers — see caiao_servers/*/tests/
+cd caiao_servers/anastruct_server && pytest tests/ -v
+cd caiao_servers/demo_calculator && pytest tests/ -v
 
-# CAIAO servers
-cd caiao_servers/anastruct_server && pytest tests/ -v   # 19 tests
-cd caiao_servers/demo_calculator && pytest tests/ -v    # 9 tests
-
-# Frontend
-cd frontend && npx vitest run                # 16 tests
+# Frontend — see frontend/lib/__tests__ and frontend/__tests__
+cd frontend && npx vitest run
 ```
 
-**Total: 82 tests passing** (as of May 2026)
+Test counts evolve with the codebase — run pytest / vitest to get the live number.
 
 ---
 
@@ -447,7 +444,7 @@ cd frontend && npx vitest run                # 16 tests
 
 ## Known Limitations
 
-- **OpenSees on Windows**: Requires Python 3.10–3.12 (not 3.13+). The OpenSees server runs in its own Python 3.12 venv, managed automatically by the CAIAO hub.
+- **OpenSees on Windows**: openseespy 3.8.0.0 requires Python >=3.10 (verified on 3.12 and 3.13). The OpenSees server runs in its own Python 3.12 venv, managed automatically by the CAIAO hub.
 - **Unity scripts**: C# scripts written and structured but not yet validated inside Unity Editor with a full scene.
 - **Single-user**: No multi-tenant session isolation — agent and memory are single-instance.
 - **3D Physics Engine**: The default physics backend is `kinematic_fallback.py` (pure Python, zero dependencies). Optional high-performance upgrade: install Rust toolchain (`winget install Rustlang.Rustup`) and `pip install rapier3d` for the Rapier Rust-based rigid body engine.
@@ -469,4 +466,4 @@ Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE). Third-party notices: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
