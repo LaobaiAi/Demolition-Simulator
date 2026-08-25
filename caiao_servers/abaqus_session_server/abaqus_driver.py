@@ -40,7 +40,18 @@ from abaqus_session import HANDLERS  # noqa: E402
 
 _WORKDIR = os.environ.get("ABAQUS_DRIVER_WORKDIR") or os.getcwd()
 _EXIT_FLAG = os.path.join(_WORKDIR, "exit.flag")
+_READY_FLAG = os.path.join(_WORKDIR, "ready.flag")
 _POLL_INTERVAL = 0.5  # seconds
+
+
+def _log(msg):
+    """Write to a file instead of stdout: under noGUI the kernel stdout may be
+    buffered or swallowed, but a file is immediately visible to server.py."""
+    try:
+        with open(os.path.join(_WORKDIR, "driver.log"), "a", encoding="utf-8") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + msg + "\n")
+    except OSError:
+        pass
 
 
 def _process_task(task_path):
@@ -72,6 +83,7 @@ def _process_task(task_path):
 
         with open(result_path, "w", encoding="utf-8") as f:
             json.dump(response, f, ensure_ascii=False, indent=2)
+        _log("done: {} ({})".format(req_id, tool_name))
     finally:
         try:
             os.remove(task_path)
@@ -81,6 +93,11 @@ def _process_task(task_path):
 
 def main():
     os.makedirs(_WORKDIR, exist_ok=True)
+    # Signal readiness ONLY after all imports succeeded and we are about to enter
+    # the task loop — this is the "kernel actually works" proof server.py waits for.
+    with open(_READY_FLAG, "w", encoding="utf-8") as f:
+        f.write("ready")
+    _log("driver started, polling " + _WORKDIR)
     while True:
         if os.path.exists(_EXIT_FLAG):
             break
