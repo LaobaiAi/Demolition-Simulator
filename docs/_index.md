@@ -6,6 +6,7 @@
 
 | 章节 | 内容 |
 |------|------|
+| [用户手册](USER_MANUAL.md) | 最终用户使用指南：快速开始、界面导览、核心操作、实例库、Abaqus 仿真面板、FAQ |
 | [01 — WebSocket 通信机制](01-websocket/README.md) | 前后端 WebSocket 通信架构、保活机制、断线重连、状态管理 |
 | [02 — 系统架构](02-architecture/README.md) | 整体架构设计、CAIAO 服务器模式、数据流 |
 | [03 — 结构求解器](03-analysis-solvers/README.md) | anaStruct 快速分析、OpenSees 高精度验证、多求解器共识 |
@@ -16,7 +17,7 @@
 
 ## 快速导航
 
-- **代码仓库根目录**: `E:\Claude code workspace\XuanwuAI Demolition Simulator`
+- **代码仓库根目录**: 本仓库根目录（即 `docs/` 的上一级）
 - **CLAUDEMD 总纲**: [CLAUDE.md](../CLAUDE.md) — 项目核心设计原则和用户指令
 - **架构总纲**: [ARCHITECTURE.md](../ARCHITECTURE.md)
 - **开发笔记**: [dev-notes/](../dev-notes/)
