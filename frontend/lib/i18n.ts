@@ -22,6 +22,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "chat.demolish": "Demolish Critical Column",
     "chat.mode_analysis": "Analysis",
     "chat.mode_fast": "Fast",
+    "chat.mode_simulation": "Simulation",
     // Status
     "status.idle": "idle",
     "status.loading": "loading",
@@ -164,6 +165,9 @@ const translations: Record<Lang, Record<string, string>> = {
     "quick.2x4": "Analyze a 2-story 4-bay frame",
     "quick.4x3": "Analyze a 4-story 3-bay frame",
     "quick.1x2": "Analyze a 1-story 2-bay frame",
+    "quick.sim_collapse": "Run an Abaqus collapse simulation on a 2-story 2-bay frame",
+    "quick.sim_displacement": "Run an Abaqus simulation on a 2x2 concrete frame and report max displacement",
+    "quick.sim_progressive": "Run a full Abaqus progressive collapse analysis on a 3-story 3-bay frame",
     // Storage & Memory
     "settings.storage": "Storage & Memory",
     "settings.conv_storage": "Conversations",
@@ -426,6 +430,13 @@ const translations: Record<Lang, Record<string, string>> = {
     // Unity video panel
     "unity.connecting": "Connecting to Unity...",
     "unity.gateway_unreachable": "Gateway unreachable",
+    // Abaqus video panel
+    "abaqus.style_rendered": "Rendered",
+    "abaqus.style_raw": "Raw",
+    "abaqus.solving": "Solving {p}% — est. {lo}-{hi} min",
+    "abaqus.solving_started": "Solve submitted — est. {lo}-{hi} min",
+    "abaqus.stop": "Terminate",
+    "abaqus.stop_failed": "Failed to terminate the solve. Try again.",
   },
   zh: {
     "sidebar.new_chat": "新建对话",
@@ -446,6 +457,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "chat.demolish": "拆除关键柱",
     "chat.mode_analysis": "分析",
     "chat.mode_fast": "急速",
+    "chat.mode_simulation": "仿真",
     "status.idle": "空闲",
     "status.loading": "加载中",
     "status.ws_connected": "WS 已连接",
@@ -575,6 +587,9 @@ const translations: Record<Lang, Record<string, string>> = {
     "quick.2x4": "分析一个2跨4层框架",
     "quick.4x3": "分析一个4跨3层框架",
     "quick.1x2": "分析一个1跨2层框架",
+    "quick.sim_collapse": "对 2x2 框架做 Abaqus 倒塌仿真分析",
+    "quick.sim_displacement": "对 2x2 混凝土框架做 Abaqus 仿真并报告最大位移",
+    "quick.sim_progressive": "对 3跨3层框架做 Abaqus 渐进倒塌全流程分析",
     // Storage & Memory
     "settings.storage": "存储与记忆",
     "settings.conv_storage": "对话记录",
@@ -836,6 +851,13 @@ const translations: Record<Lang, Record<string, string>> = {
     // Unity video panel
     "unity.connecting": "正在连接 Unity...",
     "unity.gateway_unreachable": "网关不可达",
+    // Abaqus video panel
+    "abaqus.style_rendered": "渲染",
+    "abaqus.style_raw": "原始",
+    "abaqus.solving": "求解中 {p}% — 预计共 {lo}-{hi} 分钟",
+    "abaqus.solving_started": "求解已提交 — 预计共 {lo}-{hi} 分钟",
+    "abaqus.stop": "终止",
+    "abaqus.stop_failed": "终止失败，请重试。",
   },
 };
 
