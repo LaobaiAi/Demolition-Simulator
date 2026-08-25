@@ -317,7 +317,7 @@ If `frame_generator.core` has a breaking change, `quick_analysis_server` needs t
 | `blender_render_server` | Atomic | `render_animation`, `render_preview` | Active (lazy) | 2026-06-03 |
 | `blender_pipeline_server` | Atomic | `run_full_pipeline`, `run_pipeline_stage`, `check_blender_environment` | Active (lazy) | 2026-06-03 |
 | `abaqus_environment_server` | Infrastructure | `resolve_abaqus_path`, `validate_environment`, `get_abaqus_config` | Active (eager) | 2026-06-04 |
-| `abaqus_session_server` | Merged | `create_rectangular_column`, `create_truss`, `create_slab`, `assign_concrete_cdp`, `mesh_part`, `create_explicit_step`, `apply_gravity`, `create_rigid_ground`, `submit_job`, `get_max_displacement`, `plot_displacement_curve`, `create_cut_zone`, `inject_cut_zone_inp`, `build_factory`, `setup_collapse` | Active (lazy) | 2026-06-04 |
+| `abaqus_session_server` | Merged | `create_rectangular_column`, `create_truss`, `create_slab`, `assign_concrete_cdp`, `mesh_part`, `create_explicit_step`, `apply_gravity`, `create_rigid_ground`, `submit_job`, `get_max_displacement`, `plot_displacement_curve`, `create_cut_zone`, `inject_cut_zone_inp`, `build_factory`, `setup_collapse`, `create_cooling_tower`, `assign_tower_materials`, `mesh_tower`, `setup_tower_collapse`, `extract_collapse_frames`, `render_collapse_video`, `get_collapse_status`, `stop_collapse` | Active (lazy) | 2026-06-04 |
 ### Server Details
 
 #### ⚡ `quick_analysis_server` — Pipeline A (First Merge)
@@ -558,15 +558,16 @@ If `frame_generator.core` has a breaking change, `quick_analysis_server` needs t
 
 #### `abaqus_session_server` — Persistent Abaqus CAE Session
 
-- **Purpose:** Maintains a single long-lived Abaqus Python subprocess exposing 15 modeling, analysis, and result extraction tools. All tools share one `mdb.models['Model-1']` session.
+- **Purpose:** Maintains a single long-lived Abaqus Python subprocess exposing 19 modeling, analysis, and result extraction tools. All tools share one `mdb.models['Model-1']` session.
 - **Kind:** Merged (lazy)
 - **Architecture:** System Python MCP server → spawns `abaqus python abaqus_session.py` → JSON-RPC over stdio. Avoids requiring `mcp` package in Abaqus Python.
-- **Tools (15):**
+- **Tools (19):**
   - Modeling: `create_rectangular_column`, `create_truss`, `create_slab`, `assign_concrete_cdp`, `mesh_part`
   - Analysis: `create_explicit_step`, `apply_gravity`, `create_rigid_ground`, `submit_job`
   - Results: `get_max_displacement`, `plot_displacement_curve`
   - Demolition: `create_cut_zone`, `inject_cut_zone_inp`
   - Pipeline: `build_factory`, `setup_collapse`
+  - Cooling tower: `create_cooling_tower`, `assign_tower_materials`, `mesh_tower`, `setup_tower_collapse`
 - **INP Injection Logic:** Preserves v1→v2→v3 validated WEAK_C30 material, SECTION CONTROLS element deletion, and STATUS/SDEG field output injection from original pipeline_run_collapse.py
 - **Creation:** 2026-06-04 (absorbed from Abaqus_Collapse project — 12 atomic servers + 2 orchestration servers merged into one session server)
 
@@ -660,6 +661,8 @@ convert_to_unified_frame (embedded in the merged server):
 | 2026-06-05 | **Extract _shared/ planning modules**: Moved `rule_planner`, `llm_planner`, `demolition_schemas` from `planning_server/` to `caiao_servers/_shared/` (underscore prefix ensures caiao discovery skips). Fixed Server Independence Principle violation where `comparison_server` directly imported from `planning_server`. Both servers now import from `_shared` package using relative imports internally. | Claude |
 | 2026-06-04 | Simplify review Phase 4-6 + architecture redesign: **Blender Daemon Architecture** — agreed to add `blender_daemon_server` (infrastructure, eager) as single persistent Blender process shared by all functional servers, eliminating per-server subprocess cold starts. **Standard file format** — each structure type defined by two standard files (geometry manifest + demolition sequence), not by code; `build_server`/`animate_server` read files → validate → forward to daemon, containing zero geometry or demolition algorithms. **Three-mechanism parameter extension** — namespace isolation + schema registry + three-tier classification (base/extension/transient) applied to all four parameter files. **caiao.yaml template compression** — `_manifest_to_config()` now fills command/kind/health/dependencies defaults; 6 Blender server manifests stripped of ~120 lines boilerplate. Full architecture decision documented in `dev-notes/decisions/2026-06-04-blender-daemon-architecture.md` | Claude |
 | 2026-06-05 | **Thorough CAIAO-ification**: Removed 175-line legacy `_legacy_server_configs()` fallback from `caiao_config.py` — all 30 servers now have `caiao.yaml` manifests. Created composite manifests for `run_full_analysis`, `full_bim_demolition`, `visual_demolition_topology`, `visual_demolition_mechanics`. Replaced hardcoded `PIPELINE_VISUAL_DEMOLITION_*` constants in `main.py` with runtime reads from hub config (`get_pipeline_config()`). Split monolithic `main.py` (1298→470 lines) into `routers/` (5 files: tools, verify, servers, settings, unity) and `services/pipeline_service.py`. All REST endpoints now defined in routers; WebSocket handler + lifespan remain in main.py. Added `app.state` pattern for shared state between lifespan and routers. Architecture redesign documented in `dev-notes/architecture/2026-06-05-architecture-redesign.md` | Claude |
+| 2026-08-22 | **Cooling tower collapse simulation tools**: Added 4 tools to `abaqus_session_server` (15→19): `create_cooling_tower` (hyperboloid shell, two-segment hyperbola meridian base/throat/top, S4R mesh generated at creation, 70m tower defaults), `assign_tower_materials` (C30 CDP full GB50010 hardening/stiffening tables + rebar steel + CompositeShellSection 2×60mm C30 + 0.5mm rebar), `mesh_tower` (opening-band element set via centroid criterion: elevation + azimuth), `setup_tower_collapse` (settle 1s + collapse 12s explicit steps, smooth gravity ramp, rigid ground, INP surgery: opening element exclusion + `*CONCRETE FAILURE` injection, runs via `JobFromInputFile` so INP edits take effect). Registry §8 and server details updated. | Claude |
+| 2026-08-22 | **Frontend LLM chain: async tower collapse + video pipeline**: `setup_tower_collapse` rewritten to generate the solver INP directly from parameters in the kernel (host-validated cards: composite shell, CDP+rebar, fixed mass scaling dt=4e-4, ENCASTRE base, gravity ramp, contact, full output — no CAE model, bypassing the assembly.Set kernel bug) and submit ASYNCHRONOUSLY (returns job_id/status=submitted/estimated_duration_s/odb_path, no wait). Added 4 tools (19→23): `extract_collapse_frames` (kernel, ODB→data.npz), `render_collapse_video` (server process, MP4s + footprint to frontend, no Abaqus license), `get_collapse_status` (server, .sta polling), `stop_collapse` (kernel, kill solver + .lck). LLM side: 8 tools unblocked in TOOL_KEYWORD_MAP, SIMULATION_CORE_PROMPT polling workflow (submit → estimate >5min asks user → poll → extract → render), MAX_TOOL_ITERATIONS 8→16. Timeouts env-parameterized (ABAQUS_TOOL_TIMEOUT_S/ABAQUS_KERNEL_BOOT_TIMEOUT_S/ABAQUS_POLL_INTERVAL_S/ABAQUS_RENDER_TIMEOUT_S). Registry §8 updated. | Claude |
 
 ---
 

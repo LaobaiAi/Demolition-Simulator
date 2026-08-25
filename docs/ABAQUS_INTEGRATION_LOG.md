@@ -106,12 +106,44 @@ RESULT: LINK_OK  (DS <-> Abaqus 2026 linked)
 | `cmd /c` 列表参数报 `'\"...'` 不是命令 | `subprocess.Popen(["cmd","/c",cmdline])` 会把含引号的命令串二次转义成 `\"` | 改用 `subprocess.Popen(cmdline, shell=True)`，按交互式 cmd 引号规则解析 |
 | `NameError: name '__file__' is not defined` | Abaqus noGUI 用 `exec()` 执行脚本，无 `__file__`；且 `os.environ.get(k, default)` 的 default 会先求值 | 环境变量 `ABAQUS_DRIVER_SERVERDIR` 优先，default 用 try/except 延迟求值 |
 | 系统 `python` 是 WindowsApps 存根（9009） | 未安装官方 Python 时 PATH 里的是商店存根 | 用 `.workbuddy` 真实解释器运行验证脚本 |
+| **MCP 路径内核假死：进程活着、`kernel.log` 0 字节、`ready.flag` 永不出现、干等半小时** | **MCP stdio 下 server.py 的 stdin 是协议管道；Popen 未指定 stdin 时 Abaqus 内核继承该管道并在启动早期阻塞读 stdin**（直接脚本/终端跑则继承控制台 stdin，不阻塞，所以"看起来同样的命令"怎么试都通） | Popen 加 `stdin=subprocess.DEVNULL`（内核立即读到 EOF，不再阻塞） |
+
+### MCP 层验证结果（2026-08-20，当前电脑实测通过）
+
+MCP stdio 层 = 网关 hub（`CAIAOClientHub`）拉起 `server.py` 的真实路径。用 `scripts/verify_abaqus_mcp.py`（gateway venv python）验证：
+
+```
+[1/4] Spawning MCP server (same as gateway hub):
+      D:\GitHub Dev\...\gateway\venv\Scripts\python.exe ...\server.py
+[2/4] MCP initialized — 15 tools: create_rectangular_column, ...
+[3/4] Calling create_rectangular_column via MCP (kernel boot ~30-60s)...
+INFO:abaqus_session:Abaqus kernel started (pid=32676)
+INFO:abaqus_session:Abaqus kernel ready        ← 内核 2~3 秒就绪
+[4/4] MCP result received:
+{
+  "concrete_part": "verify_col_conc",
+  "rebar_part": "verify_col_rebar",
+  "message": "Column verify_col created: 4.0m height, 0.5x0.5m section"
+}
+RESULT: MCP_LINK_OK  (gateway hub can drive Abaqus 2026)
+```
+
+至此 **前端 → 网关 → CAIAO Hub → MCP stdio → server.py → 文件通道 → Abaqus 常驻内核** 全链路打通，不再依赖 CodeBuddy 手动介入。
+
+### 超时与防御机制（防"干等"）
+
+- `_KERNEL_BOOT_TIMEOUT_S = 180`：内核必须在 180s 内写 `ready.flag`（driver 进入主循环才写），否则**报错并 `taskkill /T /F` 清理进程树**（`shell=True` 拿到的是 cmd.exe PID，直接 kill 会留 SMAPython 孤儿占许可证）。
+- `_TOOL_TIMEOUT_S = 600`：单次工具调用上限（`setup_collapse` 求解器任务可到 10 分钟）。
+- verify 脚本客户端另有 `asyncio.wait_for(..., 420)` 兜底。
+- `driver.log`：driver 侧独立日志（noGUI 下 stdout 可能被吞，文件日志更可靠）。
 
 ## 7. 排障速查
 
 | 现象 | 处理 |
 |---|---|
-| 许可证 `-140,148` | 检查 27800 端口被占用：`netstat -ano | findstr 27800`；确保只有 `ABAQUS Flexnet Server` 在跑 |
+| 许可证 `-140,148` | 检查 27800 端口被占用：`netstat -ano \| findstr 27800`；确保只有 `ABAQUS Flexnet Server` 在跑 |
 | 内核启动即退 | 查看 `%TEMP%\abaqus_session_*\kernel.log` |
-| 工具调用超时 | `setup_collapse` 等含求解器工具耗时长，默认超时 3600s；确认 ODB/日志目录有产出 |
+| **内核假死：进程活着、kernel.log 0 字节、无 ready.flag** | 确认 Popen 带 `stdin=subprocess.DEVNULL`（MCP 管道被继承所致）；`taskkill /T /F` 清理旧内核进程后再试 |
+| 工具调用超时 | `setup_collapse` 等含求解器工具耗时长，默认超时 600s；确认 ODB/日志目录有产出 |
 | driver 报 `Unknown tool` | 确认 `abaqus_session.py` 的 `HANDLERS` 键与 TOOLS 名称一致 |
+| 内层通过但 MCP 层失败 | 隔离法：`scripts/verify_abaqus_kernel_boot.py`（内核能否跑）→ `scripts/verify_abaqus_driver_direct.py`（driver 能否跑）→ `scripts/verify_abaqus_mcp.py`（MCP 全链路） |

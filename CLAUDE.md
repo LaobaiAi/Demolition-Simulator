@@ -135,6 +135,62 @@ frontend/
 - **倒塌判定**：所有柱被拆除 或 位移 >100mm 或 分析不收敛
 - **Unity 场景搭建**：Unity Editor → Tools → XuanwuAI → Setup Scene（一键创建）
 
+## 冷却塔 Abaqus 仿真速查
+新会话先读本节省时；原理与细节一律查手册，不以记忆为准。
+
+### 文件地图
+
+| 文件路径 | 职责 | 何时用 |
+|---|---|---|
+| `dev-notes/abaqus/2026-08-22-cooling-tower-collapse-manual.md`（手册） | 12 章，原理/学习/照做清单（第十章检查清单 + 10.4 验证顺序），历史事故都有记录 | 新会话先读；跑法/原理/细节任何疑问 |
+| `dev-notes/abaqus/2026-08-22-cooling-tower-parameters.md`（参数文件） | 全部参数取值 + 项目状态（run 8 真实塔为当前基准）+ 调优入口速查（第四章）+ 版本变更历史（第三章）+ 用户反馈台账与调优分析（第六章）；参数变更与项目状态以此为准 | **改参数前必查、跑完必回填、调优必登记；用户反馈仿真效果必须先登记反馈台账（关联参数版本）再调优** |
+| `dev-notes/abaqus/2026-08-23-real-video-calibration-and-collapse-mechanism.md`（实拍校准与机制讨论） | 占地 51m 机制讨论（扑倒/弯折/碎裂三模式）、开洞角误差讨论（87-92° vs 98°）、视频对比方案与模型能力边界（deepseek 无视觉）、video_analysis_server 设想、待用户协助清单 | 调优方向争议、视频校准问题先读此文件；实拍分析产物在 `scripts/video_calibration/` |
+| `dev-notes/abaqus/2026-08-23-site-collapse-description.md`（现场倒塌描述权威汇总，用户审核版） | 用户 2026-08-23 三次澄清后的权威时间线（0-2s 慢倾 → 2s 起连续加速 → 4s 根部断裂 → 扑倒落地，全程约 6s，无速度突变）+ 裂缝/断裂/残留/占地/底座 8 点 + 未知待定项（钢筋、环梁 500-800mm、自由落体为感觉） | 调优目标与时间线任何疑问先读此文件；run 13 起以四阶段时间线验证 |
+| `todo/abaqus-cooling-tower.md` | 冷却塔历轮 run 状态与开发决策 | 查历史 run 记录；每轮 run 脚本自动追加 |
+| `todo/abaqus-stack.md` | 烟囱历轮 run 状态与开发决策（run 1–26 全记录 + 常驻索引） | 查烟囱历史 run 记录；烟囱线回填此处 |
+| `scripts/run_tower_collapse.py` | 求解驱动：塔几何/壁厚/洞口/网格/求解时长/CPU 常量 + 提交作业（fallback 链路） | 改参数、跑求解 |
+| `scripts/verify_cooling_tower_build.py` | 建模验证（8/8 ALL_PASS，不提交作业） | 每轮跑求解前先验证建模 |
+| `scripts/extract_tower_frames.py` | 帧提取（ODB → `_tower_frames/data.npz` 50 帧，内核侧脚本） | 求解完成后、渲染前；每轮必改 ODB_PATH |
+| `scripts/render_tower_frames.py` | 渲染/合成/验证（MP4 + frames，部署 frontend/public/resource/Abaqus/） | 提取帧后合成与 verify |
+| `scripts/footprint_report.py` | 占地报告（内核侧，生成 cooling_tower_footprint.json） | 核对落点/方向/堆高；每轮必改 ODB_PATH |
+
+### 标准跑法（宿主脚本链路，5 步）
+宿主脚本用 gateway venv python；内核侧脚本只能 `abq2026.bat cae noGUI=<脚本>` 批跑（launcher 路径在 `caiao_servers/abaqus_environment_server/abaqus_env.json`）。在仓库根目录执行：
+1. **建模验证**：`gateway/venv/Scripts/python.exe scripts/verify_cooling_tower_build.py` → 8/8 ALL_PASS（不提交作业，分钟级）
+2. **求解**：`gateway/venv/Scripts/python.exe scripts/run_tower_collapse.py` → .sta 成功 + collapse_happened（run 8 实测求解 397.6s、总 439.4s，硬预算 555s；自动追加 todo 记录）
+3. **提取帧**：先改 extract_tower_frames.py 的 ODB_PATH → `abq2026.bat cae noGUI=extract_tower_frames.py` → `_tower_frames/data.npz` 50 帧（分钟级；缺 npz 时 render test 会自动代跑）
+4. **渲染合成**：`gateway/venv/Scripts/python.exe scripts/render_tower_frames.py all` → `compose`（MP4 部署到 frontend/public/resource/Abaqus/）→ `verify`（分钟级）
+5. **占地报告**：改 footprint_report.py 的 ODB_PATH → `abq2026.bat cae noGUI=footprint_report.py` → 核对 `frontend/public/resource/Abaqus/cooling_tower_footprint.json`（秒级）
+
+### 改参数位置速查
+- 塔几何/壁厚/洞口/网格/求解时长/CPU：`scripts/run_tower_collapse.py` 顶部常量（TOWER_HEIGHT / TOWER_BASE_RADIUS / TOWER_THROAT_RADIUS / TOWER_THROAT_ELEVATION / TOWER_TOP_RADIUS / WALL_THICKNESS / OPENING_* / N_THETA / TOTAL_SIM_TIME），setup_tower_collapse 调用处显式传参
+- **N_THETA 双处**：run 脚本常量 + `abaqus_session.py` `_handle_create_cooling_tower` 硬编码 n_theta=128（只改一处会不一致）
+- 材料表：`caiao_servers/abaqus_session_server/abaqus_session.py` `_handle_assign_tower_materials`（C30 完整 CDP 表 + 钢筋层，换等级改这里）
+- 渲染常量：`scripts/render_tower_frames.py` 顶部（W/H/FPS/N_FRAMES/GROUND_R/U_MAX/视角/帧差阈值）
+- **改完先在参数文件登记再跑**（新 run 编号、新取值、变更项）
+
+### 每轮必改点
+- `scripts/extract_tower_frames.py` 的 ODB_PATH 硬编码 → 新 workdir（现指向 run 8 `tower_collapse_67hq82px`）
+- `scripts/footprint_report.py` 的 ODB_PATH 硬编码（⚠️ 现在仍指向 run 7 `tower_collapse_96t8sjpa`，重跑必须同步）
+- `scripts/render_tower_frames.py` 俯视虚线环半径 28.5（≈底半径）；塔更大/更高时另调 GROUND_R=45.0 与 U_MAX=75.0
+
+### 注意事项
+- 渲染轴映射 [x, -z, y]（Y-up 数据 → Z-up 渲染）必过——不过则塔横躺、俯视变侧视（历史事故）
+- 2026 内核 assembly.Set 必炸 → 宿主机 fallback 路径（宿主拼 INP + `abq2026.bat job=...`）已绕行，主路径修复 P2
+- 显式作业进度从 .sta 解析（MONITOR_INTERVAL_S=30）；超求解硬上限且进度不足会被终止
+- 跑完回填：todo/abaqus-cooling-tower.md（run 脚本自动追加）+ 参数文件项目状态；烟囱线回填 todo/abaqus-stack.md
+- 长任务（求解/提取/渲染 >5 分钟）必须用 python scripts/run_with_wake.py <命令> 包裹执行，防电源计划空闲睡眠中断后台任务（2026-08-23 事故：Agent 卡死+系统睡眠双重中断）
+
+### 验证清单
+1. verify_cooling_tower_build.py → 8/8 ALL_PASS（建模层）
+2. run_tower_collapse.py → completed、collapse_happened=True、.sta 成功
+3. render test 帧差 ≥1.0（第 1 vs 25 帧，视角修正前是 5.0）
+4. footprint 数值核对：tower_base_radius=新底半径、final_height/max_radius/p95 量级、direction 与洞口方位一致
+5. 数值抽查：侧视塔竖直、俯视地面圆正圆
+
+### 前端链路
+前端 LLM 对话驱动冷却塔尚未打通：`gateway/agent_loop.py` 的 TOOL_KEYWORD_MAP["abaqus"] 缺 4 个冷却塔工具（create_cooling_tower / assign_tower_materials / mesh_tower / setup_tower_collapse，事实核查遗漏），P0 仿真模式端到端验证待执行；当前全部走宿主脚本链路。打通后可直接在前端跑，Claude Code 用于高级操作（改参数/重跑/调优）。
+
 ## CAIAO Architecture (enforced)
 
 **CAIAO** is our project-specific naming layer on top of the standard MCP SDK. Every CAIAO Server is technically an MCP Server under the hood — the `mcp` Python package handles stdio transport and JSON-RPC. We rename the abstraction to distinguish our project's convention from the generic protocol.
