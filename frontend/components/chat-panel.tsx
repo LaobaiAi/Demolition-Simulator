@@ -8,6 +8,15 @@ import { t, type Lang } from "@/lib/i18n";
 import type { ChatMessage, FrameStructure } from "@/lib/state-restore";
 import { stepBrief } from "@/lib/log-format";
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 interface DemolishStrategy { key: string; category: "topology" | "mechanics"; }
 const DEMOLISH_STRATEGIES: DemolishStrategy[] = [
   { key: "top_down", category: "topology" },
@@ -106,7 +115,7 @@ export function ChatPanel({
                       <div
                         className="prose prose-sm prose-invert max-w-none [&_strong]:text-primary"
                         dangerouslySetInnerHTML={{
-                          __html: msg.content
+                          __html: escapeHtml(msg.content)
                             .replace(/\*\*(.*?)\*\*/g, '<strong class="text-primary">$1</strong>')
                             .replace(/`(.*?)`/g, '<code class="text-xs bg-secondary px-1 py-0.5 rounded">$1</code>')
                             .replace(/\n/g, "<br/>"),

@@ -151,36 +151,46 @@ export function VisualizationPanel({
             )}
           </div>
         )}
-        <div className={`absolute inset-0 flex flex-col ${vizMode === "webgl" ? "" : "invisible pointer-events-none"}`}>
-          <WebGLErrorBoundary onError={() => setVizMode("svg")}>
-            <Suspense fallback={<LoadingFallback label="3D engine" />}>
-              <FrameVisualization3D structure={frameStructure} displacements={nodeDisplacements}
-                criticalElementId={structuralMetrics?.criticalElementId ?? null}
-                failedElements={failedElements} displayFailedElements={displayFailedElements}
-                maxDisplacement={analysisResult?.max_displacement as number | undefined}
-                elementForces={analysisResult?.element_forces as Array<{element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number}> | undefined}
-                animationTrigger={animRequest?.key} animatingElements={animRequest?.targets}
-                onAnimationComplete={onAnimComplete} activeEffects={animEffects}
-                canvasCallback={onCanvasCallback} />
+        {vizMode === "webgl" && (
+          <div className="absolute inset-0 flex flex-col">
+            <WebGLErrorBoundary onError={() => setVizMode("svg")}>
+              <Suspense fallback={<LoadingFallback label="3D engine" />}>
+                <FrameVisualization3D structure={frameStructure} displacements={nodeDisplacements}
+                  criticalElementId={structuralMetrics?.criticalElementId ?? null}
+                  failedElements={failedElements} displayFailedElements={displayFailedElements}
+                  maxDisplacement={analysisResult?.max_displacement as number | undefined}
+                  elementForces={analysisResult?.element_forces as Array<{element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number}> | undefined}
+                  animationTrigger={animRequest?.key} animatingElements={animRequest?.targets}
+                  onAnimationComplete={onAnimComplete} activeEffects={animEffects}
+                  canvasCallback={onCanvasCallback} />
+              </Suspense>
+            </WebGLErrorBoundary>
+          </div>
+        )}
+        {vizMode === "unity" && (
+          <div className="absolute inset-0">
+            <UnityVideoPanel onStreamConnected={onUnityConnected} frameStructure={frameStructure} />
+          </div>
+        )}
+        {vizMode === "blender" && (
+          <div className="absolute inset-0">
+            <BlenderVideoPanel onStreamConnected={onUnityConnected} frameStructure={frameStructure} />
+          </div>
+        )}
+        {vizMode === "ifc" && (
+          <div className="absolute inset-0 flex flex-col">
+            <Suspense fallback={<LoadingFallback label="IFC viewer" />}>
+              <IFCViewer structure={frameStructure}
+                highlightedElements={structuralMetrics?.criticalElementId ? [structuralMetrics.criticalElementId] : []}
+                removedElements={displayFailedElements} />
             </Suspense>
-          </WebGLErrorBoundary>
-        </div>
-        <div className={`absolute inset-0 ${vizMode === "unity" ? "" : "invisible pointer-events-none"}`}>
-          <UnityVideoPanel onStreamConnected={onUnityConnected} frameStructure={frameStructure} />
-        </div>
-        <div className={`absolute inset-0 ${vizMode === "blender" ? "" : "invisible pointer-events-none"}`}>
-          <BlenderVideoPanel onStreamConnected={onUnityConnected} frameStructure={frameStructure} />
-        </div>
-        <div className={`absolute inset-0 flex flex-col ${vizMode === "ifc" ? "" : "invisible pointer-events-none"}`}>
-          <Suspense fallback={<LoadingFallback label="IFC viewer" />}>
-            <IFCViewer structure={frameStructure}
-              highlightedElements={structuralMetrics?.criticalElementId ? [structuralMetrics.criticalElementId] : []}
-              removedElements={displayFailedElements} />
-          </Suspense>
-        </div>
-        <div className={`absolute inset-0 ${vizMode === "abaqus" ? "" : "invisible pointer-events-none"}`}>
-          <AbaqusVideoPanel lang={lang} />
-        </div>
+          </div>
+        )}
+        {vizMode === "abaqus" && (
+          <div className="absolute inset-0">
+            <AbaqusVideoPanel lang={lang} />
+          </div>
+        )}
       </div>
 
       {demolitionRounds.length > 0 && (

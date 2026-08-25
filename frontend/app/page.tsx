@@ -141,6 +141,15 @@ export default function Home() {
   const [animPlaying, setAnimPlaying] = useState(false);
   const [animatingRound, setAnimatingRound] = useState(-1);
   const autoPlayQueueRef = useRef<number[]>([]);
+  const animQueueTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const demoFinishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (animQueueTimerRef.current) clearTimeout(animQueueTimerRef.current);
+      if (demoFinishTimerRef.current) clearTimeout(demoFinishTimerRef.current);
+    };
+  }, []);
+
   const { theme, setTheme } = useTheme();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   useEffect(() => {
@@ -292,7 +301,7 @@ export default function Home() {
       conv.syncMessagesToStorage(conv.activeConvId!, messages);
     }, 500);
     return () => clearTimeout(timer);
-  }, [messages.length, conv.activeConvId, conv.convLoaded]);
+  }, [messages, conv.activeConvId, conv.convLoaded]);
 
   // ---- WebSocket ----
   const wsCallbacks: WebSocketCallbacks = {
@@ -525,7 +534,8 @@ export default function Home() {
     setAnimRequest(null);
     const queue = autoPlayQueueRef.current;
     if (queue.length > 0) {
-      setTimeout(() => {
+      animQueueTimerRef.current = setTimeout(() => {
+        animQueueTimerRef.current = null;
         const q = autoPlayQueueRef.current;
         if (q.length > 0) {
           const nextRound = q.shift()!;
@@ -635,9 +645,20 @@ export default function Home() {
         wsRef.current.send(JSON.stringify({ type: "message", content: msg }));
       }
       setDemoStatus(t("demo.completed", langRef.current));
-      setTimeout(() => { demoRef.current.running = false; setDemoRunning(false); setDemoStatus(""); }, 2500);
+      demoFinishTimerRef.current = setTimeout(() => {
+        demoFinishTimerRef.current = null;
+        demoRef.current.running = false;
+        setDemoRunning(false);
+        setDemoStatus("");
+      }, 2500);
     }, 1000);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      if (demoFinishTimerRef.current) {
+        clearTimeout(demoFinishTimerRef.current);
+        demoFinishTimerRef.current = null;
+      }
+    };
   }, [demolishReady, structuralMetrics]);
 
   const quickActions = analysisMode === "fast"
@@ -654,7 +675,9 @@ export default function Home() {
     wsSend(action, analysisMode);
   }, [status, wsSend, analysisMode]);
 
-  const handleUnityConnected = useCallback(() => setVizMode("unity"), []);
+  const handleUnityConnected = useCallback(() => {
+    setVizMode((prev) => (prev === "unity" ? "unity" : prev));
+  }, []);
 
   const handleClearChat = useCallback(() => {
     setMessages([]);
