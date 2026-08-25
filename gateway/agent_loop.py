@@ -15,8 +15,8 @@ from caiao import CAIAOClientHub
 
 logger = logging.getLogger(__name__)
 
-MAX_TOOL_ITERATIONS = 8
-REPLAN_AFTER = 6  # after this many iterations, force a summary/replan
+MAX_TOOL_ITERATIONS = 16
+REPLAN_AFTER = 10  # after this many iterations, force a summary/replan
 
 
 def _make_cache_key(name: str, args: dict) -> str:
@@ -40,12 +40,30 @@ TOOL_KEYWORD_MAP: dict[str, list[str]] = {
                 "generate_effects_config", "init_physics_scene",
                 "step_physics", "get_physics_state"],
     "verify": ["high_fidelity_analysis", "fapp_analysis", "pynite_analysis"],
-    "abaqus": ["setup_collapse", "build_factory", "get_max_displacement",
-               "submit_job"],
+    "abaqus": ["create_rectangular_column", "create_truss", "create_slab",
+               "assign_concrete_cdp", "mesh_part", "create_explicit_step",
+               "apply_gravity", "create_rigid_ground", "submit_job",
+               "get_max_displacement", "plot_displacement_curve",
+               "create_cut_zone", "inject_cut_zone_inp", "build_factory",
+               "setup_collapse",
+               "create_cooling_tower", "assign_tower_materials", "mesh_tower",
+               "setup_tower_collapse", "extract_collapse_frames",
+               "render_collapse_video", "get_collapse_status", "stop_collapse"],
     "bim": ["generate_steel_frame", "generate_concrete_structure",
             "generate_hybrid_structure", "export_ifc", "generate_truss",
             "generate_portal_frame", "generate_beam"],
 }
+
+# ── Mode-scoped tool groups ─────────────────────────────────────────────────
+# fast (Blender) 模式只暴露 Blender 管线工具
+BLENDER_PIPELINE_TOOLS: set[str] = {
+    "run_full_pipeline", "run_pipeline_stage", "check_blender_environment",
+    "build_frame_model", "list_scenarios", "get_scenario",
+    "steam_turbine_demolition", "visual_demolition",
+}
+# simulation (Abaqus) 模式只暴露 Abaqus 仿真工具
+ABAQUS_TOOLS: set[str] = set(TOOL_KEYWORD_MAP["abaqus"])
+
 
 def _filter_tools_by_message(
     user_message: str,
@@ -164,10 +182,19 @@ class AgentLoop:
         tools_list = self._cached_tools
         llm_tools = self.llm.format_tools_for_llm(tools_list) if tools_list else None
         if analysis_mode == "fast" and llm_tools:
-            fast_tools = {"run_full_pipeline", "run_pipeline_stage", "check_blender_environment", "build_frame_model", "list_scenarios", "get_scenario", "steam_turbine_demolition", "visual_demolition"}
-            llm_tools = [t for t in llm_tools if t["function"]["name"] in fast_tools]
+            llm_tools = [t for t in llm_tools if t["function"]["name"] in BLENDER_PIPELINE_TOOLS]
             logger.info(f"Fast mode: filtered to {len(llm_tools)} blender pipeline tools")
+        elif analysis_mode == "simulation" and llm_tools:
+            llm_tools = [t for t in llm_tools if t["function"]["name"] in ABAQUS_TOOLS]
+            logger.info(f"Simulation mode: filtered to {len(llm_tools)} abaqus tools")
         else:
+            # analysis 模式：排除 Blender 与 Abaqus 工具，其余按消息关键词过滤
+            if llm_tools:
+                llm_tools = [
+                    t for t in llm_tools
+                    if t["function"]["name"] not in BLENDER_PIPELINE_TOOLS
+                    and t["function"]["name"] not in ABAQUS_TOOLS
+                ]
             llm_tools = _filter_tools_by_message(user_message, llm_tools)
 
         system_content = build_system_prompt(user_message, has_tools=llm_tools is not None, analysis_mode=analysis_mode)
