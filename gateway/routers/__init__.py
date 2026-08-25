@@ -7,5 +7,6 @@ from routers.settings import router as settings_router
 from routers.unity import router as unity_router
 from routers.blender import router as blender_router
 from routers.effects import router as effects_router
+from routers.abaqus import router as abaqus_router
 
-routers = [tools_router, verify_router, servers_router, settings_router, unity_router, blender_router, effects_router]
+routers = [tools_router, verify_router, servers_router, settings_router, unity_router, blender_router, effects_router, abaqus_router]
