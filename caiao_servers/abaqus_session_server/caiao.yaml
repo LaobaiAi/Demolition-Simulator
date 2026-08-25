@@ -57,3 +57,27 @@ tools:
   - name: setup_collapse
     description: "Full collapse simulation pipeline — build model, create step, setup ground/contact, apply gravity, create cut zone, submit job"
     tags: [abaqus, pipeline, collapse]
+  - name: create_cooling_tower
+    description: "Create hyperboloid cooling tower shell part (S4R mesh built at creation, two-segment hyperbola meridian, 70m tower defaults)"
+    tags: [abaqus, modeling, cooling-tower]
+  - name: assign_tower_materials
+    description: "Assign C30 CDP + rebar steel with composite shell section (2x60mm concrete + 0.5mm rebar) to a tower part"
+    tags: [abaqus, material, cooling-tower]
+  - name: mesh_tower
+    description: "Collect tower opening-band elements into OpeningHole element set by centroid criterion (elevation + azimuth)"
+    tags: [abaqus, mesh, cooling-tower]
+  - name: setup_tower_collapse
+    description: "Submit cooling tower collapse solve asynchronously — generate INP from parameters, submit job, return job_id + estimated_duration_s; poll with get_collapse_status"
+    tags: [abaqus, pipeline, collapse, cooling-tower]
+  - name: extract_collapse_frames
+    description: "Extract tower nodal displacement frames from the collapse ODB into data.npz for video rendering (1-3 min, after solve completes)"
+    tags: [abaqus, results, cooling-tower, video]
+  - name: render_collapse_video
+    description: "Render collapse animation to 2 MP4s + footprint json, deploy to frontend Abaqus panel (3-8 min, server process, no Abaqus license)"
+    tags: [abaqus, results, video, footprint]
+  - name: get_collapse_status
+    description: "Poll async collapse solve progress from .sta (status/progress %, wait_seconds up to 180)"
+    tags: [abaqus, job, status]
+  - name: stop_collapse
+    description: "Terminate a running collapse solve (kill solver process, remove .lck)"
+    tags: [abaqus, job, cancel]
