@@ -8,6 +8,8 @@ Supports external cancel/stop and pause/resume via asyncio.Event signals.
 import asyncio
 import json
 import logging
+import os
+import time
 from typing import Any, AsyncGenerator
 
 from llm_engine import LLMEngine, build_system_prompt
@@ -48,7 +50,8 @@ TOOL_KEYWORD_MAP: dict[str, list[str]] = {
                "setup_collapse",
                "create_cooling_tower", "assign_tower_materials", "mesh_tower",
                "setup_tower_collapse", "extract_collapse_frames",
-               "render_collapse_video", "get_collapse_status", "stop_collapse"],
+               "render_collapse_video", "get_collapse_status", "stop_collapse",
+               "stack_run_analysis"],
     "bim": ["generate_steel_frame", "generate_concrete_structure",
             "generate_hybrid_structure", "export_ifc", "generate_truss",
             "generate_portal_frame", "generate_beam"],
@@ -63,6 +66,20 @@ BLENDER_PIPELINE_TOOLS: set[str] = {
 }
 # simulation (Abaqus) 模式只暴露 Abaqus 仿真工具
 ABAQUS_TOOLS: set[str] = set(TOOL_KEYWORD_MAP["abaqus"])
+
+# ── Tool call safety & caching ───────────────────────────────────────────────
+TOOL_CALL_TIMEOUT_S = 600.0
+# stack_run_analysis blocks until its own solve budget (GLOBAL_BUDGET_S=9000s) expires —
+# a shorter gateway timeout would kill a legitimate solve mid-run and orphan Abaqus.
+POLL_TOOL_TIMEOUT_S = 9000.0
+POLL_TOOLS: set[str] = {"get_collapse_status", "stack_run_analysis"}
+TOOL_CACHE_TTL_S = 30.0
+
+
+def _is_no_cache_tool(name: str) -> bool:
+    """Stateful tools (submit/stop/setup/query, all Abaqus tools) must never be cached —
+    identical args can return different state (e.g. poll progress)."""
+    return name in ABAQUS_TOOLS or name.startswith(("setup_", "clear_", "stop_"))
 
 
 def _filter_tools_by_message(
@@ -119,13 +136,65 @@ def _truncate_tool_result(result_data: Any, max_chars: int = 3000) -> Any:
     return result_data
 
 
+# ── Lazy tool schema enrichment ──────────────────────────────────────────────
+# Lazy servers are not running at list_tools() time, so the hub returns them with
+# a placeholder description and an empty input_schema. Their caiao.yaml manifests
+# carry the real descriptions — merge those in before handing tools to the LLM.
+_SERVERS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "caiao_servers")
+_yaml_tool_meta: dict[str, dict[str, Any]] = {}
+
+
+def _load_yaml_tool_meta() -> dict[str, dict[str, Any]]:
+    """Load tool name → manifest entry for every caiao_servers/*/caiao.yaml (cached)."""
+    if _yaml_tool_meta:
+        return _yaml_tool_meta
+    try:
+        import yaml
+    except ImportError:
+        return _yaml_tool_meta
+    if not os.path.isdir(_SERVERS_DIR):
+        return _yaml_tool_meta
+    for entry in os.scandir(_SERVERS_DIR):
+        if not entry.is_dir() or entry.name.startswith(("_", ".")):
+            continue
+        manifest = os.path.join(entry.path, "caiao.yaml")
+        if not os.path.exists(manifest):
+            continue
+        try:
+            with open(manifest, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+        except Exception:
+            continue
+        if not isinstance(data, dict):
+            continue
+        for tool in data.get("tools") or []:
+            if isinstance(tool, dict) and tool.get("name"):
+                _yaml_tool_meta[tool["name"]] = tool
+    return _yaml_tool_meta
+
+
+def _enrich_tool_schemas(tools_list: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Replace lazy-placeholder descriptions with manifest descriptions (in place)."""
+    meta = _load_yaml_tool_meta()
+    for tool in tools_list:
+        info = meta.get(tool.get("name", ""))
+        if not info:
+            continue
+        if info.get("description") and "(lazy)" in tool.get("description", ""):
+            tool["description"] = info["description"]
+        schema = tool.get("input_schema")
+        if not isinstance(schema, dict) or not schema.get("properties"):
+            tool["input_schema"] = {"type": "object", "properties": {}}
+    return tools_list
+
+
 class AgentLoop:
     """Orchestrates the ReAct loop: LLM reasoning + tool execution."""
 
     def __init__(self, llm: LLMEngine, hub: CAIAOClientHub):
         self.llm = llm
         self.hub = hub
-        self._tool_cache: dict[str, Any] = {}
+        self._tool_cache: dict[str, tuple[float, Any]] = {}
         self._cancel_event = asyncio.Event()
         self._pause_event = asyncio.Event()
         self._resume_event = asyncio.Event()
@@ -178,6 +247,7 @@ class AgentLoop:
     ) -> AsyncGenerator[dict[str, Any], None]:
         if self._cached_tools is None:
             self._cached_tools = await self.hub.list_tools()
+            _enrich_tool_schemas(self._cached_tools)
             logger.info(f"Cached {len(self._cached_tools)} tools from hub")
         tools_list = self._cached_tools
         llm_tools = self.llm.format_tools_for_llm(tools_list) if tools_list else None
@@ -240,16 +310,27 @@ class AgentLoop:
             final_reasoning = ""
 
             try:
+                thinking_buf: list[str] = []
                 async for chunk in self.llm.chat_stream(messages, tools=llm_tools):
                     if chunk["type"] == "reasoning_chunk":
                         streamed_reasoning.append(chunk["content"])
                         total_reasoning.append(chunk["content"])
+                        thinking_buf.append(chunk["content"])
+                        if sum(len(c) for c in thinking_buf) >= 100:
+                            yield {"type": "thinking", "content": "".join(thinking_buf)}
+                            thinking_buf.clear()
                     elif chunk["type"] == "content_chunk":
                         streamed_content.append(chunk["content"])
+                        thinking_buf.append(chunk["content"])
+                        if sum(len(c) for c in thinking_buf) >= 100:
+                            yield {"type": "thinking", "content": "".join(thinking_buf)}
+                            thinking_buf.clear()
                     elif chunk["type"] == "stream_complete":
                         final_tool_calls = chunk.get("tool_calls")
                         final_content = chunk.get("content", "")
                         final_reasoning = chunk.get("reasoning_content", "")
+                if thinking_buf:
+                    yield {"type": "thinking", "content": "".join(thinking_buf)}
             except Exception as e:
                 error_msg = str(e)
                 logger.exception(f"LLM stream failed: {error_msg}")
@@ -284,12 +365,20 @@ class AgentLoop:
                         assistant_msg["reasoning_content"] = final_reasoning
                     messages.append(assistant_msg)
 
-                    # Check tool cache (avoid redundant calls with identical args)
+                    # Tool cache — idempotent read-only tools only, TTL-bounded
                     cache_key = _make_cache_key(tc["name"], tc["arguments"])
-                    cached = self._tool_cache.get(cache_key)
-                    if cached is not None:
+                    cached_result = None
+                    if not _is_no_cache_tool(tc["name"]):
+                        entry = self._tool_cache.get(cache_key)
+                        if entry is not None:
+                            ts, value = entry
+                            if time.monotonic() - ts <= TOOL_CACHE_TTL_S:
+                                cached_result = value
+                            else:
+                                self._tool_cache.pop(cache_key, None)
+                    if cached_result is not None:
                         logger.info(f"Tool cache hit: {tc['name']}")
-                        result_data = cached
+                        result_data = cached_result
                         yield {
                             "type": "tool_result",
                             "name": tc["name"],
@@ -298,7 +387,14 @@ class AgentLoop:
                             "iteration": iteration,
                         }
                     else:
-                        result = await self.hub.call_tool(tc["name"], tc["arguments"])
+                        timeout = POLL_TOOL_TIMEOUT_S if tc["name"] in POLL_TOOLS else TOOL_CALL_TIMEOUT_S
+                        try:
+                            result = await asyncio.wait_for(
+                                self.hub.call_tool(tc["name"], tc["arguments"]), timeout
+                            )
+                        except asyncio.TimeoutError:
+                            logger.error(f"Tool call timed out after {timeout}s: {tc['name']}")
+                            result = {"error": f"Tool '{tc['name']}' timed out after {int(timeout)}s"}
                         if "result" in result:
                             result_data = result["result"]
                         elif "error" in result:
@@ -306,11 +402,12 @@ class AgentLoop:
                         else:
                             result_data = str(result)
 
-                        # Cache successful results (skip errors)
-                        if isinstance(result_data, str) and "error" not in result_data.lower()[:50]:
-                            self._tool_cache[cache_key] = result_data
-                        elif isinstance(result_data, dict) and "error" not in result_data:
-                            self._tool_cache[cache_key] = result_data
+                        # Cache successful results (skip errors and stateful tools)
+                        if not _is_no_cache_tool(tc["name"]):
+                            if isinstance(result_data, str) and "error" not in result_data.lower()[:50]:
+                                self._tool_cache[cache_key] = (time.monotonic(), result_data)
+                            elif isinstance(result_data, dict) and "error" not in result_data:
+                                self._tool_cache[cache_key] = (time.monotonic(), result_data)
 
                         yield {
                             "type": "tool_result",
