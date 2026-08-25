@@ -318,6 +318,12 @@ If `frame_generator.core` has a breaking change, `quick_analysis_server` needs t
 | `blender_pipeline_server` | Atomic | `run_full_pipeline`, `run_pipeline_stage`, `check_blender_environment` | Active (lazy) | 2026-06-03 |
 | `abaqus_environment_server` | Infrastructure | `resolve_abaqus_path`, `validate_environment`, `get_abaqus_config` | Active (eager) | 2026-06-04 |
 | `abaqus_session_server` | Merged | `create_rectangular_column`, `create_truss`, `create_slab`, `assign_concrete_cdp`, `mesh_part`, `create_explicit_step`, `apply_gravity`, `create_rigid_ground`, `submit_job`, `get_max_displacement`, `plot_displacement_curve`, `create_cut_zone`, `inject_cut_zone_inp`, `build_factory`, `setup_collapse`, `create_cooling_tower`, `assign_tower_materials`, `mesh_tower`, `setup_tower_collapse`, `extract_collapse_frames`, `render_collapse_video`, `get_collapse_status`, `stop_collapse` | Active (lazy) | 2026-06-04 |
+| `agnes_video_server` | Atomic | `generate_video`, `check_video_status`, `save_api_key`, `list_scene_prompts` | Active | — |
+| `demo_calculator` | Atomic | `add`, `subtract`, `multiply`, `divide` | Active | — |
+| `scenario_server` | Atomic | `list_scenarios`, `get_scenario`, `recommend_scenario` | Active | — |
+| `steel_frame_3d_generator` | Atomic | `generate_3d_frame` | Active | — |
+| `steam_turbine_demolition` | Composite | `run_steam_turbine_demolition` | Active | — |
+| `stack_analysis_server` | Atomic | `stack_run_analysis` | Active (lazy) | 2026-08-25 |
 ### Server Details
 
 #### ⚡ `quick_analysis_server` — Pipeline A (First Merge)
@@ -558,18 +564,29 @@ If `frame_generator.core` has a breaking change, `quick_analysis_server` needs t
 
 #### `abaqus_session_server` — Persistent Abaqus CAE Session
 
-- **Purpose:** Maintains a single long-lived Abaqus Python subprocess exposing 19 modeling, analysis, and result extraction tools. All tools share one `mdb.models['Model-1']` session.
+- **Purpose:** Maintains a single long-lived Abaqus Python subprocess exposing 23 modeling, analysis, and result extraction tools. All tools share one `mdb.models['Model-1']` session.
 - **Kind:** Merged (lazy)
 - **Architecture:** System Python MCP server → spawns `abaqus python abaqus_session.py` → JSON-RPC over stdio. Avoids requiring `mcp` package in Abaqus Python.
-- **Tools (19):**
+- **Tools (23):**
   - Modeling: `create_rectangular_column`, `create_truss`, `create_slab`, `assign_concrete_cdp`, `mesh_part`
   - Analysis: `create_explicit_step`, `apply_gravity`, `create_rigid_ground`, `submit_job`
   - Results: `get_max_displacement`, `plot_displacement_curve`
   - Demolition: `create_cut_zone`, `inject_cut_zone_inp`
   - Pipeline: `build_factory`, `setup_collapse`
   - Cooling tower: `create_cooling_tower`, `assign_tower_materials`, `mesh_tower`, `setup_tower_collapse`
+  - Frame extraction/rendering: `extract_collapse_frames`, `render_collapse_video`
+  - Status/control: `get_collapse_status`, `stop_collapse`
 - **INP Injection Logic:** Preserves v1→v2→v3 validated WEAK_C30 material, SECTION CONTROLS element deletion, and STATUS/SDEG field output injection from original pipeline_run_collapse.py
 - **Creation:** 2026-06-04 (absorbed from Abaqus_Collapse project — 12 atomic servers + 2 orchestration servers merged into one session server)
+
+#### `stack_analysis_server` — Chimney Collapse Quick Analysis (Thin Wrapper)
+
+- **Purpose:** Platform LLM entry to the stack01 chimney (H=100m, chemical-concrete, self-weight collapse) quick analysis. Thin stdio wrapper over the script module `scripts/stack_quick_analysis.py` — imports the pure `run_stack_analysis()` function (scripts dir injected into sys.path), no dependency on any other server's runtime (P1 compliant).
+- **Kind:** Atomic (lazy)
+- **Tool:** `stack_run_analysis` — one-shot parameterized run on the accepted `concrete_stack_run39` baseline: copies run script + metrics probe, substitutes params (sim_time / opening_height / weak_ring_elev / weak_ring_cf / output_interval / n_theta), assembles + validates INP, solves via `run_with_wake.py` (power-sleep guard), runs kernel metrics, returns the stable JSON schema v1 with per-criterion PASS/FAIL acceptance. Blocking 5-15 min (seconds for `no_solve` dry run); the gateway grants it the long POLL_TOOL_TIMEOUT_S budget (9000s, matching the script's internal GLOBAL_BUDGET_S).
+- **LLM wiring:** Registered in `TOOL_KEYWORD_MAP["abaqus"]` (available in simulation mode + never cached) and in `SIMULATION_CORE_PROMPT` table/workflow (stack01 default 7.6s display regime vs 12.0s acceptance regime).
+- **Instance guide:** `docs/instances/stack01/prompt.md`
+- **Creation:** 2026-08-25
 
 ---
 
@@ -663,6 +680,8 @@ convert_to_unified_frame (embedded in the merged server):
 | 2026-06-05 | **Thorough CAIAO-ification**: Removed 175-line legacy `_legacy_server_configs()` fallback from `caiao_config.py` — all 30 servers now have `caiao.yaml` manifests. Created composite manifests for `run_full_analysis`, `full_bim_demolition`, `visual_demolition_topology`, `visual_demolition_mechanics`. Replaced hardcoded `PIPELINE_VISUAL_DEMOLITION_*` constants in `main.py` with runtime reads from hub config (`get_pipeline_config()`). Split monolithic `main.py` (1298→470 lines) into `routers/` (5 files: tools, verify, servers, settings, unity) and `services/pipeline_service.py`. All REST endpoints now defined in routers; WebSocket handler + lifespan remain in main.py. Added `app.state` pattern for shared state between lifespan and routers. Architecture redesign documented in `dev-notes/architecture/2026-06-05-architecture-redesign.md` | Claude |
 | 2026-08-22 | **Cooling tower collapse simulation tools**: Added 4 tools to `abaqus_session_server` (15→19): `create_cooling_tower` (hyperboloid shell, two-segment hyperbola meridian base/throat/top, S4R mesh generated at creation, 70m tower defaults), `assign_tower_materials` (C30 CDP full GB50010 hardening/stiffening tables + rebar steel + CompositeShellSection 2×60mm C30 + 0.5mm rebar), `mesh_tower` (opening-band element set via centroid criterion: elevation + azimuth), `setup_tower_collapse` (settle 1s + collapse 12s explicit steps, smooth gravity ramp, rigid ground, INP surgery: opening element exclusion + `*CONCRETE FAILURE` injection, runs via `JobFromInputFile` so INP edits take effect). Registry §8 and server details updated. | Claude |
 | 2026-08-22 | **Frontend LLM chain: async tower collapse + video pipeline**: `setup_tower_collapse` rewritten to generate the solver INP directly from parameters in the kernel (host-validated cards: composite shell, CDP+rebar, fixed mass scaling dt=4e-4, ENCASTRE base, gravity ramp, contact, full output — no CAE model, bypassing the assembly.Set kernel bug) and submit ASYNCHRONOUSLY (returns job_id/status=submitted/estimated_duration_s/odb_path, no wait). Added 4 tools (19→23): `extract_collapse_frames` (kernel, ODB→data.npz), `render_collapse_video` (server process, MP4s + footprint to frontend, no Abaqus license), `get_collapse_status` (server, .sta polling), `stop_collapse` (kernel, kill solver + .lck). LLM side: 8 tools unblocked in TOOL_KEYWORD_MAP, SIMULATION_CORE_PROMPT polling workflow (submit → estimate >5min asks user → poll → extract → render), MAX_TOOL_ITERATIONS 8→16. Timeouts env-parameterized (ABAQUS_TOOL_TIMEOUT_S/ABAQUS_KERNEL_BOOT_TIMEOUT_S/ABAQUS_POLL_INTERVAL_S/ABAQUS_RENDER_TIMEOUT_S). Registry §8 updated. | Claude |
+| 2026-08-25 | **Registry sync**: Registered 5 existing-but-unlisted servers in §8 Server Registry (`agnes_video_server`, `demo_calculator`, `scenario_server`, `steel_frame_3d_generator`, `steam_turbine_demolition`); updated `abaqus_session_server` detail section tool count 19→23 with the 4 async-collapse tools (`extract_collapse_frames`, `render_collapse_video`, `get_collapse_status`, `stop_collapse`) | Claude |
+| 2026-08-25 | **stack_analysis_server**: New thin CAIAO server wrapping `scripts/stack_quick_analysis.py` — tool `stack_run_analysis` (stack01 chimney self-weight collapse one-shot analysis, stable JSON schema v1 with PASS/FAIL acceptance). Auto-registered via caiao.yaml (lazy). LLM wiring: added to `TOOL_KEYWORD_MAP["abaqus"]` (simulation-mode visible, no-cache), `POLL_TOOLS` + `POLL_TOOL_TIMEOUT_S` 700→9000s (blocking solve budget), `SIMULATION_CORE_PROMPT` table/workflow/rules. Registry §8 + stack01 prompt.md updated. | Claude |
 
 ---
 
