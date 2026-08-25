@@ -50,8 +50,8 @@ interface ChatPanelProps {
   onLaunchVisualDemolition: () => void;
   onTriggerDemolition: () => void;
   onQuickAction: (action: string) => void;
-  analysisMode: "analysis" | "fast";
-  setAnalysisMode: (v: "analysis" | "fast") => void;
+  analysisMode: "analysis" | "fast" | "simulation";
+  setAnalysisMode: (v: "analysis" | "fast" | "simulation") => void;
 }
 
 export function ChatPanel({
@@ -76,6 +76,10 @@ export function ChatPanel({
           <button onClick={() => setAnalysisMode("fast")}
             className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${analysisMode === "fast" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
             {t("chat.mode_fast", lang)}
+          </button>
+          <button onClick={() => setAnalysisMode("simulation")}
+            className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${analysisMode === "simulation" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+            {t("chat.mode_simulation", lang)}
           </button>
         </div>
       </div>

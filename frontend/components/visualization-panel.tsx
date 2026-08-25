@@ -179,7 +179,7 @@ export function VisualizationPanel({
           </Suspense>
         </div>
         <div className={`absolute inset-0 ${vizMode === "abaqus" ? "" : "invisible pointer-events-none"}`}>
-          <AbaqusVideoPanel />
+          <AbaqusVideoPanel lang={lang} />
         </div>
       </div>
 
