@@ -1,8 +1,8 @@
-export const API_BASE = "http://localhost:8000";
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
 // ── Resilient fetch wrapper ─────────────────────────────────────────────────
 
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 10000): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -35,7 +35,7 @@ export interface Tool {
 }
 
 export async function fetchHealth(): Promise<{ status: string }> {
-  const res = await fetch(`${API_BASE}/health`);
+  const res = await fetchWithTimeout(`${API_BASE}/health`);
   if (!res.ok) throw new Error(`Health check failed: ${res.status}`);
   return res.json();
 }
@@ -82,7 +82,7 @@ export async function fetchScenarios(category?: string, tag?: string): Promise<S
 }
 
 export async function fetchScenario(name: string): Promise<ScenarioFull | null> {
-  const res = await fetch(`${API_BASE}/scenarios/${name}`);
+  const res = await fetchWithTimeout(`${API_BASE}/scenarios/${name}`);
   if (!res.ok) return null;
   const data = await res.json();
   const raw = data.result || data;
@@ -92,7 +92,7 @@ export async function fetchScenario(name: string): Promise<ScenarioFull | null> 
 
 export async function fetchScenarioPrompt(name: string): Promise<string | null> {
   try {
-    const res = await fetch(`${API_BASE}/prompts/${name}`);
+    const res = await fetchWithTimeout(`${API_BASE}/prompts/${name}`);
     if (!res.ok) return null;
     const data = await res.json();
     return (data.content as string) || null;
@@ -105,7 +105,7 @@ export async function callTool(
   toolName: string,
   arguments_: Record<string, unknown>
 ): Promise<{ result: string; error?: string }> {
-  const res = await fetch(`${API_BASE}/tools/call`, {
+  const res = await fetchWithTimeout(`${API_BASE}/tools/call`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ tool_name: toolName, arguments: arguments_ }),
@@ -141,7 +141,7 @@ export async function verifyAnalysis(
   fastResult: Record<string, unknown>,
   structure?: Record<string, unknown>
 ): Promise<VerificationResult> {
-  const res = await fetch(`${API_BASE}/verify`, {
+  const res = await fetchWithTimeout(`${API_BASE}/verify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fast_result: fastResult, structure: structure || null }),
@@ -186,7 +186,7 @@ export async function verifyMulti(
   fastResult: Record<string, unknown>,
   structure: Record<string, unknown>
 ): Promise<MultiSolverResult> {
-  const res = await fetch(`${API_BASE}/verify/multi`, {
+  const res = await fetchWithTimeout(`${API_BASE}/verify/multi`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fast_result: fastResult, structure }),
@@ -203,7 +203,7 @@ export interface LLMConfig {
 }
 
 export async function saveLLMSettings(config: LLMConfig): Promise<void> {
-  const res = await fetch(`${API_BASE}/settings/llm`, {
+  const res = await fetchWithTimeout(`${API_BASE}/settings/llm`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(config),
@@ -217,7 +217,7 @@ export async function getLLMConfig(): Promise<{
   has_api_key: boolean;
   thinking_enabled: boolean;
 }> {
-  const res = await fetch(`${API_BASE}/settings/llm`);
+  const res = await fetchWithTimeout(`${API_BASE}/settings/llm`);
   if (!res.ok) throw new Error(`Failed to get config: ${res.status}`);
   return res.json();
 }
@@ -256,43 +256,43 @@ export interface ServerMetrics {
 }
 
 export async function fetchServerStatus(): Promise<ServerStatus[]> {
-  const res = await fetch(`${API_BASE}/servers`);
+  const res = await fetchWithTimeout(`${API_BASE}/servers`);
   if (!res.ok) throw new Error(`Failed to fetch servers: ${res.status}`);
   const data = await res.json();
   return data.servers;
 }
 
 export async function fetchServerHealth(): Promise<ServerHealth> {
-  const res = await fetch(`${API_BASE}/servers/health`);
+  const res = await fetchWithTimeout(`${API_BASE}/servers/health`);
   if (!res.ok) throw new Error(`Failed to fetch health: ${res.status}`);
   const data = await res.json();
   return data.health;
 }
 
 export async function fetchServerMetrics(): Promise<ServerMetrics> {
-  const res = await fetch(`${API_BASE}/servers/metrics`);
+  const res = await fetchWithTimeout(`${API_BASE}/servers/metrics`);
   if (!res.ok) throw new Error(`Failed to fetch metrics: ${res.status}`);
   const data = await res.json();
   return data.metrics;
 }
 
 export async function pauseServer(serverName: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/servers/${serverName}/pause`, { method: "POST" });
+  const res = await fetchWithTimeout(`${API_BASE}/servers/${serverName}/pause`, { method: "POST" });
   if (!res.ok) throw new Error(`Failed to pause: ${res.status}`);
 }
 
 export async function resumeServer(serverName: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/servers/${serverName}/resume`, { method: "POST" });
+  const res = await fetchWithTimeout(`${API_BASE}/servers/${serverName}/resume`, { method: "POST" });
   if (!res.ok) throw new Error(`Failed to resume: ${res.status}`);
 }
 
 export async function restartServer(serverName: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/servers/${serverName}/restart`, { method: "POST" });
+  const res = await fetchWithTimeout(`${API_BASE}/servers/${serverName}/restart`, { method: "POST" });
   if (!res.ok) throw new Error(`Failed to restart: ${res.status}`);
 }
 
 export async function stopServer(serverName: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/servers/${serverName}/stop`, { method: "POST" });
+  const res = await fetchWithTimeout(`${API_BASE}/servers/${serverName}/stop`, { method: "POST" });
   if (!res.ok) throw new Error(`Failed to stop: ${res.status}`);
 }
 
@@ -300,7 +300,7 @@ export async function callManagerTool(
   toolName: string,
   args: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(`${API_BASE}/tools/call`, {
+  const res = await fetchWithTimeout(`${API_BASE}/tools/call`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ tool_name: toolName, arguments: args }),
@@ -343,7 +343,7 @@ export interface OrphanToolsResponse {
 }
 
 export async function fetchOrphanTools(): Promise<OrphanToolsResponse> {
-  const res = await fetch(`${API_BASE}/tools/orphans`)
+  const res = await fetchWithTimeout(`${API_BASE}/tools/orphans`)
   if (!res.ok) throw new Error(`Failed to fetch orphan tools: ${res.status}`)
   return res.json()
 }

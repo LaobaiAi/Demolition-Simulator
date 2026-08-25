@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Play, Pause, Volume2, VolumeX, AlertTriangle, Loader2, Maximize2, Minimize2, XCircle } from "lucide-react";
 import { t, type Lang } from "@/lib/i18n";
+import { API_BASE } from "@/lib/api";
 
 interface FootprintData {
   max_radius_m: number;
@@ -122,7 +123,7 @@ export function AbaqusVideoPanel({ lang }: { lang: Lang }) {
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
-        const r = await fetch("/api/abaqus/solve-status");
+        const r = await fetch(`${API_BASE}/api/abaqus/solve-status`);
         if (!r.ok) {
           timer = setTimeout(poll, 8000);
           return;
@@ -145,7 +146,7 @@ export function AbaqusVideoPanel({ lang }: { lang: Lang }) {
   const stopSolve = async () => {
     setStopError(null);
     try {
-      const r = await fetch("/api/abaqus/solve-stop", { method: "POST" });
+      const r = await fetch(`${API_BASE}/api/abaqus/solve-stop`, { method: "POST" });
       const d: SolveStatus = await r.json();
       if (!r.ok || d.error) {
         setStopError(t("abaqus.stop_failed", lang));
