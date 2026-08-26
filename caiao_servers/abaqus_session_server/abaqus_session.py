@@ -1266,6 +1266,10 @@ def _submit_job_from_inp(inp_path, job_name, cpus, memory):
     which would defeat the async design. Kernel submit is the last-resort
     fallback when the launcher cannot be resolved."""
     global _SOLVER_PROC
+    running = _find_job_processes(job_name)
+    if running:
+        raise RuntimeError("job already running: solver processes %s still "
+                           "active for %s" % (running, job_name))
     try:
         launcher = _resolve_launcher()
         cmd = '{} job={} cpus={} memory={}'.format('"' + launcher + '"', job_name, cpus, memory)
@@ -1498,11 +1502,51 @@ def _handle_extract_collapse_frames(args):
     }
 
 
+def _find_job_processes(job_name):
+    """Pids of Abaqus solver-related processes whose command line contains
+    job_name; None when the process scan itself fails (cannot verify)."""
+    images = "','".join(["eliT_DriverLM.exe", "explicit.exe", "mpiexec.exe",
+                         "SMAPython.exe", "cmd.exe"])
+    ps = (
+        "Get-CimInstance Win32_Process | Where-Object { "
+        "$_.Name -in @('" + images + "') } | "
+        "ForEach-Object { \"{0}|{1}|{2}\" -f $_.ProcessId,$_.Name,$_.CommandLine }"
+    )
+    try:
+        r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                           capture_output=True, text=True, errors="replace",
+                           timeout=30)
+        if r.returncode != 0:
+            return None
+    except Exception:
+        return None
+    pids = []
+    own_pid = os.getpid()
+    for line in r.stdout.splitlines():
+        parts = line.split("|", 2)
+        if len(parts) != 3 or not parts[2]:
+            continue
+        pid, name, cmdline = parts
+        if job_name.lower() not in cmdline.lower():
+            continue
+        try:
+            pid_i = int(pid)
+        except ValueError:
+            continue
+        # the kernel itself is SMAPython.exe — never kill the process
+        # answering this request
+        if pid_i == own_pid:
+            continue
+        pids.append(pid_i)
+    return pids
+
+
 def _handle_stop_collapse(args):
     """Terminate a running collapse solve: kill the kernel job (or the fallback
     solver process) and remove the .lck lock so the job cannot restart."""
     job_name = args.get("job_id", TOWER_JOB_NAME)
     actions = []
+    failed = False
     try:
         if job_name in mdb.jobs:
             mdb.jobs[job_name].kill()
@@ -1512,12 +1556,38 @@ def _handle_stop_collapse(args):
     global _SOLVER_PROC
     if _SOLVER_PROC is not None:
         try:
-            subprocess.run(["taskkill", "/T", "/F", "/PID", str(_SOLVER_PROC.pid)],
-                           capture_output=True, timeout=15)
-            actions.append("solver process killed")
+            r = subprocess.run(["taskkill", "/T", "/F", "/PID", str(_SOLVER_PROC.pid)],
+                               capture_output=True, timeout=15)
+            if r.returncode == 0:
+                actions.append("solver process killed")
+            else:
+                actions.append("process kill failed (pid %d stale)" % _SOLVER_PROC.pid)
         except Exception as e:
+            failed = True
             actions.append("process kill failed: %s" % e)
         _SOLVER_PROC = None
+    remaining = None
+    killed_trees = 0
+    pids = _find_job_processes(job_name)
+    if pids is None:
+        actions.append("process scan failed")
+    else:
+        for pid in pids:
+            try:
+                r = subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)],
+                                   capture_output=True, timeout=15)
+                if r.returncode == 0:
+                    killed_trees += 1
+                else:
+                    actions.append("sweep kill failed for pid %d" % pid)
+            except Exception as e:
+                failed = True
+                actions.append("sweep kill failed for pid %d: %s" % (pid, e))
+        if killed_trees:
+            actions.append("sweep killed %d process tree(s)" % killed_trees)
+        remaining = _find_job_processes(job_name)
+        if remaining:
+            actions.append("still running: %s" % remaining)
     lck = os.path.join(os.getcwd(), job_name + ".lck")
     if os.path.exists(lck):
         try:
@@ -1525,7 +1595,16 @@ def _handle_stop_collapse(args):
             actions.append("lck removed")
         except OSError:
             pass
-    return {"job_id": job_name, "status": "terminated", "actions": actions}
+    if failed:
+        status = "failed"
+    elif remaining is None or remaining:
+        status = "partial"
+    else:
+        status = "terminated"
+    result = {"job_id": job_name, "status": status, "actions": actions}
+    if isinstance(remaining, list) and remaining:
+        result["remaining_pids"] = remaining
+    return result
 
 
 # ── Tool registry ──────────────────────────────────────────────────────────
