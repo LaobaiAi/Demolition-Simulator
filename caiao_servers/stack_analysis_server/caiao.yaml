@@ -1,7 +1,7 @@
 # caiao.yaml — Stack Analysis Server manifest
 
 name: stack_analysis_server
-version: 0.1.0
+version: 0.2.0
 kind: atomic-mcp
 description: "Chemical-concrete chimney (stack01, H=100m) self-weight collapse analysis — one-shot quick analysis on the accepted run-39 baseline"
 status: active
@@ -23,12 +23,24 @@ health:
 
 tools:
   - name: stack_run_analysis
-    description: "Chemical-concrete chimney stack01 (H=100m) self-weight collapse one-shot analysis on the accepted run-39 baseline. BLOCKING call (5-15 min real solve; seconds with no_solve dry-run). Returns stable JSON (schema v1) with per-criterion PASS/FAIL acceptance. Params: run_name (new, letters/digits/underscore), sim_time (7.6 display regime / 12.0 acceptance regime), opening_height, weak_ring_elev, weak_ring_cf, output_interval, n_theta, no_solve, solve_only, metrics_only. Instance guide: docs/instances/stack01/prompt.md"
+    description: "Chemical-concrete chimney stack01 (H=100m) self-weight collapse one-shot analysis on the accepted run-39 baseline. BLOCKING call (5-15 min real solve; seconds with no_solve dry-run). For interactive flows use stack_submit_analysis + stack_get_status instead. Returns stable JSON (schema v1) with per-criterion PASS/FAIL acceptance. Params: run_name (new, letters/digits/underscore), sim_time (7.6 display regime / 12.0 acceptance regime), opening_height, weak_ring_elev, weak_ring_cf, output_interval, n_theta, no_solve, solve_only, metrics_only. Instance guide: docs/instances/stack01/prompt.md"
     tags: [stack, chimney, abaqus, collapse, analysis]
+  - name: stack_submit_analysis
+    description: "Submit stack01 chimney (H=100m) self-weight collapse solve ASYNCHRONOUSLY — builds the run from the accepted run-39 baseline, launches the solver, returns immediately with run_name + status=submitted + estimated_duration_s + model info. DO NOT wait — poll with stack_get_status until status=completed (that poll returns the full schema-v1 acceptance JSON with per-criterion PASS/FAIL); abort with stack_stop_analysis. Params: run_name (new, letters/digits/underscore), sim_time (7.6 display regime ~400s / 12.0 acceptance regime ~700s), opening_height, weak_ring_elev, weak_ring_cf, output_interval, n_theta, no_solve (seconds-level dry run). Instance guide: docs/instances/stack01/prompt.md"
+    tags: [stack, chimney, abaqus, collapse, analysis, async, submit]
+  - name: stack_get_status
+    description: "Poll stack solve progress from the run's .sta status file. Returns status (submitted/running/completed/failed/terminated/not_found) with progress percent and step/total time; wait_seconds up to 180 per call; the solve keeps running in the background between calls. On status=completed the same call runs the metrics probe and returns the full schema-v1 acceptance JSON (per-criterion PASS/FAIL: deletion 15-17%, p95 55-66m, direction +-60deg of +X, penetration min_y>=-0.5)."
+    tags: [stack, chimney, abaqus, collapse, status, poll]
+  - name: stack_stop_analysis
+    description: "Terminate a running stack solve: kill the wrapper/solver process tree, sweep explicit.exe, remove the .lck. Use when the user wants to abort a long solve; verify afterwards with stack_get_status (must be terminated/failed, not running)."
+    tags: [stack, chimney, abaqus, collapse, stop, abort]
 
 capabilities:
   - stack_collapse_analysis
   - one_shot_solve
+  - async_solve_submit
+  - solve_status_poll
+  - solve_abort
 
 dependencies:
   python: []
