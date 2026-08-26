@@ -1,7 +1,7 @@
 name: steam_turbine_demolition
-version: 0.1.0
+version: 0.2.0
 kind: composite
-description: "Steam turbine industrial building — build Blender model for demo/visualization"
+description: "Steam turbine industrial building — build Blender model, apply demolition animation, render video"
 status: active
 since: "2026-06-06"
 
@@ -20,17 +20,17 @@ input_schema:
       default: steam_turbine
     strategy:
       type: string
-      description: "Demolition strategy"
+      description: "Demolition strategy (informational; animate stage uses the built-in sequence)"
     effects_preset:
       type: string
-      description: "Visual effects preset"
+      description: "Visual effects preset (informational)"
     speed:
       type: number
-      description: "Animation speed multiplier"
+      description: "Animation speed multiplier (informational)"
 
 tools:
   - name: run_steam_turbine_demolition
-    description: "Full steam turbine demolition pipeline — build model, plan demolition, create animation with effects"
+    description: "Full steam turbine demolition pipeline — build model, apply demolition animation, render video"
     tags: [pipeline, demolition, blender, industrial, animation]
 
 pipeline:
@@ -40,39 +40,26 @@ pipeline:
     modes: [topology]
     defaults:
       building_type: steam_turbine
+    map_result: build
 
-  - server: planning_server
-    tool: plan_demolition_sequence
-    input_map:
-      structure: build_frame_model
-      strategy: strategy
-    map_result: demolition_plan
-    label: Planning demolition sequence
+  - server: blender_pipeline_server
+    tool: run_pipeline_stage
+    label: Applying demolition animation
     modes: [topology]
+    defaults:
+      stage: turbine_animate
+    input_map:
+      blend_input: build.blend_file
+      output_dir: build.output_dir
+    map_result: animate
 
-  - server: animation_control_server
-    tool: create_timeline
-    input_map:
-      demolition_plan: demolition_plan
-      effects_preset: effects_preset
-    map_result: timeline
-    label: Creating animation timeline
+  - server: blender_pipeline_server
+    tool: run_pipeline_stage
+    label: Rendering demolition video
     modes: [topology]
-
-  - server: animation_control_server
-    tool: sequence_to_animation_data
+    defaults:
+      stage: render
     input_map:
-      demolition_sequence: timeline
-      speed: speed
-    map_result: animation_data
-    label: Building animation data
-    modes: [topology]
-
-  - server: animation_control_server
-    tool: generate_effects_config
-    input_map:
-      preset: effects_preset
-      structure: build_frame_model
-    map_result: effects_config
-    label: Configuring visual effects
-    modes: [topology]
+      blend_input: animate.blend_file
+      output_dir: animate.output_dir
+    map_result: render

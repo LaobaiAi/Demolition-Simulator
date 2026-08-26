@@ -11,7 +11,9 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from blender_pipeline.common import (
@@ -34,9 +36,14 @@ DATA_DIR = _paths["data_dir"]
 server = Server("blender-pipeline")
 
 
+_STEAM_TURBINE_ANIMATE = os.path.join(
+    _paths["pipeline_dir"], "projects", "steam_turbine_building", "scripts", "animate_demolition.py"
+)
+
 STAGES = [
     ("build", "generate_building.py", None, 120, True),
     ("animate", "apply_demolition.py", None, 300, True),
+    ("turbine_animate", _STEAM_TURBINE_ANIMATE, None, 300, True),
     ("machinery", "add_machinery.py", None, 120, True),
     ("render", "render.py", None, 1200, False),
     ("preview", "preview_render.py", None, 600, True),
@@ -95,8 +102,8 @@ TOOLS = [
             "properties": {
                 "stage": {
                     "type": "string",
-                    "enum": ["build", "animate", "machinery", "render", "preview"],
-                    "description": "Pipeline stage to run.",
+                    "enum": ["build", "animate", "turbine_animate", "machinery", "render", "preview"],
+                    "description": "Pipeline stage to run. turbine_animate applies the steam-turbine-specific demolition keyframes (projects/steam_turbine_building/scripts/animate_demolition.py).",
                 },
                 "blend_input": {
                     "type": "string",
@@ -131,10 +138,87 @@ TOOLS = [
 STAGE_BLEND_FILES = {
     "build": "scene_base.blend",
     "animate": "scene_animated.blend",
+    "turbine_animate": "scene_animated.blend",
     "machinery": "scene_final.blend",
 }
 
-STAGE_REQUIRES_INPUT = {"animate", "machinery", "render", "preview"}
+STAGE_REQUIRES_INPUT = {"animate", "turbine_animate", "machinery", "render", "preview"}
+
+
+def _mux_render_output(result, output_dir, meta_path=None):
+    """Mux per-frame PNGs (written by render.py) into an MP4 via bundled ffmpeg.
+
+    render.py renders one PNG per frame (write_still loop — the opengl animation
+    operator does not evaluate object animation in this environment), then this
+    helper combines them into the final video. Returns mp4 path or None.
+    """
+    frame_dir = None
+    if meta_path and os.path.isfile(meta_path):
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                frame_dir = json.load(f).get("frame_dir")
+        except Exception as e:
+            logger.warning(f"render: read meta failed: {e}")
+    if not frame_dir:
+        for line in result.get("output", []):
+            line = line.strip()
+            if line.startswith("[FRAME_DIR] "):
+                frame_dir = line[len("[FRAME_DIR] "):].strip()
+                break
+    if not frame_dir or not os.path.isdir(frame_dir):
+        logger.warning("render: no [FRAME_DIR] marker / meta file, cannot mux")
+        return None
+    proj_dir = os.path.dirname(frame_dir)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    mp4_path = os.path.join(proj_dir, f"animation_{ts}.mp4")
+    try:
+        import imageio_ffmpeg
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception as e:
+        logger.warning(f"render: ffmpeg unavailable: {e}")
+        return None
+    try:
+        cfg = load_project_config()
+        fps = int(cfg.get("fps", 24))
+    except Exception:
+        fps = 24
+    # Mux to an ASCII temp path first, then move into place — avoids any
+    # path-encoding edge cases and leaves a complete file at the final path.
+    tmp_mp4 = os.path.join(tempfile.gettempdir(), f"ds_mux_{ts}.mp4")
+    err_log = os.path.join(tempfile.gettempdir(), f"ds_mux_{ts}.err.log")
+    cmd = [ffmpeg_exe, "-loglevel", "error", "-y", "-framerate", str(fps),
+           "-i", os.path.join(frame_dir, "frame_%05d.png"),
+           "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18",
+           tmp_mp4]
+    try:
+        # stdin=DEVNULL is critical: a child of the MCP stdio server that
+        # inherits the JSON-RPC pipe as stdin can block indefinitely. stderr
+        # goes to a file so diagnostics survive even when the pipe path hangs.
+        with open(err_log, "wb") as ef:
+            r = subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                               stderr=ef, timeout=300)
+    except subprocess.TimeoutExpired:
+        logger.warning(f"render: mux timed out after 300s (stderr: {err_log})")
+        return None
+    except Exception as e:
+        logger.warning(f"render: mux failed: {e}")
+        return None
+    if r.returncode != 0 or not os.path.exists(tmp_mp4) or os.path.getsize(tmp_mp4) < 100000:
+        try:
+            tail = open(err_log, "rb").read().decode(errors="replace")[-300:]
+        except Exception:
+            tail = ""
+        logger.warning("render: mux failed: " + tail)
+        return None
+    try:
+        # shutil.move handles cross-drive moves (os.replace raises WinError 17
+        # when Temp is on C: and the output dir on another drive).
+        shutil.move(tmp_mp4, mp4_path)
+    except Exception as e:
+        logger.warning(f"render: mux move failed: {e}")
+        return None
+    logger.info(f"render: muxed {mp4_path}")
+    return mp4_path
 
 
 def _get_stage_config(stage_name):
@@ -221,8 +305,15 @@ def _handle_run_full_pipeline(arguments):
 
     if with_render and result.get("success"):
         logger.info("Stage: render...")
+        run_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        env_base["BLENDER_RUN_ID"] = run_id
         result = run_blender_script("render.py", blend_input=blend_final, env_extra=env_base, timeout=1200, background=False)
-        video_path, _ = find_video_file(proj_dir)
+        video_path = None
+        if result.get("success"):
+            meta_path = os.path.join(blend_dir, f"_render_meta_{run_id}.json")
+            video_path = _mux_render_output(result, proj_dir, meta_path)
+        if not video_path:
+            video_path, _ = find_video_file(proj_dir)
         results["stages"]["render"] = {
             "success": result.get("success", False),
             "video_file": video_path,
@@ -261,6 +352,10 @@ def _handle_run_pipeline_stage(arguments):
     os.makedirs(output_dir, exist_ok=True)
 
     env = {"BLENDER_OUTPUT_DIR": output_dir}
+    run_id = None
+    if stage == "render":
+        run_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        env["BLENDER_RUN_ID"] = run_id
     if config_override and stage == "build":
         config = load_project_config()
         config["building"].update(config_override.get("building", {}))
@@ -298,9 +393,13 @@ def _handle_run_pipeline_stage(arguments):
             stage_result["blend_file"] = path
 
     if stage == "render":
-        video_path, _ = find_video_file(output_dir)
-        if video_path:
-            stage_result["video_file"] = video_path
+        # Always mux the freshly rendered frames — find_video_file may return a
+        # stale MP4 from an earlier run in the same output_dir.
+        if result.get("success"):
+            meta_path = os.path.join(output_dir, f"_render_meta_{run_id}.json") if run_id else None
+            muxed = _mux_render_output(result, output_dir, meta_path)
+            if muxed:
+                stage_result["video_file"] = muxed
 
     return stage_result
 

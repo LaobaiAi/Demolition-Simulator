@@ -78,7 +78,8 @@ def run_blender_script(script_name, blend_input=None, env_extra=None, timeout=30
         return {"success": False, "error": "Blender not found. Set BLENDER_EXE env var or install Blender."}
 
     paths = get_pipeline_paths()
-    script_path = os.path.join(paths["scripts_dir"], script_name)
+    # Absolute script paths (project-specific scripts outside scripts/) are used as-is
+    script_path = script_name if os.path.isabs(script_name) else os.path.join(paths["scripts_dir"], script_name)
     if not os.path.exists(script_path):
         return {"success": False, "error": f"Script not found: {script_path}"}
 

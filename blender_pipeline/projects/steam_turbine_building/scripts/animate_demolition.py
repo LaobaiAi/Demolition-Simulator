@@ -16,7 +16,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
 DATA_DIR = os.path.join(PROJECT_DIR, "data")
 OUTPUT_DIR = os.path.join(PROJECT_DIR, "output", "blend")
-BLEND_OUTPUT = os.environ.get("BLEND_OUTPUT_DIR", OUTPUT_DIR)
+BLEND_OUTPUT = os.environ.get("BLEND_OUTPUT_DIR") or os.environ.get("BLENDER_OUTPUT_DIR", OUTPUT_DIR)
 os.makedirs(BLEND_OUTPUT, exist_ok=True)
 
 

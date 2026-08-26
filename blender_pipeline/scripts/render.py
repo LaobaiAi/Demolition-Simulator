@@ -125,7 +125,7 @@ def setup_render(config, scene):
     print(f"  [OK] 帧: {scene.frame_start}-{scene.frame_end} ({nf}帧, {dur:.0f}秒)")
 
 
-def render_animation(config):
+def render_animation(config, proj_dir):
     scene = bpy.context.scene
     if scene.camera is None:
         print("  [ERROR] 无摄像机!")
@@ -138,12 +138,32 @@ def render_animation(config):
                     if space.type == 'VIEW_3D':
                         space.region_3d.view_perspective = 'CAMERA'
 
+    # 逐帧 write_still 渲染：opengl(animation=True) 在本环境不逐帧求值对象动画
+    # （每帧都渲染首帧视口状态），write_still + frame_set 才能得到真实拆除动画。
+    scene.render.image_settings.file_format = 'PNG'
     nf = scene.frame_end - scene.frame_start + 1
+    frame_dir = os.path.join(proj_dir, "frames")
+    os.makedirs(frame_dir, exist_ok=True)
+    # UI 模式下 Python print 不进进程 stdout（走 Blender 控制台窗口），
+    # 帧目录必须写文件让服务器侧读到：BLENDER_OUTPUT_DIR/_render_meta_<run_id>.json
+    run_id = os.environ.get("BLENDER_RUN_ID", "")
+    meta_path = os.path.join(os.environ.get("BLENDER_OUTPUT_DIR", OUTPUT_DIR),
+                             f"_render_meta_{run_id}.json" if run_id else "_render_meta.json")
+    meta = {"frame_dir": frame_dir, "n_frames": nf,
+            "fps": int(bpy.context.scene.render.fps)}
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, ensure_ascii=False)
+    print(f"  [FRAME_DIR] {frame_dir}")
     print(f"\n  开始OpenGL渲染(相机视角) {nf} 帧...")
     try:
-        bpy.ops.render.opengl(animation=True)
+        for f in range(scene.frame_start, scene.frame_end + 1):
+            scene.frame_set(f)
+            scene.render.filepath = os.path.join(frame_dir, f"frame_{f:05d}.png")
+            bpy.ops.render.opengl(write_still=True)
+            if (f - scene.frame_start) % 200 == 0:
+                print(f"    进度 {f - scene.frame_start}/{nf - 1}")
         print("  [OK] 渲染完成")
-        return scene.render.filepath
+        return frame_dir
     except Exception as e:
         print(f"  [ERROR] 渲染失败: {e}")
         return None
@@ -155,7 +175,7 @@ if __name__ == "__main__":
 
     project_name = config.get("project_name", "demolition").replace(" ", "_")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    proj_dir = os.path.join(OUTPUT_DIR, f"{project_name}_{timestamp}")
+    proj_dir = os.path.join(os.environ.get("BLENDER_OUTPUT_DIR", OUTPUT_DIR), f"{project_name}_{timestamp}")
     os.makedirs(proj_dir, exist_ok=True)
 
     ts_short = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -177,9 +197,20 @@ if __name__ == "__main__":
     setup_lighting()
     setup_camera(config, bounds)
     setup_render(config, scene)
-    render_animation(config)
+    try:
+        render_animation(config, proj_dir)
+    except Exception as e:
+        print(f"  [ERROR] 渲染异常: {e}")
 
     print(f"\n  输出目录: {proj_dir}")
     print("=" * 60)
     print("  渲染完成!")
     print("=" * 60)
+
+    # 渲染完成后必须退出 Blender（UI 模式脚本结束不自动退出，
+    # 否则父进程 communicate() 永久阻塞导致工具调用超时）
+    try:
+        bpy.ops.wm.quit_app()
+    except Exception:
+        import os as _os
+        _os._exit(0)
