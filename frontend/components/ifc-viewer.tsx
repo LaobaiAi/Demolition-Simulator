@@ -73,6 +73,7 @@ export function IFCViewer({
   const controlsRef = useRef<OrbitControls | null>(null);
   const modelGroupRef = useRef<THREE.Group>(null!);
   const elementMeshMap = useRef<Map<number, THREE.Mesh>>(new Map());
+  const lastSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
 
   // Upload state
   const [uploadedIfcName, setUploadedIfcName] = useState<string | null>(null);
@@ -166,7 +167,8 @@ export function IFCViewer({
     scene.add(mg);
     modelGroupRef.current = mg;
 
-    // ResizeObserver
+    // ResizeObserver: rAF + 尺寸判等合并同帧多次通知，避免 loop 警告
+    let resizeRaf = 0;
     const ro = new ResizeObserver(() => {
       const c = canvasRef.current;
       const cam = cameraRef.current;
@@ -175,9 +177,19 @@ export function IFCViewer({
       const cw = c.clientWidth;
       const ch = c.clientHeight;
       if (cw === 0 || ch === 0) return;
-      cam.aspect = cw / ch;
-      cam.updateProjectionMatrix();
-      ren.setSize(cw, ch, false);
+      if (cw === lastSizeRef.current.w && ch === lastSizeRef.current.h) return;
+      cancelAnimationFrame(resizeRaf);
+      resizeRaf = requestAnimationFrame(() => {
+        const c2 = canvasRef.current;
+        if (!c2) return;
+        const nw = c2.clientWidth;
+        const nh = c2.clientHeight;
+        if (nw === lastSizeRef.current.w && nh === lastSizeRef.current.h) return;
+        lastSizeRef.current = { w: nw, h: nh };
+        cam.aspect = nw / nh;
+        cam.updateProjectionMatrix();
+        ren.setSize(nw, nh, false);
+      });
     });
     ro.observe(canvas);
 
@@ -196,6 +208,7 @@ export function IFCViewer({
 
     return () => {
       running = false;
+      cancelAnimationFrame(resizeRaf);
       ro.disconnect();
       controls.dispose();
       renderer.dispose();

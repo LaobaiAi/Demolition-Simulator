@@ -269,7 +269,7 @@ export function BlenderVideoPanel({ onStreamConnected, frameStructure }: Props) 
             } else {
               wsFailureCountRef.current++;
             }
-          });
+          }).catch(() => { /* Blob may abort when WebSocket closes */ });
         }
       };
 
