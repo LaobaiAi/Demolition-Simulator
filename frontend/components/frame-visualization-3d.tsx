@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { Settings2, RotateCw, ZoomIn, ZoomOut, Move, Eye } from "lucide-react";
+import { Settings2, RotateCw, ZoomIn, ZoomOut, Move, Eye, MousePointer, Loader2 } from "lucide-react";
+import { t, type Lang } from "@/lib/i18n";
 import {
   EFFECT_DEFS_3D as EFFECT_DEFS, COLLAPSE_DURATION, GRAVITY, SECTION_COL, SECTION_BEAM,
   GROUND_Y, EXPLOSION_FORCE, DEBRIS_COUNT_PER_ELEM, DUST_COUNT_PER_ELEM,
@@ -18,10 +19,24 @@ interface FrameElement { id: number; node_i: number; node_j: number; E?: number;
 interface FrameLoad { node_id: number; Fx: number; Fy: number; Fz?: number; }
 interface FrameSupport { node_id: number; type: string; }
 interface FrameStructure { nodes: FrameNode[]; elements: FrameElement[]; loads: FrameLoad[]; supports: FrameSupport[]; }
-interface NodeDisp { node_id: number; ux: number; uy: number; }
-interface ElemForce { element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number; }
+interface NodeDisp { node_id: number; ux: number; uy: number; uz?: number; }
+interface ElemForce { element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number; N?: number; stress_ratio?: number; }
 
-interface Props {
+export interface GhostElement {
+  id: number;
+  from: { x: number; y: number; z: number };
+  to: { x: number; y: number; z: number };
+}
+
+export interface ExtraSummary {
+  maxDisplacement?: number;
+  maxStressRatio?: number;
+  unstableReason?: string;
+  error?: string;
+  removedCount?: number;
+}
+
+export interface Props {
   structure: FrameStructure | null;
   displacements?: NodeDisp[] | null;
   criticalElementId?: number | null;
@@ -36,6 +51,27 @@ interface Props {
   // External control
   activeEffects?: Record<string, boolean>;
   canvasCallback?: (canvas: HTMLCanvasElement | null) => void;
+  // Extra member-removal analysis
+  lang?: Lang;
+  selectionMode?: boolean;
+  selectedElements?: number[];
+  onSelectElement?: (id: number | null) => void;
+  ghostElements?: GhostElement[];
+  scenarioView?: "baseline" | "extra";
+  extraRunning?: boolean;
+  extraStatus?: "complete" | "unstable" | "error" | null;
+  extraSummary?: ExtraSummary | null;
+  onRunExtraAnalysis?: () => void;
+  onClearSelection?: () => void;
+  onToggleScenario?: () => void;
+  onToggleSelectionMode?: () => void;
+}
+
+
+// Fog near/far must track the camera distance, or zooming out past fog.far washes the model into the background color
+function updateFogForDist(fog: THREE.Fog, camDist: number) {
+  fog.near = camDist * 0.4;
+  fog.far = Math.max(camDist * 1.6, 120);
 }
 
 
@@ -44,6 +80,9 @@ export function FrameVisualization3D({
   structure, displacements, criticalElementId, failedElements, displayFailedElements, maxDisplacement, elementForces,
   animationTrigger, animatingElements, onAnimationComplete,
   activeEffects, canvasCallback,
+  lang = "en", selectionMode = false, selectedElements = [], onSelectElement,
+  ghostElements, scenarioView = "baseline", extraRunning = false, extraStatus = null, extraSummary = null,
+  onRunExtraAnalysis, onClearSelection, onToggleScenario, onToggleSelectionMode,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -60,6 +99,12 @@ export function FrameVisualization3D({
   const fractureGroupRef = useRef<THREE.Group>(null!);
   const elementMeshMap = useRef<Map<number, THREE.Mesh>>(new Map());
   const nodeMeshMap = useRef<Map<number, THREE.Mesh>>(new Map());
+  const ghostGroupRef = useRef<THREE.Group>(null!);
+  const selectionModeRef = useRef(false);
+  const onSelectElementRef = useRef<((id: number | null) => void) | undefined>(undefined);
+
+  useEffect(() => { selectionModeRef.current = selectionMode; }, [selectionMode]);
+  useEffect(() => { onSelectElementRef.current = onSelectElement; }, [onSelectElement]);
 
   // Animation state (read continuously by render loop, written by collapse effect)
   const animStateRef = useRef<AnimationState>({
@@ -67,6 +112,11 @@ export function FrameVisualization3D({
     debris: [], dust: [], fractures: [], collapseCount: 0, firstBodyDelay: 0,
   });
   const effectsRef = useRef<Record<string, boolean>>({});
+  // Dirty-frame rendering: only render when something changed (scene build, camera, animation)
+  const needsRenderRef = useRef(true);
+  // Debris/dust/fracture pools are created lazily on first collapse animation
+  const poolsDirtyRef = useRef(true);
+  const lastSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
 
   // Frame bounds
   const bounds = useMemo(() => {
@@ -113,10 +163,10 @@ export function FrameVisualization3D({
 
     // Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
     renderer.setSize(w, h, false);
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.1;
     canvas.appendChild(renderer.domElement);
@@ -130,7 +180,7 @@ export function FrameVisualization3D({
     sceneRef.current = scene;
 
     // Camera (default position, repositioned by frame rebuild on structure change)
-    const camera = new THREE.PerspectiveCamera(50, w / h, 0.5, 200);
+    const camera = new THREE.PerspectiveCamera(50, w / h, 0.5, 400);
     camera.position.set(5, 5, 10);
     cameraRef.current = camera;
 
@@ -139,7 +189,7 @@ export function FrameVisualization3D({
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     controls.minDistance = 3;
-    controls.maxDistance = 40;
+    controls.maxDistance = 300;
     controls.maxPolarAngle = Math.PI * 0.7;
     controls.target.set(0, 0, 0);
     controls.update();
@@ -179,8 +229,39 @@ export function FrameVisualization3D({
     const dg = new THREE.Group(); dg.name = "debris"; scene.add(dg); debrisGroupRef.current = dg;
     const dug = new THREE.Group(); dug.name = "dust"; scene.add(dug); dustGroupRef.current = dug;
     const frg = new THREE.Group(); frg.name = "fracture"; scene.add(frg); fractureGroupRef.current = frg;
+    const gg = new THREE.Group(); gg.name = "ghost"; scene.add(gg); ghostGroupRef.current = gg;
 
-    // ResizeObserver
+    // Member click selection (active only when selectionMode is on)
+    let downX = 0, downY = 0;
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      downX = e.clientX; downY = e.clientY;
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.button !== 0 || !selectionModeRef.current) return;
+      const dx = e.clientX - downX, dy = e.clientY - downY;
+      if (dx * dx + dy * dy > 25) return; // drag, not a click
+      const ren = rendererRef.current, cam = cameraRef.current;
+      if (!ren || !cam) return;
+      const rect = ren.domElement.getBoundingClientRect();
+      const ndc = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(ndc, cam);
+      const hits = raycaster.intersectObjects([...elementMeshMap.current.values()], false);
+      if (hits.length > 0 && typeof hits[0].object.userData.elementId === "number") {
+        onSelectElementRef.current?.(hits[0].object.userData.elementId as number);
+      } else {
+        onSelectElementRef.current?.(null);
+      }
+    };
+    renderer.domElement.addEventListener("pointerdown", onPointerDown);
+    renderer.domElement.addEventListener("pointerup", onPointerUp);
+
+    // ResizeObserver: rAF + 尺寸判等合并同帧多次通知，避免 loop 警告
+    let resizeRaf = 0;
     const ro = new ResizeObserver(() => {
       const c = canvasRef.current;
       const cam = cameraRef.current;
@@ -188,13 +269,23 @@ export function FrameVisualization3D({
       if (!c || !cam || !ren) return;
       const cw = c.clientWidth, ch = c.clientHeight;
       if (cw === 0 || ch === 0) return;
-      cam.aspect = cw / ch;
-      cam.updateProjectionMatrix();
-      ren.setSize(cw, ch, false);
+      if (cw === lastSizeRef.current.w && ch === lastSizeRef.current.h) return;
+      cancelAnimationFrame(resizeRaf);
+      resizeRaf = requestAnimationFrame(() => {
+        const c2 = canvasRef.current;
+        if (!c2) return;
+        const nw = c2.clientWidth, nh = c2.clientHeight;
+        if (nw === lastSizeRef.current.w && nh === lastSizeRef.current.h) return;
+        lastSizeRef.current = { w: nw, h: nh };
+        cam.aspect = nw / nh;
+        cam.updateProjectionMatrix();
+        ren.setSize(nw, nh, false);
+        needsRenderRef.current = true;
+      });
     });
     ro.observe(canvas);
 
-    // Animation loop
+    // Animation loop — render only when flagged dirty (interaction, resize, scene build, collapse animation)
     let running = true;
     function animate() {
       if (!running) return;
@@ -203,18 +294,30 @@ export function FrameVisualization3D({
       const ren = rendererRef.current;
       const sc = sceneRef.current;
       const cam = cameraRef.current;
-      if (ren && sc && cam) ren.render(sc, cam);
+      if (ren && sc && cam && needsRenderRef.current) {
+        needsRenderRef.current = false;
+        ren.render(sc, cam);
+      }
     }
     animate();
+    controls.addEventListener("change", () => {
+      needsRenderRef.current = true;
+      const cam = cameraRef.current;
+      const ctrl = controlsRef.current;
+      if (cam && ctrl && scene.fog) updateFogForDist(scene.fog as THREE.Fog, cam.position.distanceTo(ctrl.target));
+    });
 
     return () => {
       running = false;
+      cancelAnimationFrame(resizeRaf);
       ro.disconnect();
       controls.dispose();
+      renderer.domElement.removeEventListener("pointerdown", onPointerDown);
+      renderer.domElement.removeEventListener("pointerup", onPointerUp);
       canvasCallback?.(null);
       renderer.dispose();
       if (canvas.contains(renderer.domElement)) canvas.removeChild(renderer.domElement);
-      [scene, fg, ag, dg, dug, frg].forEach(g => g.traverse(obj => {
+      [scene, fg, ag, dg, dug, frg, gg].forEach(g => g.traverse(obj => {
         if (obj instanceof THREE.Mesh) {
           obj.geometry?.dispose();
           if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
@@ -246,11 +349,13 @@ export function FrameVisualization3D({
     cam.position.set(cx + dist * 0.6, cy + dist * 0.5, dist);
     ctrl.target.set(cx, cy, 0);
     ctrl.update();
+    const fog = sceneRef.current?.fog;
+    if (fog) updateFogForDist(fog as THREE.Fog, cam.position.distanceTo(ctrl.target));
 
     // Build frame
     const nodeMap = new Map(structure.nodes.map(n => [n.id, n]));
-    const dispMap = new Map<number, { ux: number; uy: number }>();
-    displacements?.forEach(d => dispMap.set(d.node_id, { ux: d.ux, uy: d.uy }));
+    const dispMap = new Map<number, { ux: number; uy: number; uz?: number }>();
+    displacements?.forEach(d => dispMap.set(d.node_id, { ux: d.ux, uy: d.uy, uz: d.uz }));
     const hasDeformation = !!(displacements?.length);
     const dispScale = (maxDisplacement && maxDisplacement > 0) ? ((bounds.maxX - bounds.minX || 1) * 0.15) / maxDisplacement : 100;
     const FY = 235e6;
@@ -258,8 +363,10 @@ export function FrameVisualization3D({
     elementForces?.forEach(ef => {
       const el = structure.elements.find(e => e.id === ef.element_id);
       if (el?.A && el.A > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        stressMap.set(ef.element_id, Math.min(Math.max(Math.abs(ef.Nmax ?? 0), Math.abs(ef.Nmin ?? 0), Math.abs((ef as any).N ?? 0)) / (el.A * FY), 1));
+        const ratio = typeof ef.stress_ratio === "number"
+          ? Math.min(Math.max(ef.stress_ratio, 0), 1)
+          : Math.min(Math.max(Math.abs(ef.Nmax ?? 0), Math.abs(ef.Nmin ?? 0), Math.abs(ef.N ?? 0)) / (el.A * FY), 1);
+        stressMap.set(ef.element_id, ratio);
       }
     });
     const hasStress = stressMap.size > 0;
@@ -267,9 +374,9 @@ export function FrameVisualization3D({
     const matCrit = new THREE.MeshStandardMaterial({ color: "#f97316", roughness: 0.35, metalness: 0.7, emissive: "#f97316", emissiveIntensity: 0.3 });
 
     function n3d(n: FrameNode, d: boolean) {
-      let px = n.x, py = n.y;
-      if (d && hasDeformation) { const dd = dispMap.get(n.id); if (dd) { px += dd.ux * dispScale; py += dd.uy * dispScale; } }
-      return new THREE.Vector3(px, py, n.z ?? 0);
+      let px = n.x, py = n.y, pz = n.z ?? 0;
+      if (d && hasDeformation) { const dd = dispMap.get(n.id); if (dd) { px += dd.ux * dispScale; py += dd.uy * dispScale; pz += (dd.uz ?? 0) * dispScale; } }
+      return new THREE.Vector3(px, py, pz);
     }
 
     const emap = elementMeshMap.current;
@@ -285,7 +392,10 @@ export function FrameVisualization3D({
       else if (hasStress) { const r = stressMap.get(elem.id); if (r !== undefined) { mat.color.copy(stressColor(r)); mat.emissive?.copy(stressColor(r)); mat.emissiveIntensity = 0.15; } }
       const p1 = n3d(ni, hasDeformation), p2 = n3d(nj, hasDeformation);
       const mesh = buildBoxAlign(p1, p2, section, mat);
-      mesh.userData = { elementId: elem.id, isColumn: isCol };
+      mesh.userData = {
+        elementId: elem.id, isColumn: isCol,
+        _mat: { color: mat.color.getHex(), emissive: mat.emissive?.getHex(), emissiveIntensity: mat.emissiveIntensity, opacity: mat.opacity, transparent: mat.transparent },
+      };
       fg.add(mesh); emap.set(elem.id, mesh);
       if (hasDeformation) fg.add(buildBoxAlign(n3d(ni, false), n3d(nj, false), section * 0.8, new THREE.MeshBasicMaterial({ color: "#334155", transparent: true, opacity: 0.25, depthWrite: false })));
     }
@@ -302,7 +412,7 @@ export function FrameVisualization3D({
         const gn = new THREE.Mesh(new THREE.SphereGeometry(isTop ? 0.14 : 0.1, 8, 8), ghostMat);
         gn.position.copy(n3d(n, false)); fg.add(gn);
         const d = dispMap.get(n.id);
-        if (d && (Math.abs(d.ux * dispScale) > 0.01 || Math.abs(d.uy * dispScale) > 0.01)) {
+        if (d && (Math.abs(d.ux * dispScale) > 0.01 || Math.abs(d.uy * dispScale) > 0.01 || Math.abs((d.uz ?? 0) * dispScale) > 0.01)) {
           ag.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([n3d(n, false), p]), new THREE.LineBasicMaterial({ color: "#22d3ee", transparent: true, opacity: 0.4, depthTest: false })));
         }
       }
@@ -322,9 +432,11 @@ export function FrameVisualization3D({
       const head = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.3, 8), new THREE.MeshStandardMaterial({ color: "#f59e0b", roughness: 0.4, metalness: 0.5, emissive: "#f59e0b", emissiveIntensity: 0.5 }));
       head.rotation.x = Math.PI; head.position.set(p.x, p.y - len, 0); fg.add(head);
     }
+    needsRenderRef.current = true;
   }, [structure, displacements, criticalElementId, elementForces, maxDisplacement, bounds]);
 
   // ── 3. Effect Pools (on structure size change) ──────────────
+  // Pool meshes (~2400) are created lazily inside the collapse effect on first animation.
   useEffect(() => {
     const dg = debrisGroupRef.current;
     const dug = dustGroupRef.current;
@@ -335,39 +447,11 @@ export function FrameVisualization3D({
     clearGroup(dug);
     clearGroup(frg);
 
-    const total = structure.elements.length;
-    const debrisPool: DebrisItem[] = [];
-    const dustPool: DustItem[] = [];
-    const fracturePool: FractureItem[] = [];
-
-    for (let i = 0; i < total * DEBRIS_COUNT_PER_ELEM; i++) {
-      const m = new THREE.Mesh(
-        new THREE.BoxGeometry(0.04 + seedRand(i*7)*0.08, 0.03+seedRand(i*13)*0.06, 0.04+seedRand(i*17)*0.06),
-        new THREE.MeshStandardMaterial({color:new THREE.Color().setHSL(0.08+seedRand(i*19)*0.08,0.3,0.2+seedRand(i*23)*0.3), roughness:0.7,metalness:0.4,transparent:true,opacity:0.9})
-      );
-      m.visible = false; dg.add(m);
-      debrisPool.push({mesh:m, velocity:new THREE.Vector3(), angularVel:new THREE.Vector3(), lifetime:0, active:false, delay:0, groundY:GROUND_Y});
-    }
-    for (let i = 0; i < total * DUST_COUNT_PER_ELEM; i++) {
-      const m = new THREE.Mesh(
-        new THREE.SphereGeometry(1,8,8),
-        new THREE.MeshBasicMaterial({color:"#94a3b8",transparent:true,opacity:0,depthWrite:false})
-      );
-      m.visible = false; dug.add(m);
-      dustPool.push({mesh:m, maxScale:0, lifetime:0, active:false, delay:0});
-    }
-    for (let i = 0; i < Math.min(total * 4, 60); i++) {
-      const m = new THREE.Mesh(
-        new THREE.BoxGeometry(0.10+seedRand(i*23)*0.06, 0.06+seedRand(i*31)*0.04, 0.06+seedRand(i*37)*0.04),
-        new THREE.MeshStandardMaterial({color:"#ef4444", roughness:0.6, metalness:0.3, emissive:"#ef4444", emissiveIntensity:0.2, transparent:true, opacity:0.85})
-      );
-      m.visible = false; frg.add(m);
-      fracturePool.push({mesh:m, velocity:new THREE.Vector3(), angularVel:new THREE.Vector3(), lifetime:0, active:false, delay:0});
-    }
     const anim = animStateRef.current;
-    anim.debris = debrisPool; anim.dust = dustPool; anim.fractures = fracturePool;
+    anim.debris = []; anim.dust = []; anim.fractures = [];
     anim.bodies.clear(); anim.active = false; anim.collapseCount = 0;
     anim.startTime = 0; anim.firstBodyDelay = 0;
+    poolsDirtyRef.current = true;
   }, [structure?.elements?.length]);
 
   // ── 4. Failed Elements Visibility ───────────────────────────
@@ -386,7 +470,52 @@ export function FrameVisualization3D({
         mesh.visible = !failedSet.has(id);
       }
     }
+    needsRenderRef.current = true;
   }, [failedElements, displayFailedElements]);
+
+  // ── 4b. Selection Highlight ────────────────────────────────
+  useEffect(() => {
+    const emap = elementMeshMap.current;
+    if (emap.size === 0) return;
+    const selSet = new Set(selectedElements);
+    for (const [id, mesh] of emap) {
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      const orig = mesh.userData._mat as { color: number; emissive?: number; emissiveIntensity: number; opacity: number; transparent: boolean } | undefined;
+      if (selSet.has(id)) {
+        mat.color.set("#ef4444");
+        mat.emissive?.set("#ef4444");
+        mat.emissiveIntensity = 0.6;
+        mat.transparent = true;
+        mat.opacity = 0.9;
+      } else if (orig) {
+        mat.color.setHex(orig.color);
+        if (mat.emissive && orig.emissive !== undefined) mat.emissive.setHex(orig.emissive);
+        mat.emissiveIntensity = orig.emissiveIntensity;
+        mat.transparent = orig.transparent;
+        mat.opacity = orig.opacity;
+      }
+    }
+    needsRenderRef.current = true;
+  }, [selectedElements]);
+
+  // ── 4c. Removed-member Ghosts (extra view) ─────────────────
+  useEffect(() => {
+    const gg = ghostGroupRef.current;
+    if (!gg) return;
+    clearGroup(gg);
+    if (scenarioView !== "extra" || !ghostElements?.length) return;
+    for (const g of ghostElements) {
+      const isCol = Math.abs(g.from.x - g.to.x) < 0.01;
+      const section = isCol ? SECTION_COL : SECTION_BEAM;
+      const mat = new THREE.MeshStandardMaterial({ color: "#ef4444", transparent: true, opacity: 0.25, depthWrite: false });
+      gg.add(buildBoxAlign(
+        new THREE.Vector3(g.from.x, g.from.y, g.from.z),
+        new THREE.Vector3(g.to.x, g.to.y, g.to.z),
+        section, mat,
+      ));
+    }
+    needsRenderRef.current = true;
+  }, [ghostElements, scenarioView]);
 
   // ── 5. Collapse Animation ──────────────────────────────────
   useEffect(() => {
@@ -456,6 +585,48 @@ export function FrameVisualization3D({
     anim.firstBodyDelay = failedData.length > 0 && anim.bodies.size > 0
       ? Math.min(...[...anim.bodies.values()].map(b => b.delay))
       : 0;
+
+    // Lazily build debris/dust/fracture pools on first collapse animation
+    if (poolsDirtyRef.current) {
+      const dg = debrisGroupRef.current;
+      const dug = dustGroupRef.current;
+      const frg = fractureGroupRef.current;
+      if (dg && dug && frg) {
+        clearGroup(dg);
+        clearGroup(dug);
+        clearGroup(frg);
+        const total = structure.elements.length;
+        const debrisPool: DebrisItem[] = [];
+        const dustPool: DustItem[] = [];
+        const fracturePool: FractureItem[] = [];
+        for (let i = 0; i < total * DEBRIS_COUNT_PER_ELEM; i++) {
+          const m = new THREE.Mesh(
+            new THREE.BoxGeometry(0.04 + seedRand(i*7)*0.08, 0.03+seedRand(i*13)*0.06, 0.04+seedRand(i*17)*0.06),
+            new THREE.MeshStandardMaterial({color:new THREE.Color().setHSL(0.08+seedRand(i*19)*0.08,0.3,0.2+seedRand(i*23)*0.3), roughness:0.7,metalness:0.4,transparent:true,opacity:0.9})
+          );
+          m.visible = false; dg.add(m);
+          debrisPool.push({mesh:m, velocity:new THREE.Vector3(), angularVel:new THREE.Vector3(), lifetime:0, active:false, delay:0, groundY:GROUND_Y});
+        }
+        for (let i = 0; i < total * DUST_COUNT_PER_ELEM; i++) {
+          const m = new THREE.Mesh(
+            new THREE.SphereGeometry(1,8,8),
+            new THREE.MeshBasicMaterial({color:"#94a3b8",transparent:true,opacity:0,depthWrite:false})
+          );
+          m.visible = false; dug.add(m);
+          dustPool.push({mesh:m, maxScale:0, lifetime:0, active:false, delay:0});
+        }
+        for (let i = 0; i < Math.min(total * 4, 60); i++) {
+          const m = new THREE.Mesh(
+            new THREE.BoxGeometry(0.10+seedRand(i*23)*0.06, 0.06+seedRand(i*31)*0.04, 0.06+seedRand(i*37)*0.04),
+            new THREE.MeshStandardMaterial({color:"#ef4444", roughness:0.6, metalness:0.3, emissive:"#ef4444", emissiveIntensity:0.2, transparent:true, opacity:0.85})
+          );
+          m.visible = false; frg.add(m);
+          fracturePool.push({mesh:m, velocity:new THREE.Vector3(), angularVel:new THREE.Vector3(), lifetime:0, active:false, delay:0});
+        }
+        anim.debris = debrisPool; anim.dust = dustPool; anim.fractures = fracturePool;
+        poolsDirtyRef.current = false;
+      }
+    }
 
     // Debris/dust/fracture setup
     const debrisPool = anim.debris;
@@ -636,7 +807,7 @@ export function FrameVisualization3D({
     if (!cam || !ctrl) return;
     const dirVec = new THREE.Vector3().subVectors(cam.position, ctrl.target).normalize();
     const dist = cam.position.distanceTo(ctrl.target);
-    const newDist = Math.max(2, Math.min(40, dist + dir * dist * 0.15));
+    const newDist = Math.max(2, Math.min(300, dist + dir * dist * 0.15));
     cam.position.copy(ctrl.target).add(dirVec.multiplyScalar(newDist));
     cam.updateProjectionMatrix();
     ctrl.update();
@@ -741,6 +912,16 @@ export function FrameVisualization3D({
           <div className="absolute inset-0 pointer-events-none z-10" style={{ backgroundColor: `rgba(239,68,68,${flashOpacity})` }} />
         )}
 
+        {/* Selection mode toggle */}
+        <button
+          onClick={onToggleSelectionMode}
+          title={t("extra.select", lang)}
+          className={`absolute top-3 left-3 z-10 flex items-center gap-1.5 px-2 py-1.5 rounded-md border text-[10px] font-medium transition-colors cursor-pointer shadow-sm ${selectionMode ? "bg-primary/20 text-primary border-primary/50" : "bg-background/90 border-border text-muted-foreground hover:text-foreground hover:border-primary/40"}`}
+        >
+          <MousePointer className="h-3.5 w-3.5" />
+          <span>{t("extra.select", lang)}</span>
+        </button>
+
         {/* View Toolbar */}
         <div className="absolute top-3 right-3 z-10 flex flex-col gap-1">
           {/* Zoom controls */}
@@ -789,8 +970,81 @@ export function FrameVisualization3D({
         <div className="absolute bottom-3 left-3 z-10 bg-background/80 border border-border rounded-md px-2 py-1 text-[10px] text-muted-foreground/60 pointer-events-none">
           <span className="flex items-center gap-1">
             <Move className="h-3 w-3 inline" /> Drag to orbit · Scroll to zoom · Right-drag to pan
+            {selectionMode && <span className="text-red-400/80"> · {t("extra.select_hint", lang)}</span>}
           </span>
         </div>
+
+        {/* Extra-analysis bar: selection + scenario toggle + verdict */}
+        {(selectionMode || extraStatus) && (
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1.5 pointer-events-auto max-w-[95%]">
+            {selectionMode && (
+              <>
+                <div className="bg-background/80 border border-border rounded-md px-3 py-1 text-[10px] text-muted-foreground/70 text-center">
+                  {t("extra.select_hint", lang)}
+                </div>
+                <div className="flex items-center gap-1.5 bg-background/90 border border-border rounded-md px-2 py-1 shadow-sm">
+                  <span className="text-[10px] text-muted-foreground tabular-nums">
+                    {t("extra.selected", lang)}: {selectedElements.length}
+                  </span>
+                  <button
+                    onClick={onClearSelection}
+                    disabled={selectedElements.length === 0}
+                    className="px-2 py-0.5 text-[10px] rounded border border-border/60 text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  >
+                    {t("extra.clear", lang)}
+                  </button>
+                  <button
+                    onClick={onRunExtraAnalysis}
+                    disabled={selectedElements.length === 0 || extraRunning}
+                    className="px-2.5 py-0.5 text-[10px] font-medium rounded border border-red-500/40 bg-red-500/20 text-red-400 hover:bg-red-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    {extraRunning ? (<><Loader2 className="h-3 w-3 animate-spin" />{t("extra.running", lang)}</>) : t("extra.analyze", lang)}
+                  </button>
+                </div>
+              </>
+            )}
+            {extraStatus && (
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex items-center gap-1 bg-background/90 border border-border rounded-md px-1.5 py-1 shadow-sm">
+                  <span className="text-[10px] text-muted-foreground mr-0.5">{t("extra.view_toggle", lang)}</span>
+                  <button
+                    onClick={onToggleScenario}
+                    className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors cursor-pointer ${scenarioView === "baseline" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    {t("extra.baseline", lang)}
+                  </button>
+                  <button
+                    onClick={onToggleScenario}
+                    className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors cursor-pointer ${scenarioView === "extra" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    {t("extra.removal", lang)}
+                  </button>
+                </div>
+                <div className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[10px] font-medium ${extraStatus === "complete" ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400" : "border-red-500/40 bg-red-500/10 text-red-400"}`}>
+                  {extraStatus === "complete" ? (
+                    <span>
+                      ✓ {t("extra.stable", lang)}
+                      {extraSummary?.maxDisplacement != null && <span className="text-emerald-300/80"> · {t("extra.max_disp", lang)}: {extraSummary.maxDisplacement.toFixed(1)} mm</span>}
+                      {extraSummary?.maxStressRatio != null && <span className="text-emerald-300/80"> · {t("extra.max_ratio", lang)}: {(extraSummary.maxStressRatio * 100).toFixed(1)}%</span>}
+                    </span>
+                  ) : extraStatus === "unstable" ? (
+                    <span>
+                      ✖ {t("extra.unstable", lang)}
+                      {extraSummary?.unstableReason && <span className="text-red-300/80"> · {t("extra.failed_case", lang)}: {extraSummary.unstableReason}</span>}
+                    </span>
+                  ) : (
+                    <span>{t("extra.error", lang)}{extraSummary?.error && <span className="text-red-300/80">: {extraSummary.error}</span>}</span>
+                  )}
+                </div>
+                {!!extraSummary?.removedCount && (
+                  <div className="bg-background/80 border border-border rounded-md px-2 py-0.5 text-[10px] text-muted-foreground/70">
+                    {t("extra.removed", lang)}: {extraSummary.removedCount}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Status */}
         <div className="absolute bottom-3 right-3 z-10 bg-background/80 border border-border rounded-md px-2.5 py-1 pointer-events-none flex items-center gap-2">
