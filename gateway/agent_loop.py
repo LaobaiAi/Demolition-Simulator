@@ -31,9 +31,9 @@ TOOL_KEYWORD_MAP: dict[str, list[str]] = {
                  "generate_from_text", "generate_steel_frame", "generate_concrete_structure",
                  "generate_hybrid_structure", "generate_truss", "generate_portal_frame",
                  "generate_beam", "export_ifc", "list_materials"],
-    "analyze": ["analyze_frame", "quick_analysis", "full_analysis_3d",
-                "high_fidelity_analysis", "fapp_analysis", "pynite_analysis",
-                "select_critical_element"],
+    "analyze": ["analyze_frame", "quick_analysis", "full_analysis_3d", "full_analysis_3d_gb",
+                "full_analysis_3d_gb_remove", "high_fidelity_analysis", "fapp_analysis",
+                "pynite_analysis", "select_critical_element"],
     "demolish": ["apply_demolition_action", "plan_demolition_sequence",
                  "analyze_structure_topology", "get_demolition_plan_summary",
                  "compute_collapse_chain", "compare_demolition_strategies",
@@ -51,7 +51,8 @@ TOOL_KEYWORD_MAP: dict[str, list[str]] = {
                "create_cooling_tower", "assign_tower_materials", "mesh_tower",
                "setup_tower_collapse", "extract_collapse_frames",
                "render_collapse_video", "get_collapse_status", "stop_collapse",
-               "stack_run_analysis"],
+               "stack_run_analysis", "stack_submit_analysis", "stack_get_status",
+               "stack_stop_analysis"],
     "bim": ["generate_steel_frame", "generate_concrete_structure",
             "generate_hybrid_structure", "export_ifc", "generate_truss",
             "generate_portal_frame", "generate_beam"],
@@ -69,10 +70,15 @@ ABAQUS_TOOLS: set[str] = set(TOOL_KEYWORD_MAP["abaqus"])
 
 # ── Tool call safety & caching ───────────────────────────────────────────────
 TOOL_CALL_TIMEOUT_S = 600.0
-# stack_run_analysis blocks until its own solve budget (GLOBAL_BUDGET_S=9000s) expires —
-# a shorter gateway timeout would kill a legitimate solve mid-run and orphan Abaqus.
+# stack_get_status can run the metrics probe on completion (METRICS_TIMEOUT_S=1200s)
+# after the .sta shows done — the long budget lets that poll finish in one call.
 POLL_TOOL_TIMEOUT_S = 9000.0
-POLL_TOOLS: set[str] = {"get_collapse_status", "stack_run_analysis"}
+POLL_TOOLS: set[str] = {"get_collapse_status", "stack_get_status"}
+# Blender render/animation tools can legitimately run 20-40 min (server-side caps:
+# run_pipeline_stage 1500s, run_full_pipeline 2400s, composite = 300+300+1200s).
+# A 600s generic timeout would abort real rendering mid-flight.
+RENDER_TOOL_TIMEOUT_S = 2400.0
+RENDER_TOOLS: set[str] = {"run_full_pipeline", "run_pipeline_stage", "steam_turbine_demolition", "visual_demolition"}
 TOOL_CACHE_TTL_S = 30.0
 
 
@@ -387,7 +393,12 @@ class AgentLoop:
                             "iteration": iteration,
                         }
                     else:
-                        timeout = POLL_TOOL_TIMEOUT_S if tc["name"] in POLL_TOOLS else TOOL_CALL_TIMEOUT_S
+                        if tc["name"] in RENDER_TOOLS:
+                            timeout = RENDER_TOOL_TIMEOUT_S
+                        elif tc["name"] in POLL_TOOLS:
+                            timeout = POLL_TOOL_TIMEOUT_S
+                        else:
+                            timeout = TOOL_CALL_TIMEOUT_S
                         try:
                             result = await asyncio.wait_for(
                                 self.hub.call_tool(tc["name"], tc["arguments"]), timeout
