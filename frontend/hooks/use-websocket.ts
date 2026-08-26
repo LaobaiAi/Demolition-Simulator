@@ -65,6 +65,7 @@ const STEP_LABELS: Record<string, string> = {
   generate_frame: "step.generating",
   analyze_frame: "step.analyzing",
   quick_analysis: "step.generating",
+  full_analysis_3d_gb: "step.analyzing",
   pynite_analysis: "step.analyzing",
   fapp_analysis: "step.analyzing",
   select_critical_element: "step.critical",
@@ -209,6 +210,41 @@ const TOOL_RESULT_HANDLERS: Record<string, (parsed: Record<string, unknown>, cb:
   generate_from_text(p, cb) { if (p.nodes && p.elements) cb.setFrameStructure(p as unknown as FrameStructure); },
 
   quick_analysis(p, cb) {
+    if (p.status !== "complete") return;
+    if (p.structure && (p.structure as Record<string, unknown>).nodes && (p.structure as Record<string, unknown>).elements) {
+      cb.setFrameStructure(p.structure as unknown as FrameStructure);
+    }
+    const analysis = p.analysis as Record<string, unknown> | undefined;
+    if (analysis && analysis.max_displacement !== undefined && !("error" in analysis)) {
+      cb.setAnalysisResult(analysis);
+      if (analysis.solver) cb.setAnalysisSolver(analysis.solver as string);
+      if (analysis.node_displacements) cb.setNodeDisplacements(analysis.node_displacements as NodeDisp[]);
+      cb.setRoundAnalysisResults((prev) => ({ ...prev, [-1]: analysis }));
+      const extracted = extractMaxAxialForce(analysis.element_forces as Record<string, unknown>[] | undefined);
+      cb.setStructuralMetrics((prev) => ({
+        maxDisplacement: (analysis.max_displacement as number) ?? 0,
+        maxAxialForce: (analysis.max_axial_force as number) ?? 0,
+        criticalElementId: extracted?.elementId ?? prev?.criticalElementId ?? null,
+        criticalAxialForce: extracted?.absMaxAxial ?? prev?.criticalAxialForce ?? null,
+        columnCount: prev?.columnCount ?? 0,
+        failedElements: prev?.failedElements ?? [],
+      }));
+    }
+    const crit = p.critical_element as Record<string, unknown> | undefined;
+    if (crit?.critical_element_id != null) {
+      cb.setStructuralMetrics((prev) => ({
+        maxDisplacement: prev?.maxDisplacement ?? 0,
+        maxAxialForce: prev?.maxAxialForce ?? 0,
+        criticalElementId: crit.critical_element_id as number,
+        criticalAxialForce: (crit.critical_axial_force_N as number) ?? null,
+        columnCount: (crit.column_count as number) ?? prev?.columnCount ?? 0,
+        failedElements: prev?.failedElements ?? [],
+      }));
+      cb.setDemolishReady(true);
+    }
+  },
+
+  full_analysis_3d_gb(p, cb) {
     if (p.status !== "complete") return;
     if (p.structure && (p.structure as Record<string, unknown>).nodes && (p.structure as Record<string, unknown>).elements) {
       cb.setFrameStructure(p.structure as unknown as FrameStructure);

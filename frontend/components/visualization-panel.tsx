@@ -29,10 +29,31 @@ function LoadingFallback({ label }: { label: string }) {
   );
 }
 
+export interface ExtraView {
+  scenarioView: "baseline" | "extra";
+  extraStatus: "complete" | "unstable" | "error" | null;
+  extraRunning: boolean;
+  extraStructure: FrameStructure | null;
+  extraDisplacements: NodeDisp[] | null;
+  extraElementForces: Array<{ element_id: number; Nmax: number; Nmin: number; N?: number; stress_ratio?: number }> | null;
+  extraMaxDisplacement: number | undefined;
+  extraCriticalElementId: number | null;
+  ghostElements: Array<{ id: number; from: { x: number; y: number; z: number }; to: { x: number; y: number; z: number } }> | null;
+  extraSummary: { maxDisplacement?: number; maxStressRatio?: number; unstableReason?: string; error?: string; removedCount?: number } | null;
+}
+
 interface VizPanelProps {
   lang: Lang;
   vizMode: "svg" | "webgl" | "unity" | "blender" | "ifc" | "abaqus";
   setVizMode: (v: "svg" | "webgl" | "unity" | "blender" | "ifc" | "abaqus") => void;
+  extraView: ExtraView | null;
+  selectionMode: boolean;
+  selectedElements: number[];
+  onSelectElement: (id: number | null) => void;
+  onRunExtraAnalysis: () => void;
+  onClearSelection: () => void;
+  onToggleScenario: () => void;
+  onToggleSelectionMode: () => void;
   frameStructure: FrameStructure | null;
   nodeDisplacements: NodeDisp[] | null;
   analysisResult: Record<string, unknown> | null;
@@ -80,6 +101,8 @@ export function VisualizationPanel({
   onAnimComplete, onRoundClick, onAutoPlay,
   onStepForward, onStepBackward, onReset, onSpeedChange, onEffectToggle, onPause,
   onLogPauseToggle, onCanvasCallback, onUnityConnected,
+  extraView, selectionMode, selectedElements,
+  onSelectElement, onRunExtraAnalysis, onClearSelection, onToggleScenario, onToggleSelectionMode,
 }: VizPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -102,6 +125,16 @@ export function VisualizationPanel({
     demolitionRounds.map(r => `Round ${r.round + 1}: ${r.elementIds.length} elements`),
     [demolitionRounds]
   );
+
+  // Extra-analysis effective props: in extra view, swap in the removal-check structure/analysis
+  const isExtraView = extraView?.scenarioView === "extra" && extraView.extraStructure != null;
+  const effStructure = isExtraView ? extraView.extraStructure : frameStructure;
+  const effDisplacements = isExtraView ? extraView.extraDisplacements : nodeDisplacements;
+  const effElementForces = isExtraView
+    ? extraView.extraElementForces as unknown as Array<{ element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number; N?: number; stress_ratio?: number }> | null
+    : analysisResult?.element_forces as Array<{ element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number; N?: number; stress_ratio?: number }> | undefined;
+  const effMaxDisplacement = isExtraView ? extraView.extraMaxDisplacement : (analysisResult?.max_displacement as number | undefined);
+  const effCriticalElementId = isExtraView ? extraView.extraCriticalElementId : (structuralMetrics?.criticalElementId ?? null);
 
   return (
     <div ref={panelRef}
@@ -139,7 +172,7 @@ export function VisualizationPanel({
               criticalElementId={structuralMetrics?.criticalElementId ?? null}
               failedElements={displayFailedElements}
               maxDisplacement={analysisResult?.max_displacement as number | undefined}
-              elementForces={analysisResult?.element_forces as Array<{element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number}> | undefined}
+              elementForces={analysisResult?.element_forces as Array<{element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number; N?: number; stress_ratio?: number}> | undefined}
               animationTrigger={animRequest?.key} animatingElements={animRequest?.targets}
               onAnimationComplete={onAnimComplete} />
             {analysisResult && (
@@ -155,14 +188,28 @@ export function VisualizationPanel({
           <div className="absolute inset-0 flex flex-col">
             <WebGLErrorBoundary onError={() => setVizMode("svg")}>
               <Suspense fallback={<LoadingFallback label="3D engine" />}>
-                <FrameVisualization3D structure={frameStructure} displacements={nodeDisplacements}
-                  criticalElementId={structuralMetrics?.criticalElementId ?? null}
-                  failedElements={failedElements} displayFailedElements={displayFailedElements}
-                  maxDisplacement={analysisResult?.max_displacement as number | undefined}
-                  elementForces={analysisResult?.element_forces as Array<{element_id: number; Nmax: number; Nmin: number; Mmax: number; Mmin: number; Qmax: number; Qmin: number}> | undefined}
+                <FrameVisualization3D structure={effStructure} displacements={effDisplacements}
+                  criticalElementId={effCriticalElementId}
+                  failedElements={isExtraView ? [] : failedElements}
+                  displayFailedElements={isExtraView ? [] : displayFailedElements}
+                  maxDisplacement={effMaxDisplacement}
+                  elementForces={effElementForces ?? undefined}
                   animationTrigger={animRequest?.key} animatingElements={animRequest?.targets}
                   onAnimationComplete={onAnimComplete} activeEffects={animEffects}
-                  canvasCallback={onCanvasCallback} />
+                  canvasCallback={onCanvasCallback}
+                  lang={lang}
+                  selectionMode={selectionMode}
+                  selectedElements={selectedElements}
+                  onSelectElement={onSelectElement}
+                  ghostElements={extraView?.ghostElements ?? undefined}
+                  scenarioView={extraView?.scenarioView ?? "baseline"}
+                  extraRunning={extraView?.extraRunning ?? false}
+                  extraStatus={extraView?.extraStatus ?? null}
+                  extraSummary={extraView?.extraSummary ?? null}
+                  onRunExtraAnalysis={onRunExtraAnalysis}
+                  onClearSelection={onClearSelection}
+                  onToggleScenario={onToggleScenario}
+                  onToggleSelectionMode={onToggleSelectionMode} />
               </Suspense>
             </WebGLErrorBoundary>
           </div>

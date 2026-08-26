@@ -77,7 +77,8 @@ export function ChatPanel({
     <div className="flex w-[30%] min-w-[300px] flex-col border-r border-border">
       <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
         <span className="text-sm font-semibold text-foreground">{t("chat.title", lang)}</span>
-        <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-0.5">
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-0.5">
           <button onClick={() => setAnalysisMode("analysis")}
             className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${analysisMode === "analysis" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
             {t("chat.mode_analysis", lang)}
@@ -90,6 +91,7 @@ export function ChatPanel({
             className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${analysisMode === "simulation" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
             {t("chat.mode_simulation", lang)}
           </button>
+          </div>
         </div>
       </div>
       <div className="min-h-0 flex-1">

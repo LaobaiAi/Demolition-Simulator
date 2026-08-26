@@ -90,6 +90,7 @@ export function stepBrief(step: StepEvent, lang: Lang): string {
     high_fidelity_analysis: "OpenSees",
     pynite_analysis: "PyNite",
     fapp_analysis: "FAPP",
+    full_analysis_3d_gb: "3D GB50017",
   };
   if (step.type === "tool_call") {
     return toolNames[step.name || ""] || step.name || "?";
@@ -110,6 +111,10 @@ export function stepBrief(step: StepEvent, lang: Lang): string {
         return fe?.length ? `塌 #${fe.join(",")}` : "";
       },
       high_fidelity_analysis: (r) => `${r.solver ? (r.solver as string).split(" ")[0] : ""} ${((r.max_displacement ?? 0) as number * 1000).toFixed(2)}mm`,
+      full_analysis_3d_gb: (r) => {
+        const a = r.analysis as Record<string, unknown> | undefined;
+        return `${a?.solver ? (a.solver as string).split(" ")[0] : ""} ${(((a?.max_displacement ?? 0) as number) * 1000).toFixed(2)}mm`;
+      },
     };
     const fn = briefs[step.name];
     if (!fn) return "";

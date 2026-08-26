@@ -11,7 +11,7 @@ export interface FrameElement { id: number; node_i: number; node_j: number; E?: 
 export interface FrameLoad { node_id: number; Fx: number; Fy: number; Fz?: number; }
 export interface FrameSupport { node_id: number; type: string; }
 export interface FrameStructure { nodes: FrameNode[]; elements: FrameElement[]; loads: FrameLoad[]; supports: FrameSupport[]; }
-export interface NodeDisp { node_id: number; ux: number; uy: number; }
+export interface NodeDisp { node_id: number; ux: number; uy: number; uz?: number; }
 
 // ── Chat message types ───────────────────────────────────────────────────────
 
@@ -42,7 +42,9 @@ export interface ChatMessage {
 
 // ── Analysis tools set ───────────────────────────────────────────────────────
 
-export const ANALYSIS_TOOLS = new Set(["analyze_frame", "pynite_analysis", "fapp_analysis", "high_fidelity_analysis"]);
+export const ANALYSIS_TOOLS = new Set(["analyze_frame", "pynite_analysis", "fapp_analysis", "high_fidelity_analysis", "full_analysis_3d_gb"]);
+
+export const EXTRA_ANALYSIS_TOOL = "full_analysis_3d_gb_remove";
 
 // ── Axial force extraction ───────────────────────────────────────────────────
 
@@ -126,6 +128,49 @@ export function extractDemolitionRounds(messages: ChatMessage[]): DemolitionRoun
   return rounds;
 }
 
+// ── Extra member-removal analysis state ──────────────────────────────────────
+
+export interface ExtraAnalysisState {
+  status: "complete" | "unstable" | "error";
+  removedIds: number[];
+  structure: FrameStructure | null;
+  analysis: Record<string, unknown> | null;
+  criticalElementId: number | null;
+  unstableReason?: string;
+  error?: string;
+}
+
+export function extractExtraAnalysisState(messages: ChatMessage[]): ExtraAnalysisState | null {
+  let state: ExtraAnalysisState | null = null;
+  for (const msg of messages) {
+    if (msg.role !== "ai" || !msg.steps) continue;
+    for (const step of msg.steps) {
+      if (step.type !== "tool_result" || step.name !== EXTRA_ANALYSIS_TOOL) continue;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let parsed: any;
+      try {
+        parsed = typeof step.result === "string" ? JSON.parse(step.result) : step.result;
+      } catch { continue; }
+      if (!parsed || typeof parsed !== "object") continue;
+      const status = parsed.status === "unstable" || parsed.status === "error"
+        ? parsed.status as "unstable" | "error"
+        : "complete";
+      const ce = parsed.critical_element as Record<string, unknown> | undefined;
+      const un = parsed.unstable as Record<string, unknown> | undefined;
+      state = {
+        status,
+        removedIds: Array.isArray(parsed.removed_member_ids) ? parsed.removed_member_ids as number[] : [],
+        structure: parsed.structure as FrameStructure | null ?? null,
+        analysis: parsed.analysis as Record<string, unknown> | null ?? null,
+        criticalElementId: ce?.critical_element_id != null ? ce.critical_element_id as number : null,
+        unstableReason: un?.reason as string | undefined,
+        error: parsed.error as string | undefined,
+      };
+    }
+  }
+  return state;
+}
+
 // ── Full state restoration from conversation ─────────────────────────────────
 
 export interface RestoredState {
@@ -135,6 +180,7 @@ export interface RestoredState {
   structuralMetrics: StructuralMetrics | null;
   failedElements: number[];
   demolishReady: boolean;
+  extraAnalysis: ExtraAnalysisState | null;
 }
 
 export function restoreStateFromMessages(msgs: ChatMessage[]): RestoredState {
@@ -237,5 +283,6 @@ export function restoreStateFromMessages(msgs: ChatMessage[]): RestoredState {
     structuralMetrics,
     failedElements: allFailed,
     demolishReady,
+    extraAnalysis: extractExtraAnalysisState(msgs),
   };
 }

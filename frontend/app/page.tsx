@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { fetchTools, fetchScenarios, fetchScenario, fetchScenarioPrompt, type Tool, type ScenarioSummary, API_BASE } from "@/lib/api";
+import { fetchTools, fetchScenarios, fetchScenario, fetchScenarioPrompt, callTool, type Tool, type ScenarioSummary, API_BASE } from "@/lib/api";
 import { type StructuralMetrics, type DemolitionRound } from "@/components/mechanical-summary";
 import { FloatingToolbar } from "@/components/floating-toolbar";
 import { Sidebar } from "@/components/sidebar";
@@ -37,10 +37,12 @@ import { t, type Lang } from "@/lib/i18n";
 import { useTheme } from "@/components/theme-provider";
 import {
   restoreStateFromMessages,
+  EXTRA_ANALYSIS_TOOL,
   type FrameStructure,
   type NodeDisp,
   type ChatMessage,
   type StepEvent,
+  type ExtraAnalysisState,
 } from "@/lib/state-restore";
 import { safeGetItem, safeParseJson } from "@/lib/safe-storage";
 import { useConversations } from "@/hooks/use-conversations";
@@ -171,6 +173,11 @@ export default function Home() {
   const [demolitionRounds, setDemolitionRounds] = useState<DemolitionRound[]>([]);
   const [roundAnalysisResults, setRoundAnalysisResults] = useState<Record<number, Record<string, unknown>>>({});
   const [activeRoundIdx, setActiveRoundIdx] = useState(-1);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedElements, setSelectedElements] = useState<number[]>([]);
+  const [scenarioView, setScenarioView] = useState<"baseline" | "extra">("baseline");
+  const [extraRunning, setExtraRunning] = useState(false);
+  const [extraState, setExtraState] = useState<ExtraAnalysisState | null>(null);
 
   const logEndRef = useRef<HTMLDivElement>(null);
   const pendingStepsRef = useRef<StepEvent[]>([]);
@@ -285,6 +292,7 @@ export default function Home() {
           setStructuralMetrics(restored.structuralMetrics);
           setFailedElements(restored.failedElements);
           setDemolishReady(restored.demolishReady);
+          setExtraState(restored.extraAnalysis);
           /* eslint-enable react-hooks/set-state-in-effect */
         }
       } else if (active) {
@@ -374,6 +382,48 @@ export default function Home() {
     } as FrameStructure;
   }, [frameStructure, activeRoundIdx, demolitionRounds]);
 
+  const ghostElements = useMemo(() => {
+    if (!frameStructure || !extraState?.removedIds?.length) return null;
+    const nodeMap = new Map(frameStructure.nodes.map(n => [n.id, n]));
+    const ghosts: Array<{ id: number; from: { x: number; y: number; z: number }; to: { x: number; y: number; z: number } }> = [];
+    for (const id of extraState.removedIds) {
+      const el = frameStructure.elements.find(e => e.id === id);
+      if (!el) continue;
+      const ni = nodeMap.get(el.node_i), nj = nodeMap.get(el.node_j);
+      if (!ni || !nj) continue;
+      ghosts.push({ id, from: { x: ni.x, y: ni.y, z: ni.z ?? 0 }, to: { x: nj.x, y: nj.y, z: nj.z ?? 0 } });
+    }
+    return ghosts.length > 0 ? ghosts : null;
+  }, [frameStructure, extraState]);
+
+  const extraView = useMemo(() => {
+    if (!extraState) return null;
+    const a = extraState.analysis;
+    const ef = (a?.element_forces as Array<{ stress_ratio?: number }> | undefined) ?? [];
+    let maxStressRatio: number | undefined;
+    if (ef.length > 0) {
+      maxStressRatio = Math.max(...ef.map(f => typeof f.stress_ratio === "number" ? f.stress_ratio : 0));
+    }
+    return {
+      scenarioView,
+      extraStatus: extraState.status,
+      extraRunning,
+      extraStructure: extraState.structure,
+      extraDisplacements: (a?.node_displacements as NodeDisp[] | null) ?? null,
+      extraElementForces: (a?.element_forces as Array<{ element_id: number; Nmax: number; Nmin: number; N?: number; stress_ratio?: number }> | null) ?? null,
+      extraMaxDisplacement: typeof a?.max_displacement === "number" ? a.max_displacement : undefined,
+      extraCriticalElementId: extraState.criticalElementId,
+      ghostElements,
+      extraSummary: {
+        maxDisplacement: typeof a?.max_displacement === "number" ? a.max_displacement : undefined,
+        maxStressRatio,
+        unstableReason: extraState.unstableReason,
+        error: extraState.error,
+        removedCount: extraState.removedIds.length,
+      },
+    };
+  }, [extraState, scenarioView, extraRunning, ghostElements]);
+
   // ---- Handlers ----
   const handleNewConversation = useCallback(() => {
     conv.newConversation();
@@ -394,6 +444,11 @@ export default function Home() {
     setAutoPlaying(false);
     autoPlayQueueRef.current = [];
     pendingStepsRef.current = [];
+    setSelectionMode(false);
+    setSelectedElements([]);
+    setScenarioView("baseline");
+    setExtraRunning(false);
+    setExtraState(null);
   }, [conv]);
 
   const handleSelectConversation = useCallback((id: string) => {
@@ -411,6 +466,7 @@ export default function Home() {
       setStructuralMetrics(restored.structuralMetrics);
       setFailedElements(restored.failedElements);
       setDemolishReady(restored.demolishReady);
+      setExtraState(restored.extraAnalysis);
     } else {
       setMessages([]);
       setFrameStructure(null);
@@ -420,6 +476,7 @@ export default function Home() {
       setStructuralMetrics(null);
       setFailedElements([]);
       setDemolishReady(false);
+      setExtraState(null);
     }
   }, [conv, messages]);
 
@@ -476,10 +533,21 @@ export default function Home() {
 
   const launchScenarioFromDemo = useCallback(async (scenarioName: string, scenario: ScenarioSummary) => {
     setDemoLibraryOpen(false);
+    const isZh = llm.lang === "zh";
+    if (scenario.viz_mode === "abaqus") {
+      setVizMode("abaqus");
+      setAnalysisMode("simulation");
+      const msg = scenario.title[isZh ? "zh" : "en"];
+      setMessages((prev) => [...prev, { role: "user", content: msg }]);
+      setStatus("loading");
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: "message", content: msg, analysisMode: "simulation" }));
+      }
+      return;
+    }
     setDemoRunning(true);
     demoRef.current = { running: true, phase: "launching" };
     setRunningDemoKey(scenarioName);
-    const isZh = llm.lang === "zh";
     setDemoStatus(scenario.description[isZh ? "zh" : "en"].slice(0, 80) + "...");
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       const needsAnalysis = scenario.category === "mechanics";
@@ -698,7 +766,94 @@ export default function Home() {
     setAutoPlaying(false);
     autoPlayQueueRef.current = [];
     pendingStepsRef.current = [];
+    setSelectionMode(false);
+    setSelectedElements([]);
+    setScenarioView("baseline");
+    setExtraRunning(false);
+    setExtraState(null);
   }, []);
+
+  const handleSelectElement = useCallback((id: number | null) => {
+    if (id === null) { setSelectedElements([]); return; }
+    setSelectedElements(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }, []);
+
+  const runExtraAnalysis = useCallback(async () => {
+    if (!frameStructure || selectedElements.length === 0 || extraRunning) return;
+    const removed = [...selectedElements];
+    const meta = analysisResult?.metadata as Record<string, unknown> | undefined;
+    const config = (meta?.config as Record<string, unknown> | undefined) ?? {};
+    const steel_grade = typeof config.steel_grade === "string" ? config.steel_grade : "Q355";
+    const dead_load_kpa = typeof config.dead_load_kpa === "number" ? config.dead_load_kpa : 5.0;
+    const live_load_kpa = typeof config.live_load_kpa === "number" ? config.live_load_kpa : 2.0;
+
+    setExtraRunning(true);
+    setSelectionMode(false);
+    setScenarioView("extra");
+    setLogEntries(prev => [...prev, { type: "tool_call", name: EXTRA_ANALYSIS_TOOL, arguments: { removed_member_ids: removed } }]);
+
+    let state: ExtraAnalysisState;
+    let resultText = "";
+    try {
+      const res = await callTool(EXTRA_ANALYSIS_TOOL, {
+        structure: frameStructure,
+        removed_member_ids: removed,
+        steel_grade,
+        dead_load_kpa,
+        live_load_kpa,
+      });
+      resultText = res.result ?? "";
+      let parsed: Record<string, unknown> | null = null;
+      if (!res.error) {
+        try { parsed = JSON.parse(resultText) as Record<string, unknown>; } catch { parsed = null; }
+      }
+      if (!parsed) {
+        state = { status: "error", removedIds: removed, structure: null, analysis: null, criticalElementId: null, error: res.error ?? "Failed to parse extra analysis result" };
+      } else {
+        const status = parsed.status === "unstable" || parsed.status === "error"
+          ? parsed.status as "unstable" | "error"
+          : "complete";
+        const ce = parsed.critical_element as Record<string, unknown> | undefined;
+        const un = parsed.unstable as Record<string, unknown> | undefined;
+        state = {
+          status,
+          removedIds: Array.isArray(parsed.removed_member_ids) ? parsed.removed_member_ids as number[] : removed,
+          structure: parsed.structure as FrameStructure | null ?? null,
+          analysis: parsed.analysis as Record<string, unknown> | null ?? null,
+          criticalElementId: ce?.critical_element_id != null ? ce.critical_element_id as number : null,
+          unstableReason: un?.reason as string | undefined,
+          error: parsed.error as string | undefined,
+        };
+      }
+    } catch (e) {
+      state = { status: "error", removedIds: removed, structure: null, analysis: null, criticalElementId: null, error: (e as Error)?.message ?? "Extra analysis failed" };
+    }
+
+    setExtraState(state);
+    setScenarioView("extra");
+    setLogEntries(prev => [...prev, { type: "tool_result", name: EXTRA_ANALYSIS_TOOL, result: resultText }]);
+
+    let summary: string;
+    if (state.status === "complete" && state.analysis) {
+      const maxDisp = typeof state.analysis.max_displacement === "number" ? state.analysis.max_displacement : undefined;
+      const ef = state.analysis.element_forces as Array<{ stress_ratio?: number }> | undefined;
+      const maxRatio = ef && ef.length > 0 ? Math.max(...ef.map(f => typeof f.stress_ratio === "number" ? f.stress_ratio : 0)) : undefined;
+      summary = `Removal check passed: remaining structure is stable (max disp ${maxDisp != null ? maxDisp.toFixed(2) : "—"} mm, max stress ratio ${maxRatio != null ? (maxRatio * 100).toFixed(1) : "—"}%).`;
+    } else if (state.status === "unstable") {
+      summary = `Removal check: remaining structure is UNSTABLE (collapse risk) — failed in case ${state.unstableReason ?? "unknown"}.`;
+    } else {
+      summary = `Removal check failed: ${state.error ?? "unknown error"}`;
+    }
+
+    setMessages(prev => [...prev,
+      { role: "user", content: `Extra analysis: remove members [${removed.join(", ")}]` },
+      { role: "ai", content: summary, steps: [
+        { type: "tool_call", name: EXTRA_ANALYSIS_TOOL, arguments: { removed_member_ids: removed } },
+        { type: "tool_result", name: EXTRA_ANALYSIS_TOOL, result: resultText },
+      ] },
+    ]);
+    setExtraRunning(false);
+  }, [frameStructure, selectedElements, extraRunning, analysisResult]);
 
   return (
     <div className="flex h-screen w-full overflow-hidden">
@@ -806,6 +961,14 @@ export default function Home() {
           onLogPauseToggle={() => setLogPaused(!logPaused)}
           onCanvasCallback={setCanvas3dRef}
           onUnityConnected={handleUnityConnected}
+          extraView={extraView}
+          selectionMode={selectionMode}
+          selectedElements={selectedElements}
+          onSelectElement={handleSelectElement}
+          onRunExtraAnalysis={runExtraAnalysis}
+          onClearSelection={() => setSelectedElements([])}
+          onToggleScenario={() => setScenarioView(v => v === "baseline" ? "extra" : "baseline")}
+          onToggleSelectionMode={() => setSelectionMode(!selectionMode)}
         />
         </ErrorBoundary>
 
@@ -853,6 +1016,11 @@ export default function Home() {
             setAnalysisSolver(null);
             setFailedElements([]);
             setDemolishReady(false);
+            setSelectionMode(false);
+            setSelectedElements([]);
+            setScenarioView("baseline");
+            setExtraRunning(false);
+            setExtraState(null);
           }
         }}
         onClearMemory={async () => {
