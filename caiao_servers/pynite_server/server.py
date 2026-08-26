@@ -20,7 +20,7 @@ logger = logging.getLogger("pynite_server")
 
 # Import at module level to avoid thread pool issues on Windows
 try:
-    from Pynite import FEModel3D
+    from Pynite.FEModel3D import FEModel3D
     _PYNITE_AVAILABLE = True
 except ImportError:
     _PYNITE_AVAILABLE = False
