@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Play, Pause, Volume2, VolumeX, AlertTriangle, Loader2, Maximize2, Minimize2, XCircle } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, AlertTriangle, Loader2, Maximize2, Minimize2, XCircle, FlaskConical, Upload, X } from "lucide-react";
 import { t, type Lang } from "@/lib/i18n";
 import { API_BASE } from "@/lib/api";
 
@@ -43,6 +43,20 @@ const footprintUrlFor = (id: string) => {
 };
 const SOLVE_ACTIVE_STATUSES = new Set(["submitted", "running"]);
 
+interface CalibImage {
+  url: string;
+  name: string;
+  group: string;
+}
+
+interface CalibResult {
+  job_id: string;
+  output_dir: string;
+  summary: Record<string, unknown>;
+  video_url: string;
+  images: CalibImage[];
+}
+
 const round1 = (v: number) => Math.round(v * 10) / 10;
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
@@ -61,6 +75,17 @@ export function AbaqusVideoPanel({ lang }: { lang: Lang }) {
   const [solveStyle, setSolveStyle] = useState<"rendered" | "raw" | "native">("rendered");
   const [solveStatus, setSolveStatus] = useState<SolveStatus | null>(null);
   const [stopError, setStopError] = useState<string | null>(null);
+
+  // ── Video calibration (标定) states ────────────────────────────────
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [calibOpen, setCalibOpen] = useState(false);
+  const [calibFile, setCalibFile] = useState<File | null>(null);
+  const [calibTowerH, setCalibTowerH] = useState("70");
+  const [calibBaseD, setCalibBaseD] = useState("57");
+  const [calibBusy, setCalibBusy] = useState(false);
+  const [calibError, setCalibError] = useState<string | null>(null);
+  const [calibResult, setCalibResult] = useState<CalibResult | null>(null);
+  const [lightbox, setLightbox] = useState<string | null>(null);
 
   useEffect(() => {
     const url = footprintUrlFor(VIDEOS[videoIdx].id);
@@ -158,6 +183,42 @@ export function AbaqusVideoPanel({ lang }: { lang: Lang }) {
     }
   };
 
+  // ── Video calibration: pick file, upload & analyze ───────────────────
+  const openCalib = () => {
+    setCalibError(null);
+    fileInputRef.current?.click();
+  };
+
+  const onFilePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    setCalibFile(f);
+    setCalibError(null);
+  };
+
+  const analyzeVideo = async () => {
+    if (!calibFile) return;
+    setCalibBusy(true);
+    setCalibError(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", calibFile);
+      fd.append("tower_h", String(parseFloat(calibTowerH) || 70));
+      fd.append("base_d", String(parseFloat(calibBaseD) || 57));
+      const r = await fetch(`${API_BASE}/api/abaqus/analyze-video`, { method: "POST", body: fd });
+      const data = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(data?.detail || `分析失败（HTTP ${r.status}）`);
+      setCalibResult(data as CalibResult);
+      setCalibFile(null);
+      setCalibOpen(false);
+    } catch (err) {
+      setCalibError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCalibBusy(false);
+    }
+  };
+
   // Sync fullscreen state with browser events
   useEffect(() => {
     const onFsChange = () => {
@@ -220,6 +281,13 @@ export function AbaqusVideoPanel({ lang }: { lang: Lang }) {
               {v.label}
             </button>
           ))}
+          <span className="w-px h-3 bg-border/60 mx-0.5" />
+          <button
+            onClick={() => setCalibOpen((o) => !o)}
+            className={`flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-md transition-colors cursor-pointer ${calibOpen ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            <FlaskConical className="h-3 w-3" /> 标定
+          </button>
           {(hasRaw || hasNative) && (
             <>
               <span className="w-px h-3 bg-border/60 mx-0.5" />
@@ -288,6 +356,68 @@ export function AbaqusVideoPanel({ lang }: { lang: Lang }) {
           <span>P95 占地半径 {round1(footprint.p95_radius_m)}m</span>
           <span>倒塌方向约 {Math.round(footprint.direction_deg)}°</span>
           <span>末帧塔最高点约 {round1(footprint.final_height_m)}m</span>
+        </div>
+      )}
+      {calibOpen && (
+        <div className="flex items-center gap-3 border-b border-border/60 px-4 py-2 text-[11px] flex-wrap">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="video/*"
+            className="hidden"
+            onChange={onFilePicked}
+          />
+          {!calibFile ? (
+            <>
+              <button
+                onClick={openCalib}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-primary/40 text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+              >
+                <Upload className="h-3.5 w-3.5" /> 导入工程倒塌视频
+              </button>
+              <span className="text-muted-foreground/60">导入真实工程倒塌录像进行标定分析（位置 / 折痕 / 废墟等）</span>
+            </>
+          ) : (
+            <>
+              <span className="text-muted-foreground truncate max-w-[220px]">{calibFile.name}</span>
+              <span className="text-muted-foreground/60">({(calibFile.size / 1048576).toFixed(1)} MB)</span>
+              <label className="flex items-center gap-1 text-muted-foreground">
+                塔高(m)
+                <input
+                  type="number"
+                  value={calibTowerH}
+                  onChange={(e) => setCalibTowerH(e.target.value)}
+                  className="w-16 rounded border border-border bg-background px-1.5 py-0.5 text-foreground text-[11px]"
+                />
+              </label>
+              <label className="flex items-center gap-1 text-muted-foreground">
+                塔底宽(m)
+                <input
+                  type="number"
+                  value={calibBaseD}
+                  onChange={(e) => setCalibBaseD(e.target.value)}
+                  className="w-16 rounded border border-border bg-background px-1.5 py-0.5 text-foreground text-[11px]"
+                />
+              </label>
+              <button
+                onClick={analyzeVideo}
+                disabled={calibBusy}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
+              >
+                {calibBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FlaskConical className="h-3.5 w-3.5" />}
+                {calibBusy ? "分析中..." : "开始分析"}
+              </button>
+              <button
+                onClick={() => { setCalibFile(null); setCalibError(null); }}
+                disabled={calibBusy}
+                className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-50"
+              >
+                取消
+              </button>
+              {calibBusy && <span className="text-muted-foreground/70 animate-pulse">标定 + 轨迹提取 + 折痕检测约需 10~60 秒...</span>}
+            </>
+          )}
+          {calibError && <span className="text-red-500/90 w-full">{calibError}</span>}
         </div>
       )}
       <div ref={containerRef} className="flex-1 flex items-center justify-center bg-black/40 relative">
@@ -362,6 +492,124 @@ export function AbaqusVideoPanel({ lang }: { lang: Lang }) {
           {playing ? "播放中" : ended ? "已结束" : "已暂停"}
         </span>
       </div>
+      {calibResult && (
+        <CalibrationResultModal
+          result={calibResult}
+          onClose={() => setCalibResult(null)}
+          onLightbox={setLightbox}
+        />
+      )}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-6 cursor-pointer"
+          onClick={() => setLightbox(null)}
+        >
+          <img src={lightbox} alt="标注图" className="max-w-full max-h-full rounded-lg" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Calibration result modal ────────────────────────────────────────────
+function CalibrationResultModal({
+  result,
+  onClose,
+  onLightbox,
+}: {
+  result: CalibResult;
+  onClose: () => void;
+  onLightbox: (url: string) => void;
+}) {
+  const plots = result.images.filter((i) => i.group === "plot");
+  const frames = result.images.filter((i) => i.group === "frame");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 sm:p-8">
+      <div className="relative w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-[#0d1322] p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <FlaskConical className="h-4 w-4 text-primary" /> 视频标定分析结果
+            </h3>
+            <p className="text-[11px] text-muted-foreground mt-1 break-all">
+              {result.output_dir}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {plots.length > 0 && (
+          <div className="mb-5">
+            <div className="text-xs font-medium text-foreground/80 mb-2">轨迹 / 对比图</div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {plots.map((img) => (
+                <div
+                  key={img.name}
+                  className="rounded-lg border border-border overflow-hidden bg-black/40 cursor-zoom-in"
+                  onClick={() => onLightbox(`${API_BASE}${img.url}`)}
+                >
+                  <img src={`${API_BASE}${img.url}`} alt={img.name} className="w-full" />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mb-5">
+          <div className="text-xs font-medium text-foreground/80 mb-2">测量数据</div>
+          <SummaryView data={result.summary} />
+        </div>
+
+        {frames.length > 0 && (
+          <div>
+            <div className="text-xs font-medium text-foreground/80 mb-2">
+              标注关键帧（{frames.length} 张）— 点击查看大图
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {frames.map((img) => (
+                <div
+                  key={img.name}
+                  className="rounded-lg border border-border overflow-hidden bg-black/40 cursor-zoom-in"
+                  onClick={() => onLightbox(`${API_BASE}${img.url}`)}
+                >
+                  <img src={`${API_BASE}${img.url}`} alt={img.name} className="w-full aspect-video object-cover" />
+                  <div className="px-2 py-1 text-[10px] text-muted-foreground truncate">{img.name}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SummaryView({ data }: { data: Record<string, unknown> }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {Object.entries(data).map(([k, v]) => (
+        <div key={k} className="rounded-lg border border-border/60 bg-black/20 px-3 py-2">
+          <div className="text-[11px] font-semibold text-primary mb-1.5 capitalize">{k}</div>
+          {v !== null && typeof v === "object" ? (
+            <div className="space-y-1">
+              {Object.entries(v as Record<string, unknown>).map(([kk, vv]) => (
+                <div key={kk} className="flex justify-between gap-3 text-[11px]">
+                  <span className="text-muted-foreground">{kk}</span>
+                  <span className="text-foreground text-right">{String(vv)}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-[11px] text-foreground">{String(v)}</div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
