@@ -8,5 +8,6 @@ from routers.unity import router as unity_router
 from routers.blender import router as blender_router
 from routers.effects import router as effects_router
 from routers.abaqus import router as abaqus_router
+from routers.video_analysis import router as video_analysis_router
 
-routers = [tools_router, verify_router, servers_router, settings_router, unity_router, blender_router, effects_router, abaqus_router]
+routers = [tools_router, verify_router, servers_router, settings_router, unity_router, blender_router, effects_router, abaqus_router, video_analysis_router]

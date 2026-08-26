@@ -436,6 +436,11 @@ class _BodySizeLimitPureMiddleware:
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http":
+            # Video-upload endpoint bypasses the 10 MB limit (multipart video files)
+            path = scope.get("path", "")
+            if path == "/api/abaqus/analyze-video":
+                await self.app(scope, receive, send)
+                return
             cl = next((int(v) for k, v in scope.get("headers", []) if k == b"content-length"), 0)
             if cl > self.MAX_BODY:
                 body = b'{"detail": "Request body too large"}'
@@ -465,6 +470,11 @@ app.add_middleware(_BodySizeLimitPureMiddleware)
 _exports_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "caiao_servers", "exports")
 os.makedirs(_exports_dir, exist_ok=True)
 app.mount("/exports", StaticFiles(directory=_exports_dir), name="exports")
+
+# ── Serve video-calibration analysis outputs (scripts/video_calibration/runs) ─
+from routers.video_analysis import RUNS_DIR as _video_runs_dir
+os.makedirs(_video_runs_dir, exist_ok=True)
+app.mount("/video-analysis", StaticFiles(directory=_video_runs_dir), name="video-analysis")
 
 # ── All REST endpoints are defined in gateway/routers/ ────────────────────
 # Routers are registered in lifespan() via app.include_router().
