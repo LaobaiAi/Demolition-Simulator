@@ -104,3 +104,4 @@ todo/
 # Abaqus media / analysis exports (generated artifacts)
 *.mov
 analysis/
+scripts/tower_gifs/
