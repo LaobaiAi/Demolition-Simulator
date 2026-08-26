@@ -1,42 +1,32 @@
 # 蒸汽轮机厂房 — 完整 Prompt 流程
 
 > 场景名：`steam_turbine_building` ｜ 类别：topology ｜ 渲染：Blender 管线
-> 24榀x3轴(A/B/C)大型工业厂房，AB跨24m钢屋架(脊高27m)，BC跨9m平梁(8m/15m楼板)，柱高25m，共480构件。
+> 24榀x3轴(A/B/C)大型工业厂房，AB跨24m钢屋架(脊高27m)，BC跨9m平梁(8m/15m楼板)，柱高25m，共480构件。完整流程（构建+拆除+渲染）预估最长约 25-30 分钟。
 
-## 1. 触发话术
+## 1. 触发话术（用户可只给部分参数，缺失项助手用默认值补全）
 
-| 语言 | 话术 |
+| 语言 | 话术示例 |
 |---|---|
-| 中文 | 生成一个蒸汽轮机厂房的拆除演示 |
-| English | Build a steam turbine building demolition demo |
+| 中文 | 生成一个约 24 跨的钢厂房拆除演示，AB 跨跨度大概 24 米 / 生成一个蒸汽轮机厂房的拆除演示（全部用默认） |
+| English | Build a ~24-bay steel plant demolition demo, AB bay span about 24m / Build a steam turbine building demolition demo (use defaults) |
 
-## 2. 完整对话流（Phase 1-4）
+## 2. 完整对话流（Phase 0 参数确认 → Phase 1-4）
 
-```
-用户:  生成一个蒸汽轮机厂房的拆除演示
-━━━ Phase 1 · 理解需求 ━━━
-助手:  (调用 get_scenario("steam_turbine_building"))
-       已找到预置场景：蒸汽轮机厂房
-       - 24榀 × 3轴(A/B/C)，AB跨 24m 钢屋架(脊高27m)，BC跨 9m 平梁(8m/15m楼板)，柱高 25m
-       - 共 480 构件（72柱+69纵梁+144屋架+24BC梁+46BC楼板+69屋面板+46墙板+10山墙/抗风柱）
-       是否开始构建模型？
-用户:  开始
-━━━ Phase 2 · 构建 ━━━
-助手:  (调用 build_frame_model(building_type="steam_turbine"))
-       ✅ 模型构建完成！已生成 480 个构件。
-       默认拆除策略：西→东、自上而下（C 轴柱最后保留），速度分区正常+加速，是否执行？
-用户:  执行
-━━━ Phase 3 · 拆除（5步管线）━━━
-助手:  (调用 steam_turbine_demolition(mode="topology"))
-       ✅ 拆除计划：14 步工序，138 个动画步骤，739 个动画构件
-       ✅ 动画时间线：~192 秒 @ 24fps（~4608 帧）
-       ✅ 特效配置：标准（变橙→缩小→下坠→隐藏）
-       播放动画预览成功，是否渲染成视频？
-用户:  渲染
-━━━ Phase 4 · 渲染 ━━━
-助手:  (调用 run_pipeline_stage(stage="render"))
-       ✅ 视频已输出：<输出路径>  (时长约 3 分 12 秒)
-```
+| 轮次 | 说话方 | 内容 |
+|---|---|---|
+| 1 | 用户 | 给出项目概述与部分参数（跨数、跨度、柱高、层数等，可不全、可不精确；说"默认"则全部用默认值） |
+| 2 | 助手 | 复述完整参数表：用户给出的保留，缺失项用默认值补全（24榀 × 3轴(A/B/C)，AB跨 24m 钢屋架(脊高27m)，BC跨 9m 平梁(8m/15m楼板)，柱高 25m，钢材 Q235，共 480 构件；拆除策略西→东、自上而下（C 轴柱最后保留）；特效 standard；速度 1.0）。说明预计时长：完整流程（构建+拆除+渲染）最长约 25-30 分钟。请求用户确认 |
+| 3 | 用户 | 确认参数（或指出需调整的参数） |
+| 4 | 助手 | (调用 get_scenario("steam_turbine_building")) 已找到预置场景：蒸汽轮机厂房，规格与确认参数一致。是否开始构建模型？ |
+| 5 | 用户 | 开始 |
+| 6 | 助手 | (调用 build_frame_model(building_type="steam_turbine")) 模型构建完成，已生成 480 个构件 |
+| 7 | 助手 | (调用 steam_turbine_demolition(mode="topology")) 拆除计划 14 步工序、138 个动画步骤、739 个动画构件，动画时间线 ~192 秒 @ 24fps（~4608 帧），特效 standard。是否渲染成视频？ |
+| 8 | 用户 | 渲染 |
+| 9 | 助手 | (调用 run_pipeline_stage(stage="render", blend_input="<scene_animated.blend 完整路径>")) 视频已输出：<输出路径>（时长约 3 分 12 秒） |
+
+**说明：** 任何参数调整都在轮 3 确认时提出；确认后不再变更。
+
+**渲染注意：** 轮 9 调用 render 阶段时**必须**显式指定 `blend_input` 为动画文件 `scene_animated.blend`（含全部拆除关键帧，与 `scene_base.blend` 同在默认输出目录 `blender_pipeline/output/blend/` 下）。`scene_base.blend` 是静态基础模型，渲染它只会得到静态画面，禁止使用。
 
 ## 3. 工具调用链（后端视角）
 
@@ -71,13 +61,15 @@
 
 | 环节 | 输入 | 输出 | 耗时参考 |
 |---|---|---|---|
+| Phase 0 参数确认 | 用户概述 + 默认值 | 完整参数表 + 确认 | 秒级 |
 | Phase 1 场景匹配 | 用户话术 | 场景规格 + 确认询问 | <1s |
 | Phase 2 构建 | `building_type=steam_turbine` | `scene_base.blend`（480 构件） | ~1 min |
 | Phase 3-1 拆除计划 | 480 构件 + 策略 | 14 步工序计划 | ~10s |
 | Phase 3-2 时间线 | 14 步计划 + 标准特效 | 138 动画步骤 | ~5s |
 | Phase 3-3 动画数据 | 时间线 + 速度分区 | 4608 帧动画 | ~1 min |
 | Phase 3-4 特效配置 | 标准预设 + 结构 | 变橙→缩小→下坠→隐藏 | ~5s |
-| Phase 4 渲染 | 动画 + 镜头方案 | 视频（~192s @24fps） | 5-10 min |
+| Phase 4 渲染 | `scene_animated.blend`（动画） | 视频（~192s @24fps） | 最长约 15 分钟 |
+| 完整流程合计 | — | 视频 + 模型 | 最长约 25-30 分钟 |
 
 ## 6. 拆除 14 步工序（实例内容核心）
 

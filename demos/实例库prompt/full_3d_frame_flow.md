@@ -19,8 +19,9 @@
        ✅ 已生成 3D 框架：3×4 柱网（X 3 跨 + Y 4 跨）× 4 层
        - 柱 / 梁（X 向 + Y 向）/ 节点数据
 ━━━ Phase 2 · 分析（Analyze）━━━
-助手:  (调用 full_analysis_3d — PyNite 3D FEM)
-       ✅ 3D 有限元静力分析完成
+助手:  (调用 full_analysis_3d_gb — 矩阵位移法 / OpenSeesPy 双引擎)
+       ✅ 3D 有限元静力分析完成（Dead/Live/Wind/Total 四工况）
+       ✅ GB50017-2017 逐构件校核完成（强度 / 稳定 / 挠度 / 长细比）
 ━━━ Phase 3 · 识别关键柱（ID Critical）━━━
 助手:  ✅ 关键柱已识别（受力最不利柱）
 ━━━ Phase 4 · 拆除（Demolish）━━━
@@ -32,8 +33,8 @@
 | # | 阶段 | 工具调用 | 后端实现 |
 |---|---|---|---|
 | 1 | 3D Model | `generate_frame_3d`（X/Y 双向跨度） | `caiao_servers/frame_generator/server.py` 或 `caiao_servers/steel_frame_3d_generator/server.py` |
-| 2 | Analyze | `full_analysis_3d`（PyNite 3D FEM） | `caiao_servers/full_analysis_3d_server/server.py`（geometry → UnifiedFrame 转换 → 求解） |
-| 3 | ID Critical | 关键柱识别 | PyNite 结果中最大内力/位移柱 |
+| 2 | Analyze | `full_analysis_3d_gb`（矩阵位移法 / OpenSeesPy + GB50017 逐构件校核） | `caiao_servers/full_analysis_3d_gb_server/server.py`（steel-frame-design 引擎：生成 → 四工况求解 → GB50017 校核 → 选关键柱） |
+| 3 | ID Critical | 关键柱识别 | 分析结果中轴向力最大柱（Total 工况） |
 | 4 | Demolish | 渐进式拆除 | 移除关键柱 → 连锁反应动画 |
 
 ## 4. 参数明细
@@ -52,6 +53,6 @@
 | 环节 | 输入 | 输出 |
 |---|---|---|
 | 3D 建模 | 柱网 grid_x / grid_y + 层高 | 3D 几何（nodes / columns / beams_x / beams_y） |
-| 静力分析 | UnifiedFrame（nodes / elements / loads / supports） | 节点位移 + 内力（PyNite） |
+| 静力分析 | UnifiedFrame（nodes / elements / loads / supports） | 节点位移 + 内力（矩阵位移法 / OpenSeesPy）+ GB50017 逐构件应力比 |
 | 关键柱 | 分析结果 | 关键柱列表 |
 | 渐进式拆除 | 关键柱 + 结构 | 连锁倒塌动画（3D） |

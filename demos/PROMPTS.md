@@ -26,13 +26,15 @@
 
 | # | 场景 | 推荐话术（中文） | 推荐话术（English） | 说明 |
 |---|---|---|---|---|
-| 1 | **蒸汽轮机厂房** `steam_turbine_building` | "生成一个蒸汽轮机厂房的拆除演示" | "Build a steam turbine building demolition demo" | 24榀×3轴大型工业厂房，14步西→东自上而下拆除，走 Blender 管线 |
+| 1 | **蒸汽轮机厂房** `steam_turbine_building` | "生成一个约 24 跨的钢厂房拆除演示，跨度 24 米左右" | "Build a ~24-bay steel plant demolition demo, ~24m span" | 24榀×3轴大型工业厂房，14步西→东自上而下拆除，走 Blender 管线；完整流程最长约 25-30 分钟 |
 | 2 | **快速可视化倒塌** `quick_visual` | "做个快速倒塌演示" / "来个最简单的拆除动画" | "Show a quick visual collapse" | 2跨3层小框架，最短路径出图 |
 | 3 | **完整结构拆除** `full_structural` | "做完整结构分析拆除" | "Run a full structural demolition" | 4跨6层，最弱优先策略，逐轮重分析直到倒塌 |
 | 4 | **电影级倒塌** `cinematic_collapse` | "来个电影级倒塌效果" | "Make a cinematic collapse" | 3跨4层，粒子/灰尘/震动/屈曲全特效，慢速戏剧化 |
 | 5 | **底部爆破内塌** `bottom_up_implosion` | "模拟底部爆破内塌" | "Simulate a bottom-up implosion" | 3跨4层，先拆底层柱，上部向内倒塌 |
 | 6 | **3D Unity 物理仿真** `unity_3d_physics` | "用 Unity 做 3D 物理拆除" | "Run a Unity 3D physics simulation" | 3x4柱网4层，完整分析+实时物理，**需 Unity 运行** |
 | 7 | **隔层交替倒塌** `alternating_floor_collapse` | "做隔层交替倒塌演示" | "Show alternating floor collapse" | 4跨4层，拆 4→2→3→1 层，制造连续渐进倒塌 |
+| 8 | **冷却塔倒塌仿真** `cooling_tower_collapse` | "模拟一座 70 米双曲线冷却塔倒塌，底半径约 28 米" | "Simulate a 70m hyperboloid cooling tower collapse, ~28m base" | 70m 双曲线冷却塔，实拍校准参数，Abaqus 显式仿真完整流程最长约 90 分钟，**需仿真模式（Abaqus）** |
+| 9 | **烟囱倒塌仿真** `stack_collapse` | "模拟一座 100 米化工烟囱倒塌，洞口开在 15 米左右" | "Simulate a 100m concrete chimney collapse, opening ~15m" | 100m 化工混凝土烟囱 stack01，run-39 基准一次性分析总预估最长约 60 分钟，**需仿真模式（Abaqus）** |
 
 ---
 
