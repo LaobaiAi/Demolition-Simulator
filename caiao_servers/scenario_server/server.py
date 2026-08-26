@@ -184,6 +184,58 @@ SCENARIOS: dict[str, dict] = {
         "needs_analysis": False,
         "tags": ["industrial", "steam_turbine", "blender", "large", "topology"],
     },
+    "cooling_tower_collapse": {
+        "name": "cooling_tower_collapse",
+        "title": {"en": "Cooling Tower Collapse Simulation", "zh": "冷却塔倒塌仿真"},
+        "description": {
+            "en": "70m hyperboloid RC cooling tower with validated real-tower parameters (base radius 28.5m, throat 16m at 51m, wall 0.12m, 98° flue opening). Full Abaqus explicit collapse simulation with C30 CDP material, then extract frames and render videos to the Abaqus panel. Full pipeline takes up to ~90 min.",
+            "zh": "70m双曲线钢筋混凝土冷却塔，实拍校准参数（底半径28.5m，喉部16m@51m，壁厚0.12m，98°洞口）。完整 Abaqus 显式倒塌仿真（C30 CDP 材料），求解后提取帧并渲染视频到 Abaqus 面板。完整流程预估最长约90分钟。",
+        },
+        "category": "mechanics",
+        "structure_params": {
+            "type": "concrete",
+            "building_type": "cooling_tower",
+            "height_m": 70.0,
+            "base_radius_m": 28.5,
+            "throat_radius_m": 16.0,
+            "throat_elevation_m": 51.0,
+            "top_radius_m": 17.1,
+            "wall_thickness_m": 0.12,
+            "opening_bottom_elevation_m": 11.0,
+            "opening_height_m": 3.0,
+            "opening_angle_deg": 98.0,
+            "settle_time_s": 1.0,
+            "time_period_s": 12.0,
+            "cpus": 4,
+        },
+        "strategy": "self_weight",
+        "effects_preset": "standard",
+        "speed": 1.0,
+        "viz_mode": "abaqus",
+        "needs_analysis": True,
+        "tags": ["abaqus", "cooling_tower", "simulation", "explicit", "mechanics"],
+    },
+    "stack_collapse": {
+        "name": "stack_collapse",
+        "title": {"en": "Chimney Collapse Simulation", "zh": "烟囱倒塌仿真"},
+        "description": {
+            "en": "100m chemical-concrete chimney (instance stack01), self-weight collapse on the accepted run-39 baseline. One-shot Abaqus analysis via stack_run_analysis — a new run each time, up to ~60 min total, PASS/FAIL acceptance vs validated criteria. Seconds-level no_solve dry run available.",
+            "zh": "100m 化工混凝土烟囱（实例 stack01），基于已验收 run-39 基准的自重倒塌。通过 stack_run_analysis 一次性分析——每次新建 run，总预估最长约60分钟，按验收准则返回 PASS/FAIL。支持秒级 no_solve 试跑。",
+        },
+        "category": "mechanics",
+        "structure_params": {
+            "type": "concrete",
+            "building_type": "stack",
+            "height_m": 100.0,
+            "baseline_run": "run-39",
+        },
+        "strategy": "self_weight",
+        "effects_preset": "standard",
+        "speed": 1.0,
+        "viz_mode": "abaqus",
+        "needs_analysis": True,
+        "tags": ["abaqus", "chimney", "stack", "simulation", "mechanics"],
+    },
 }
 
 EFFECTS_PRESETS: dict[str, dict] = {
@@ -268,7 +320,7 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "name": {
                         "type": "string",
-                        "description": "Scenario name: quick_visual, full_structural, cinematic_collapse, bottom_up_implosion, unity_3d_physics, alternating_floor_collapse",
+                        "description": "Scenario name: quick_visual, full_structural, cinematic_collapse, bottom_up_implosion, unity_3d_physics, alternating_floor_collapse, steam_turbine_building, cooling_tower_collapse, stack_collapse",
                         "enum": list(SCENARIOS.keys()),
                     },
                 },
