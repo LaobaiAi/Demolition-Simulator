@@ -1,0 +1,57 @@
+# caiao.yaml — CAIAO Server manifest
+# Every CAIAO Server MUST have a caiao.yaml manifest.
+
+# ── Identity ─────────────────────────────────────────────────────────────
+name: full_analysis_3d_gb_server
+version: 0.1.0
+kind: merged
+description: "3D full structural analysis (GB50017) — generate 3D steel frame, solve load cases (matrix displacement method / OpenSeesPy), run per-member GB50017-2017 code check, identify critical column in one atomic call"
+status: active
+since: "2026-08-26"
+
+# ── Lifecycle ─────────────────────────────────────────────────────────────
+start_mode: lazy
+
+# ── Command ───────────────────────────────────────────────────────────────
+command:
+  python: auto
+  args: ["server.py"]
+  cwd: "."
+  env: {}
+
+# ── Health ────────────────────────────────────────────────────────────────
+health:
+  timeout_ms: 5000
+  restart_on_crash: false
+  max_restarts: 3
+  health_check_interval_s: 0
+
+# ── Tools ─────────────────────────────────────────────────────────────────
+tools:
+  - name: full_analysis_3d_gb
+    description: "3D full structural analysis (GB50017): generate a 3D steel frame → solve Dead/Live/Wind/Total load cases (matrix displacement method / OpenSeesPy) → per-member GB50017-2017 code check → identify the critical column — all in one atomic call. Returns structure + analysis + code_check + critical_element in a single response"
+    tags: [pipeline, 3d, generation, analysis, critical-element, code-check, gb50017, merged]
+  - name: full_analysis_3d_gb_remove
+    description: "Member removal re-analysis (progressive demolition): take an existing baseline structure (uni format from full_analysis_3d_gb) + member ids to remove → purge orphan nodes → re-solve Dead/Live/Wind/Total on remaining members (matrix displacement method / OpenSeesPy) → report stability (singular solve = collapse risk) + redistributed forces + GB50017-2017 check + critical element"
+    tags: [analysis, 3d, member-removal, progressive-collapse, gb50017, merged]
+
+# ── Imports (merged servers only) ─────────────────────────────────────────
+imports:
+  - module: servers.steel_frame_generator
+    symbols: [SteelFrameGenerator]
+  - module: servers.opensees_runner
+    symbols: [OpenSeesRunner]
+  - module: servers.steel_code_check
+    symbols: [SteelCodeCheck]
+  - module: servers.defaults
+    symbols: [BUILTIN_SECTIONS, BUILTIN_MATERIALS]
+  - module: full_analysis_3d_server.server
+    symbols: [_select_critical_3d]
+
+# ── Capabilities ────────────────────────────────────────────────────────
+capabilities: [3d-analysis, pipeline, generation, critical-element-identification, code-check, gb50017, merged]
+
+# ── Dependencies ─────────────────────────────────────────────────────────
+dependencies:
+  python: [numpy]
+  system: []
