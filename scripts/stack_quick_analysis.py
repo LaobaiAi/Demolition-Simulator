@@ -34,11 +34,17 @@ Real solves must be wrapped against power sleep:
   python scripts/run_with_wake.py gateway/venv/Scripts/python.exe \
       scripts/stack_quick_analysis.py --run-name concrete_stack_run40
 
-Module API (future platform LLM via a thin CAIAO server tool -- load this
+Module API (platform LLM via a thin CAIAO server tool -- load this
 file with importlib from scripts/, or add scripts/ to sys.path):
   from stack_quick_analysis import run_stack_analysis
   result = run_stack_analysis("stack_v2", sim_time=12.0, n_theta=32)
   # -> stable dict, also mirrored to <run>/results/quick_result.json
+  # Async (interactive LLM flow, mirrors the cooling tower):
+  #   stack_submit_analysis(run_name, sim_time=...) -> submits and returns
+  #       immediately {status: "submitted", estimated_duration_s, model info}
+  #   stack_get_status(run_name, wait_seconds=0..180) -> poll; on completion
+  #       runs metrics and returns the full schema-v1 acceptance dict
+  #   stack_stop_analysis(run_name) -> kill solver + remove .lck
 
 quick_result.json schema (stable machine contract, v1):
   run_name, instance, baseline, mode, params{...}, dry_run, solved,
@@ -285,19 +291,28 @@ def _kill_tree(proc):
             pass
 
 
-def _solve(run_dir, results_dir, run_script, job_name):
-    info = {"solved": False, "error": None, "solve_elapsed_s": None,
-            "final_step_time": None, "final_total_time": None, "notes": []}
+def _launch_solve(run_dir, results_dir, run_script, job_name):
+    """Popen the solve wrapper (run_with_wake.py power-sleep guard). Returns
+    (proc, log_fh, sta_path, log_path, lck_path); the solve runs in the
+    background — monitor with _monitor_solve or poll .sta directly."""
     cmd = [VENV_PYTHON, WAKE_SCRIPT, VENV_PYTHON, run_script]
     wrapper_log = os.path.join(run_dir, "solve_wrapper.log")
-    progress_log = os.path.join(results_dir, "progress.log")
     log_fh = open(wrapper_log, "w", encoding="utf-8", errors="replace")
     proc = subprocess.Popen(cmd, cwd=run_dir, stdin=subprocess.DEVNULL,
                             stdout=log_fh, stderr=subprocess.STDOUT,
                             creationflags=_no_window())
-    sta_path = os.path.join(results_dir, job_name + ".sta")
-    log_path = os.path.join(results_dir, job_name + ".log")
-    lck_path = os.path.join(results_dir, job_name + ".lck")
+    return (proc, log_fh,
+            os.path.join(results_dir, job_name + ".sta"),
+            os.path.join(results_dir, job_name + ".log"),
+            os.path.join(results_dir, job_name + ".lck"))
+
+
+def _monitor_solve(proc, log_fh, sta_path, log_path, lck_path):
+    """Poll .sta until completion or GLOBAL_BUDGET_S. Returns the solve info dict."""
+    info = {"solved": False, "error": None, "solve_elapsed_s": None,
+            "final_step_time": None, "final_total_time": None, "notes": []}
+    wrapper_log = log_fh.name
+    progress_log = os.path.join(os.path.dirname(sta_path), "progress.log")
     t0 = time.monotonic()
     deadline = t0 + GLOBAL_BUDGET_S
     last_report = 0.0
@@ -344,6 +359,13 @@ def _solve(run_dir, results_dir, run_script, job_name):
         except Exception:
             pass
     return info
+
+
+def _solve(run_dir, results_dir, run_script, job_name):
+    """Launch the solve and block until completion (CLI/one-shot path)."""
+    proc, log_fh, sta_path, log_path, lck_path = _launch_solve(
+        run_dir, results_dir, run_script, job_name)
+    return _monitor_solve(proc, log_fh, sta_path, log_path, lck_path)
 
 
 def _env_info():
@@ -472,6 +494,69 @@ def _write_json(path, result):
         json.dump(result, fh, ensure_ascii=False, indent=2)
 
 
+def _prepare_run(run_name, params, result):
+    """Create the run dir from the baseline, substitute params, assemble and
+    validate the INP. Returns (run_dir, results_dir, mod) or None when
+    result["error"] was set. Exceptions propagate to the caller."""
+    run_dir = os.path.join(ABAQUS_PROJECTS, run_name)
+    results_dir = os.path.join(run_dir, "results")
+    os.makedirs(run_dir)
+    shutil.copy2(os.path.join(BASELINE_DIR, "run_stack_collapse.py"),
+                 os.path.join(run_dir, "run_stack_collapse.py"))
+    shutil.copy2(os.path.join(BASELINE_DIR, "metrics_probe.py"),
+                 os.path.join(run_dir, "metrics_probe.py"))
+    run_script_path = os.path.join(run_dir, "run_stack_collapse.py")
+    metrics_path = os.path.join(run_dir, "metrics_probe.py")
+    with open(run_script_path, "r", encoding="utf-8") as fh:
+        text = fh.read()
+    text = _substitute_run_script(text, run_name, params)
+    with open(run_script_path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    with open(metrics_path, "r", encoding="utf-8") as fh:
+        mtext = fh.read()
+    mtext = _substitute_metrics_script(mtext, run_dir, run_name)
+    with open(metrics_path, "w", encoding="utf-8") as fh:
+        fh.write(mtext)
+    os.makedirs(results_dir)
+    mod = _load_module(run_script_path)
+    expected = _compute_total_elements(mod)
+    inp_path, sanity = _assemble_inp(mod, results_dir)
+    total = sanity.get("element_count")
+    if total != expected:
+        result["notes"].append(
+            "element count mismatch: inp={} computed={}".format(total, expected))
+    result["total_elements"] = total
+    result["inp_sanity"] = sanity
+    with open(metrics_path, "r", encoding="utf-8") as fh:
+        mtext = fh.read()
+    mtext = _substitute_metrics_script(mtext, run_dir, run_name, total)
+    with open(metrics_path, "w", encoding="utf-8") as fh:
+        fh.write(mtext)
+    return run_dir, results_dir, mod
+
+
+def _fill_metrics_and_acceptance(result, run_dir, run_name, params, mod):
+    """Run the metrics probe and fill the schema-v1 metric/acceptance fields."""
+    mres = _run_metrics(run_dir, run_name)
+    if mres["error"]:
+        result["error"] = mres["error"]
+        return result
+    m = _parse_metrics(mres["text"])
+    result.update({k: m.get(k) for k in
+                   ("frames", "last_frame", "deletion_pct", "max_radius",
+                    "p95", "max_y", "min_y", "penetration_ok", "direction")})
+    result["whip_flag"] = m.get("max_y") is not None and m["max_y"] > mod.STACK_HEIGHT + 1e-6
+    result["metrics_ok"] = True
+    result["acceptance"] = _build_acceptance(m)
+    if params["sim_time"] <= 8.0 and not result["acceptance"]["all_pass"]:
+        result["notes"].append(
+            "sim_time={:.1f}s is the dense-frame (run39) regime: deletion/p95 "
+            "measure lower than the 12s acceptance window; use --sim-time 12.0 "
+            "for the acceptance regime".format(params["sim_time"]))
+    result["completed"] = True
+    return result
+
+
 def run_stack_analysis(run_name, opening_height=None, weak_ring_elev=None,
                        weak_ring_cf=None, sim_time=None, output_interval=None,
                        n_theta=None, no_solve=False, solve_only=False,
@@ -510,38 +595,11 @@ def run_stack_analysis(run_name, opening_height=None, weak_ring_elev=None,
                     return result
             mod = _load_module(os.path.join(run_dir, "run_stack_collapse.py"))
         else:
-            os.makedirs(run_dir)
-            shutil.copy2(os.path.join(BASELINE_DIR, "run_stack_collapse.py"),
-                         os.path.join(run_dir, "run_stack_collapse.py"))
-            shutil.copy2(os.path.join(BASELINE_DIR, "metrics_probe.py"),
-                         os.path.join(run_dir, "metrics_probe.py"))
-            run_script_path = os.path.join(run_dir, "run_stack_collapse.py")
-            metrics_path = os.path.join(run_dir, "metrics_probe.py")
-            with open(run_script_path, "r", encoding="utf-8") as fh:
-                text = fh.read()
-            text = _substitute_run_script(text, run_name, params)
-            with open(run_script_path, "w", encoding="utf-8") as fh:
-                fh.write(text)
-            with open(metrics_path, "r", encoding="utf-8") as fh:
-                mtext = fh.read()
-            mtext = _substitute_metrics_script(mtext, run_dir, run_name)
-            with open(metrics_path, "w", encoding="utf-8") as fh:
-                fh.write(mtext)
-            os.makedirs(results_dir)
-            mod = _load_module(run_script_path)
-            expected = _compute_total_elements(mod)
-            inp_path, sanity = _assemble_inp(mod, results_dir)
-            total = sanity.get("element_count")
-            if total != expected:
-                result["notes"].append(
-                    "element count mismatch: inp={} computed={}".format(total, expected))
-            result["total_elements"] = total
-            result["inp_sanity"] = sanity
-            with open(metrics_path, "r", encoding="utf-8") as fh:
-                mtext = fh.read()
-            mtext = _substitute_metrics_script(mtext, run_dir, run_name, total)
-            with open(metrics_path, "w", encoding="utf-8") as fh:
-                fh.write(mtext)
+            prepared = _prepare_run(run_name, params, result)
+            if prepared is None:
+                _write_json(os.path.join(results_dir, "quick_result.json"), result)
+                return result
+            run_dir, results_dir, mod = prepared
             if no_solve:
                 result["notes"].append("dry-run: scripts copied, params substituted, "
                                        "INP assembled and validated; no solve")
@@ -579,23 +637,7 @@ def run_stack_analysis(run_name, opening_height=None, weak_ring_elev=None,
             return result
 
         if result["solved"]:
-            mres = _run_metrics(run_dir, run_name)
-            if mres["error"]:
-                result["error"] = mres["error"]
-            else:
-                m = _parse_metrics(mres["text"])
-                result.update({k: m.get(k) for k in
-                               ("frames", "last_frame", "deletion_pct", "max_radius",
-                                "p95", "max_y", "min_y", "penetration_ok", "direction")})
-                result["whip_flag"] = m.get("max_y") is not None and m["max_y"] > mod.STACK_HEIGHT + 1e-6
-                result["metrics_ok"] = True
-                result["acceptance"] = _build_acceptance(m)
-                if params["sim_time"] <= 8.0 and not result["acceptance"]["all_pass"]:
-                    result["notes"].append(
-                        "sim_time={:.1f}s is the dense-frame (run39) regime: deletion/p95 "
-                        "measure lower than the 12s acceptance window; use --sim-time 12.0 "
-                        "for the acceptance regime".format(params["sim_time"]))
-                result["completed"] = True
+            _fill_metrics_and_acceptance(result, run_dir, run_name, params, mod)
         _write_json(os.path.join(results_dir, "quick_result.json"), result)
         return result
     except Exception as exc:
@@ -605,6 +647,268 @@ def run_stack_analysis(run_name, opening_height=None, weak_ring_elev=None,
         except Exception:
             pass
         return result
+
+
+def _estimate_duration_s(sim_time):
+    # run-39 baseline: 7.6 s sim ≈ 400 s wall; linear scale, floored at 120 s
+    return max(120.0, 400.0 * sim_time / 7.6)
+
+
+def stack_submit_analysis(run_name, opening_height=None, weak_ring_elev=None,
+                          weak_ring_cf=None, sim_time=None, output_interval=None,
+                          n_theta=None, no_solve=False):
+    """Model + launch the stack01 solve ASYNCHRONOUSLY.
+
+    Builds the run from the baseline, submits the solver, and returns
+    immediately with run_name/status=submitted/estimated_duration_s and model
+    info — the solve keeps running in the background. Poll with
+    stack_get_status until status=completed (the completion poll returns the
+    full schema-v1 acceptance dict); abort with stack_stop_analysis.
+    """
+    params = {}
+    for k, v in DEFAULTS.items():
+        params[k] = DEFAULTS[k] if locals()[k] is None else locals()[k]
+
+    run_dir = os.path.join(ABAQUS_PROJECTS, run_name)
+    results_dir = os.path.join(run_dir, "results")
+    mode = "dry_run" if no_solve else "full"
+    result = _new_result(run_name, params, mode, results_dir)
+
+    try:
+        err = _validate_run_name(run_name)
+        if err:
+            result["error"] = err
+            return result
+        err = _validate_params(params)
+        if err:
+            result["error"] = err
+            return result
+        prepared = _prepare_run(run_name, params, result)
+        if prepared is None:
+            return result
+        run_dir, results_dir, mod = prepared
+        if no_solve:
+            result["notes"].append("dry-run: scripts copied, params substituted, "
+                                   "INP assembled and validated; no solve")
+            _write_json(os.path.join(results_dir, "quick_result.json"), result)
+            result["status"] = "dry_run"
+            return result
+
+        est = _estimate_duration_s(params["sim_time"])
+        submit_info = {
+            "run_name": run_name,
+            "instance": INSTANCE_NAME,
+            "baseline": BASELINE_RUN_NAME,
+            "status": "submitted",
+            "estimated_duration_s": round(est),
+            "estimated_duration_range": [round(est * 0.5), round(est * 1.5)],
+            "params": dict(params),
+            "model": {
+                "height_m": mod.STACK_HEIGHT,
+                "base_radius_m": mod.STACK_BASE_RADIUS,
+                "top_radius_m": mod.STACK_TOP_RADIUS,
+                "wall_thickness_m": mod.WALL_THICKNESS,
+                "opening_bottom_m": mod.OPENING_BOTTOM,
+                "opening_height_m": params["opening_height"],
+                "opening_angle_deg": mod.OPENING_ANGLE_DEG,
+                "n_theta": params["n_theta"],
+                "total_elements": result["total_elements"],
+            },
+            "inp_sanity": result["inp_sanity"],
+            "results_dir": results_dir,
+            "sta_path": os.path.join(results_dir, mod.JOB_NAME + ".sta"),
+            "message": ("Stack01 solve submitted asynchronously ({} elements, "
+                        "sim_time={:.1f}s, n_theta={}). Estimated {:.0f}s "
+                        "(range {:.0f}-{:.0f}s). Poll stack_get_status(run_name={}, "
+                        "wait_seconds=120) until status=completed; abort with "
+                        "stack_stop_analysis(run_name={}).").format(
+                            result["total_elements"], params["sim_time"],
+                            params["n_theta"], est, est * 0.5, est * 1.5,
+                            run_name, run_name),
+        }
+        _write_json(os.path.join(results_dir, "stack_estimate.json"), submit_info)
+        proc, log_fh, sta_path, log_path, lck_path = _launch_solve(
+            run_dir, results_dir, os.path.join(run_dir, "run_stack_collapse.py"),
+            mod.JOB_NAME)
+        log_fh.close()  # child inherited the handle; parent side can drop it
+        submit_info["solver_pid"] = proc.pid
+        return submit_info
+    except Exception as exc:
+        result["error"] = "{}: {}".format(type(exc).__name__, exc)
+        try:
+            _write_json(os.path.join(results_dir, "quick_result.json"), result)
+        except Exception:
+            pass
+        return result
+
+
+def stack_get_status(run_name, wait_seconds=0):
+    """Poll the stack solve progress from the run's .sta file.
+
+    status: submitted (solver booting / .sta not written yet) / running
+    (progress_percent from .sta total time vs settle 1s + sim_time) / failed /
+    terminated / completed / not_found. When the .sta shows completion, runs
+    the metrics probe and returns the full schema-v1 acceptance dict with
+    status=completed (also written to quick_result.json). wait_seconds caps at
+    180 per call; the solve keeps running in the background between calls.
+    """
+    run_dir = os.path.join(ABAQUS_PROJECTS, run_name)
+    results_dir = os.path.join(run_dir, "results")
+    if not os.path.isdir(run_dir):
+        return {"run_name": run_name, "status": "not_found",
+                "message": "no such run: " + run_dir}
+    qr_path = os.path.join(results_dir, "quick_result.json")
+    try:
+        with open(qr_path, "r", encoding="utf-8") as fh:
+            prior = json.load(fh)
+        if prior.get("completed"):
+            prior["status"] = "completed"
+            return prior
+    except OSError:
+        pass
+    est = {}
+    try:
+        with open(os.path.join(results_dir, "stack_estimate.json"),
+                  "r", encoding="utf-8") as fh:
+            est = json.load(fh)
+    except OSError:
+        pass
+    params = dict(DEFAULTS)
+    if isinstance(est.get("params"), dict):
+        params.update(est["params"])
+    sim_total = 1.0 + params["sim_time"]  # settle 1 s + collapse sim_time
+
+    sta_path = os.path.join(results_dir, "stack_job_run.sta")
+    log_path = os.path.join(results_dir, "stack_job_run.log")
+    lck_path = os.path.join(results_dir, "stack_job_run.lck")
+
+    def _read():
+        prog = _sta_progress(sta_path)
+        info = {"run_name": run_name, "status": "submitted",
+                "progress_percent": None, "step_time": prog["step_time"],
+                "total_time": prog["total_time"],
+                "odb_exists": os.path.exists(os.path.join(results_dir,
+                                                          "stack_job_run.odb")),
+                "lck_exists": os.path.exists(lck_path)}
+        if prog["completed"]:
+            info["status"] = "completed"
+            return info
+        low = ""
+        try:
+            with open(log_path, "r", encoding="utf-8", errors="replace") as fh:
+                low = fh.read().lower()
+        except OSError:
+            pass
+        if "has terminated" in low or "job has terminated" in low:
+            info["status"] = "terminated"
+        elif "exited with an error" in low or "*** error" in low:
+            info["status"] = "failed"
+        elif prog["step_time"] is not None or info["lck_exists"]:
+            info["status"] = "running"
+            if prog["total_time"] is not None:
+                info["progress_percent"] = round(
+                    min(prog["total_time"] / sim_total, 1.0) * 100.0, 1)
+        return info
+
+    try:
+        wait_seconds = max(0, min(int(wait_seconds), 180))
+    except (TypeError, ValueError):
+        wait_seconds = 0
+    deadline = time.monotonic() + wait_seconds
+    while True:
+        info = _read()
+        if info["status"] in ("completed", "failed", "terminated"):
+            break
+        if time.monotonic() >= deadline:
+            if est.get("estimated_duration_s") is not None:
+                info["estimated_duration_s"] = est["estimated_duration_s"]
+                info["estimated_duration_range"] = est["estimated_duration_range"]
+            return info
+        time.sleep(2.0)
+
+    if est.get("estimated_duration_s") is not None:
+        info["estimated_duration_s"] = est["estimated_duration_s"]
+        info["estimated_duration_range"] = est["estimated_duration_range"]
+    if info["status"] != "completed":
+        return info
+
+    result = _new_result(run_name, params, "full", results_dir)
+    prog = _sta_progress(sta_path)
+    result["solved"] = True
+    result["final_step_time"] = prog["step_time"]
+    result["final_total_time"] = prog["total_time"]
+    mod = _load_module(os.path.join(run_dir, "run_stack_collapse.py"))
+    _fill_metrics_and_acceptance(result, run_dir, run_name, params, mod)
+    result["status"] = "completed"
+    _write_json(qr_path, result)
+    return result
+
+
+def _find_stack_processes(run_name):
+    """Pids of processes whose command line references this stack run (the
+    copied run_stack_collapse.py wrapper or the run dir); None on scan failure."""
+    pat = "run_stack_collapse|" + run_name
+    ps = ("Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and "
+          "$_.CommandLine -match '" + pat + "' } | Select-Object -ExpandProperty ProcessId")
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                             capture_output=True, text=True, timeout=20).stdout
+    except Exception:
+        return None
+    pids = []
+    for line in out.splitlines():
+        line = line.strip()
+        if line.isdigit() and int(line) != os.getpid():
+            pids.append(int(line))
+    return pids
+
+
+def stack_stop_analysis(run_name):
+    """Terminate a running stack solve: kill the wrapper/solver process tree,
+    sweep any explicit.exe solver, and remove the .lck so the job cannot
+    restart. Mirrors the cooling tower stop_collapse."""
+    run_dir = os.path.join(ABAQUS_PROJECTS, run_name)
+    results_dir = os.path.join(run_dir, "results")
+    actions = []
+    pids = _find_stack_processes(run_name)
+    if pids is None:
+        actions.append("process scan failed")
+    elif not pids:
+        actions.append("no matching solver process found")
+    else:
+        for pid in pids:
+            try:
+                r = subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)],
+                                   capture_output=True, timeout=15)
+                if r.returncode == 0:
+                    actions.append("process tree killed (pid {})".format(pid))
+                else:
+                    actions.append("kill failed for pid {} (stale?)".format(pid))
+            except Exception as exc:
+                actions.append("kill failed for pid {}: {}".format(pid, exc))
+    try:
+        r = subprocess.run(["taskkill", "/F", "/IM", "explicit.exe"],
+                           capture_output=True, timeout=15)
+        if r.returncode == 0:
+            actions.append("explicit.exe solver swept")
+        else:
+            actions.append("no explicit.exe solver running (ok)")
+    except Exception as exc:
+        actions.append("explicit.exe sweep failed: {}".format(exc))
+    lck = os.path.join(results_dir, "stack_job_run.lck")
+    if os.path.exists(lck):
+        try:
+            os.remove(lck)
+            actions.append("lck removed")
+        except OSError:
+            pass
+    return {
+        "run_name": run_name,
+        "status": "terminated",
+        "actions": actions,
+        "message": "Stop attempted — verify with stack_get_status(run_name={}) "
+                   "that the job is no longer running".format(run_name),
+    }
 
 
 def _print_summary(r):
