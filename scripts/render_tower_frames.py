@@ -40,6 +40,7 @@ W, H = 1280, 720
 FPS = 10
 N_FRAMES = 50
 GROUND_R = 45.0
+TOP_RING_R = 28.5
 U_MIN, U_MAX = 0.0, 75.0
 SIDE_ELEV, SIDE_AZ = 8.0, -25.0
 
@@ -132,8 +133,8 @@ def render_frame(f, X, conn, U, lim, view, out, raw=False):
                                              edgecolors="none", zorder=0))
         ax.plot(gx, -gz, np.zeros_like(gx), color=(0.30, 0.35, 0.38, 0.9), lw=1.4, zorder=1)
         if view == "top":
-            rr = 28.5 * np.cos(th)
-            rz = 28.5 * np.sin(th)
+            rr = TOP_RING_R * np.cos(th)
+            rz = TOP_RING_R * np.sin(th)
             ax.plot(rr, -rz, np.zeros_like(rr), color=(0.9, 0.6, 0.2, 0.7), lw=1.2,
                     linestyle="--", zorder=1)
 

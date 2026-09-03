@@ -13,8 +13,8 @@ import os
 import numpy as np
 from odbAccess import openOdb
 
-ODB_PATH = r"C:\Users\99005\AppData\Local\Temp\tower_collapse_4shdyzvy\tower_job_run.odb"
-OUT_DIR = r"D:\GitHub Dev\Demolition-Simulator\scripts\_tower_frames"
+ODB_PATH = r"C:\Users\99005\AppData\Local\Temp\tower_collapse_ijlll326\tower_job_run.odb"
+OUT_DIR = r"D:\GitHub Dev\Demolition-Simulator\abaqus_projects\cooling_tower_90m\run31\frames"
 OUT_PATH = os.path.join(OUT_DIR, "data.npz")
 REPORT_PATH = os.path.join(OUT_DIR, "extract_report.txt")
 N_TARGETS = 50

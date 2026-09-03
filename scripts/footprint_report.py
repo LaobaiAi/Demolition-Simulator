@@ -13,8 +13,8 @@ import math
 
 from odbAccess import openOdb
 
-ODB_PATH = r"C:\Users\99005\AppData\Local\Temp\tower_collapse_4shdyzvy\tower_job_run.odb"
-OUT_PATH = r"D:\GitHub Dev\Demolition-Simulator\frontend\public\resource\Abaqus\cooling_tower_footprint.json"
+ODB_PATH = r"C:\Users\99005\AppData\Local\Temp\tower_collapse_ijlll326\tower_job_run.odb"
+OUT_PATH = r"D:\GitHub Dev\Demolition-Simulator\abaqus_projects\cooling_tower_90m\run31\cooling_tower_footprint.json"
 
 
 def _collect(odb, frame):

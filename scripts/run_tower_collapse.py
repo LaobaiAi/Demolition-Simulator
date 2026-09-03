@@ -33,23 +33,23 @@ ENV_JSON = os.path.join(
 TODO_MD = os.path.join(PROJECT_DIR, "todo", "abaqus-cooling-tower.md")
 
 BOOT_TIMEOUT_S = 180
-GLOBAL_BUDGET_S = 555
-SOLVE_HARD_CAP_S = 380
+GLOBAL_BUDGET_S = 750
+SOLVE_HARD_CAP_S = 480
 MONITOR_INTERVAL_S = 30
 JOB_START_OBSERVE_S = 120
 TOTAL_SIM_TIME = 8.0
 JOB_NAME = "tower_job_run"
 TOWER_NAME = "Tower"
 
-TOWER_HEIGHT = 70.0
-TOWER_BASE_RADIUS = 28.5
-TOWER_THROAT_RADIUS = 16.0
-TOWER_THROAT_ELEVATION = 51.0
-TOWER_TOP_RADIUS = 17.1
-WALL_THICKNESS = 0.12
+TOWER_HEIGHT = 90.0
+TOWER_BASE_RADIUS = 35.876
+TOWER_THROAT_RADIUS = 19.4
+TOWER_THROAT_ELEVATION = 72.0
+TOWER_TOP_RADIUS = 21.661
+WALL_THICKNESS = 0.14
 OPENING_BOTTOM = 11.0
 OPENING_HEIGHT = 3.0
-OPENING_ANGLE_DEG = 98.0
+OPENING_ANGLE_DEG = 86.0
 N_THETA = 128
 
 _FUNCS = ("_tower_stations", "_tower_radius_at", "_tower_inp_surgery",
@@ -542,10 +542,11 @@ def _tower_inp(funcs, stations, opening_labels):
     L.append("*Shell Section, elset=All_Tower, composite")
     # 2026 data-line order: thickness, numIntPts, material, orientation
     L.append("{:.4f}, 3, C30_Tower, 0.".format(WALL_THICKNESS / 2))
-    L.append("0.0005, 1, RebarSteel, 0.")
+    L.append("0.001, 1, RebarSteel, 0.")
     L.append("{:.4f}, 3, C30_Tower, 0.".format(WALL_THICKNESS / 2))
     L.append("*Shell Section, elset=TopRing, composite")
     L.append("0.1850, 3, C30_Tower, 0.")
+    L.append("0.001, 1, RebarSteel, 0.")
     L.append("0.1850, 3, C30_Tower, 0.")
     L.append("*End Part")
     L.append("")
@@ -618,9 +619,9 @@ def _tower_inp(funcs, stations, opening_labels):
     L.append("3.35e+08, 0.")
     L.append("4.36e+08, 0.048")
     L.append("*Damage Initiation, criterion=DUCTILE")
-    L.append("0.03, 0., 0.")
+    L.append("0.05, 0., 0.")
     L.append("*Damage Evolution, type=DISPLACEMENT")
-    L.append("0.03")
+    L.append("0.05")
     L.append("*Material, name=RIGID_MAT")
     L.append("*Density")
     L.append("7850.,")
@@ -640,7 +641,7 @@ def _tower_inp(funcs, stations, opening_labels):
         L.append("*Dynamic, Explicit")
         L.append(", {:.1f}".format(t))
         # ground (E=2e15) caps dt at ~3e-6 s; scale only elements below 4e-4
-        # (tower shell natural dt ~3.6e-4, so only mild scaling in elastic phase)
+        # (tower shell natural dt ~3.6e-4, so no scaling in elastic phase)
         L.append("*Fixed Mass Scaling, type=Below Min, dt=4e-4")
         if name == "TowerGravity":
             L.append("*Dload, amplitude=GravRamp")
@@ -894,6 +895,7 @@ def main():
             {"name": TOWER_NAME, "height": TOWER_HEIGHT,
              "base_radius": TOWER_BASE_RADIUS, "throat_radius": TOWER_THROAT_RADIUS,
              "throat_elevation": TOWER_THROAT_ELEVATION, "top_radius": TOWER_TOP_RADIUS,
+             "wall_thickness": WALL_THICKNESS,
              "settle_time": 1.0, "time_period": 7.0,
              "project_dir": _WORKDIR},
             deadline=deadline, monitor=True, job_base=JOB_NAME)

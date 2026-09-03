@@ -859,7 +859,7 @@ def _handle_mesh_tower(args):
     part_name = args["part_name"]
     opening_bottom_elevation = args.get("opening_bottom_elevation", 11.0)
     opening_height = args.get("opening_height", 3.0)
-    opening_angle_deg = args.get("opening_angle_deg", 98.0)
+    opening_angle_deg = args.get("opening_angle_deg", 86.0)
     opening_center_angle_deg = args.get("opening_center_angle_deg", 0.0)
 
     model = mdb.models["Model-1"]
@@ -903,7 +903,7 @@ def _tower_inp_surgery(text, part_name, opening_labels):
                               "ConcreteCompressionHardening", "ConcreteTensionStiffening"):
                     end_idx = search_from + m_kw.start()
                     break
-            block = "\n*Concrete Failure\n0.005, 0.015, 0., 0.\n"
+            block = "\n*Concrete Failure\n0.01, 0.03, 0., 0.\n"
             text = text[:end_idx] + block + text[end_idx:]
             modified = True
 
@@ -1064,10 +1064,11 @@ def _tower_inp(params, stations, opening_labels):
     L.append("{}, {}, 1".format(ring_first, total_elem))
     L.append("*Shell Section, elset=All_Tower, composite")
     L.append("{:.4f}, 3, C30_Tower, 0.".format(wall_thickness / 2))
-    L.append("0.0005, 1, RebarSteel, 0.")
+    L.append("0.001, 1, RebarSteel, 0.")
     L.append("{:.4f}, 3, C30_Tower, 0.".format(wall_thickness / 2))
     L.append("*Shell Section, elset=TopRing, composite")
     L.append("0.1850, 3, C30_Tower, 0.")
+    L.append("0.001, 1, RebarSteel, 0.")
     L.append("0.1850, 3, C30_Tower, 0.")
     L.append("*End Part")
     L.append("")
@@ -1140,9 +1141,9 @@ def _tower_inp(params, stations, opening_labels):
     L.append("3.35e+08, 0.")
     L.append("4.36e+08, 0.048")
     L.append("*Damage Initiation, criterion=DUCTILE")
-    L.append("0.03, 0., 0.")
+    L.append("0.05, 0., 0.")
     L.append("*Damage Evolution, type=DISPLACEMENT")
-    L.append("0.03")
+    L.append("0.05")
     L.append("*Material, name=RIGID_MAT")
     L.append("*Density")
     L.append("7850.,")
@@ -1304,7 +1305,7 @@ def _handle_setup_tower_collapse(args):
         "wall_thickness": float(args.get("wall_thickness", 0.12)),
         "opening_bottom_elevation": float(args.get("opening_bottom_elevation", 11.0)),
         "opening_height": float(args.get("opening_height", 3.0)),
-        "opening_angle_deg": float(args.get("opening_angle_deg", 98.0)),
+        "opening_angle_deg": float(args.get("opening_angle_deg", 86.0)),
         "opening_center_angle_deg": float(args.get("opening_center_angle_deg", 0.0)),
         "settle_time": float(args.get("settle_time", 1.0)),
         "time_period": float(args.get("time_period", 12.0)),

@@ -49,13 +49,17 @@ TOWER_N_THETA = 128
 OPENING_BOTTOM = 11.0
 OPENING_HEIGHT = 3.0
 OPENING_TOP = OPENING_BOTTOM + OPENING_HEIGHT
-OPENING_ANGLE_DEG = 98.0
+OPENING_ANGLE_DEG = 86.0
 WALL_THICKNESS = 0.12
 REBAR_THICKNESS = 0.0005
 
 EXPECTED_TOWER_ELEMENTS = 9600
 EXPECTED_TOWER_NODES = 9728
-EXPECTED_OPENING_ELEMENTS = 204
+# tracked from the parameter registry (90m run 31+): 86 deg removes 180
+# elements on the 70m verify mesh (98 deg removed 204)
+EXPECTED_OPENING_ELEMENTS = 180
+# tracked from the parameter registry (90m run 28+): run 27 used 0.005/0.015
+EXPECTED_CONCRETE_FAILURE = "0.01, 0.03"
 
 _FUNCS = ("_tower_stations", "_tower_radius_at", "_tower_inp_surgery",
           "_opening_element_labels")
@@ -302,8 +306,10 @@ def _check_surgery(out, opening_labels, stations):
     n = TOWER_N_THETA
     total_elem = (len(stations) - 1) * n
     op_set = set(opening_labels)
-    ok_cf = re.search(r"\*Concrete Failure\s*\n\s*0\.005,\s*0\.015(?:,\s*0\.,\s*0\.)?",
-                      out) is not None
+    cf_re = r"\*Concrete Failure\s*\n\s*" + \
+        r",\s*".join(v.replace(".", r"\.") for v in EXPECTED_CONCRETE_FAILURE.split(", ")) + \
+        r"(?:,\s*0\.,\s*0\.)?"
+    ok_cf = re.search(cf_re, out) is not None
     elem_labels = _parse_element_labels(out)
     elem_set = set(elem_labels)
     ok_elem = not (op_set & elem_set) and len(elem_labels) == total_elem - len(opening_labels)
@@ -562,7 +568,7 @@ def main():
             and ok_gen and ok_out
         print(f"[7/8] {'PASS' if ok else 'FAIL'} INP surgery ({dt:.1f}s)")
         print(f"      modified={modified}")
-        print(f"      *Concrete Failure 0.005/0.015 injected: {ok_cf}")
+        print(f"      *Concrete Failure {EXPECTED_CONCRETE_FAILURE} injected: {ok_cf}")
         print(f"      opening elements removed from *Element: {ok_elem} "
               f"(remaining={len(_parse_element_labels(out))})")
         print(f"      node block intact ({_parse_node_lines(out)} nodes): {ok_nodes}")
